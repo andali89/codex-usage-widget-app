@@ -18,7 +18,7 @@ Store design reports, implementation reports, plans, investigation notes, valida
 - [Implementation handoff](implementation-handoff.md): stopped-session worktree, final checks, artifact provenance, remaining work and resumption instructions.
 - [Installed notification failure](notification-error-investigation.md): reproducible `ToastNotifier.Setting()` error, attempted fixes, evidence and investigation handoff.
 - [Project overview and development setup](../README.md): requirements, usage, limitations, license, setup and build commands.
-- [Environment setup and validation](development-environment-setup.md): completed preparation, checks performed, and remaining manual verification.
+- [Environment setup and validation](development-environment-setup.md): historical setup evidence, tested toolchain, presentation fixture, native validation commands, and installer smoke check.
 - [Codex protocol reference](../schemas/codex/README.md): versioned schema provenance and regeneration instructions.
 
 Add links here as maintained reports are created. Update an existing topic's report where possible; do not duplicate the canonical design report.

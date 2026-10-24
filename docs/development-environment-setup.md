@@ -4,7 +4,7 @@ Date: 2026-10-22. Historical baseline: setup complete at `51f9436`, before produ
 
 ## Prepared environment
 
-- Reused the installed Rust/MSVC x64 toolchain, Windows SDK, WebView2, Node.js, npm, Git, and Codex CLI. The tested machine versions are recorded in the [root README](../README.md#verified-machine-baseline).
+- Reused the installed Rust/MSVC x64 toolchain, Windows SDK, WebView2, Node.js, npm, Git, and Codex CLI. The tested machine versions are recorded in the [verified machine baseline](#verified-machine-baseline).
 - Installed the approved project-local Tauri 2, React, TypeScript, Vite, Tailwind CSS, and required build/type dependencies. Direct versions are exact; npm and Cargo lockfiles record their resolved trees. No global software or tooling was installed or upgraded.
 - Created one standard Tauri window containing a React/Tailwind readiness message, with strict TypeScript, loopback development serving, frontend/native build commands, Rust checks, a development icon, and generated-file exclusions.
 - Kept native permissions empty and enabled no application plugins or custom commands. The application identifier is `dev.codexusagewidget.desktop`; installer bundling is disabled.
@@ -47,3 +47,57 @@ The later debug coordinator stress command, `npm.cmd run native:stress`, uses on
 For everyday commands, use the [development setup guide](../README.md). Continue product work against the [canonical design report](codex-widget-design-report.md).
 
 Implementation was stopped at the user's request on 2026-10-23 with final source checks passing and installed notification availability still failing. The [handoff](implementation-handoff.md) identifies the uncommitted worktree, build artifacts and remaining gates; the [notification investigation](notification-error-investigation.md) gives a reproducible failure for the user's assigned agents.
+
+## Contributor reference — 2026-10-24
+
+The sections below retain detailed development instructions moved from the root README after the v0.1.0 public preview was published. Earlier setup results above remain historical.
+
+### Verified machine baseline
+
+| Component | Detected version |
+| --- | --- |
+| Windows | x64, build 26200.9711, 25H2 |
+| Rust / Cargo | 1.99.1, `x86_64-pc-windows-msvc` |
+| Rust components | rustfmt and Clippy installed |
+| Visual Studio Build Tools | 2026, 18.11.1 |
+| MSVC | 14.51.36231, x64 compiler and linker |
+| Windows SDK | 10.0.26100.0, headers, libraries, and resource compiler |
+| Microsoft Edge WebView2 Runtime | 155.0.4283.62 |
+| Node.js / npm | 24.17.0 / 11.13.0 |
+| Git | 2.44.0.windows.1 |
+| Codex CLI | 0.163.0 original baseline; 0.164.0 live protocol read validated on 2026-10-24, native Windows x64 |
+
+The setup reuses the existing toolchain without changing the default Rust toolchain, installing global npm packages, or editing system configuration. `.node-version` records the tested Node version; it does not require a version manager. The tested Rust compiler is recorded here rather than forcing rustup to install another copy of the existing stable toolchain.
+
+### Frontend presentation fixture
+
+Run `npm.cmd run dev` from the repository root.
+
+Open `http://127.0.0.1:1420`. The browser entry explicitly reports that it has no native connection; it does not substitute sample quotas. A separate development-only [synthetic presentation fixture](http://127.0.0.1:1420/src/preview.html) supports `?theme=dark&scenario=stale`, `scenario=missing|blocked|loading|partial|fractional`, `scale=200`, `contrast`, `surface=shell|preview`, `mode=floating|screen-edge|compact-hud`, `tray-hover`, `resets=both|five-hour|weekly`, `labels=words|badges`, `credits=0..100`, `scenario=max-width|long-reset`, `detail=popup`, `page=settings`, and `welcome`. It is labeled synthetic and excluded from the production entry. The server binds only to loopback. Vite and Tauri use the same fixed port and fail clearly if that port is occupied.
+
+### Native window checks
+
+For the focused stacking check, build the debug executable and run `& .\src-tauri\target\debug\codex-usage-widget.exe --check-native-topmost`. It uses separate validation settings and app-owned ordinary/topmost blocker windows to check reveal, external-activation stacking repair, focus preservation, and disabled-topmost/hidden behavior across the three desktop modes. Require `native-check result=pass`. It quits automatically and does not reproduce Photos or test real foreground-hook delivery; see the [investigation and limitations](implementation-report.md#external-activation-and-topmost-stacking--2026-10-24).
+
+After building the debug executable, use `& .\src-tauri\target\debug\codex-usage-widget.exe --check-native-sizing` for the isolated compact-widget sizing gate. It compares generation-matched React measurements against Windows client dimensions for Floating, Edge, HUD and Edge/HUD desktop previews in Light/Dark with both reset countdowns on/off, and checks tray preview sizing. It verifies rounded native regions, hover focus preservation, hide/reselect recovery, one-time raising, persistent topmost behavior against a new app-owned ordinary window, Float hover exclusion, HUD hover centering, the Edge hover gap, framework style rewrites, event-driven topmost repair, and Floating popup stacking. It also injects an activation-denial outcome to verify standard-window recovery without focus theft or warnings. The popup geometry check uses a debug-only coordinator input without requesting foreground activation; it does not establish real click/focus behavior. The gate uses isolated validation state and quits automatically. It also injects Edge drag completions to verify both-side docking on each available monitor, saved monitor/height, position lock and no accidental Overview. Require `native-check result=pass`; actual pointer, visual, mixed-DPI, enlarged Windows text and high-contrast behavior remain separate checks. The flag is debug-only.
+
+For the debug-only native coordinator check, build the bundled debug executable and run it directly:
+
+```powershell
+npm.cmd run tauri -- build --debug --no-bundle
+& .\src-tauri\target\debug\codex-usage-widget.exe --check-native-windows
+```
+
+Require the `native-check result=pass` marker; a process exit alone is not a passing result. This check opens its own windows, uses isolated validation settings and normal read-only Codex monitoring, then quits. It advances only idle-view lease time to test retirement, posts an app-local native reconciliation message, and verifies lazy recreation/minimize/restore; it does not change Windows time/settings. It injects coordinator events rather than OS input and cannot establish real pointer/DPI/Explorer or screen-reader behavior. It is excluded from release builds. Its current results and limitations are in the implementation report.
+
+After the same debug build, run the 100-transition coordinator/process-tree sampler:
+
+```powershell
+npm.cmd run native:stress
+```
+
+Close any running widget first. The script requires successful native assertions and 100 mode transitions, verifies reuse of one shell and final webview retirement, samples owned processes, and checks that no observed owned process survives shutdown. CSV/logs go to ignored `src-tauri/target/validation/`. This is a debug transition-load measurement; its sampled CPU and memory do not establish the ten-minute idle/release performance budgets, actual input behavior, or listener stability.
+
+### Installer smoke check
+
+`npm.cmd run package:check` performs a **real, temporary per-user installation** under `src-tauri/target/validation/package install`, checks artifact bytes (allowing only Tauri's NSIS bundle marker), shortcut target/app identity and data preservation, reinstalls, and uninstalls. It refuses existing product registration/shortcuts/startup entries. The default does not launch the application; optional `-NativeCheck Windows` or `-NativeCheck Notifications` launches only a matching debug package with isolated native-check state. The latter currently fails as documented in the notification investigation. The checker temporarily creates and removes one labeled app-data sentinel. Close the widget first; use a clean validation user if the guards refuse the run. A real version-upgrade/downgrade test additionally uses isolated version fixtures; exact commands/results are in the implementation report. Notification behavior, installer UI, absent-runtime/offline failures, Windows 10 and signing remain release gates.

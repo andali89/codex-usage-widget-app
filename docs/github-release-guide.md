@@ -16,7 +16,7 @@ The workflow uses the Tauri version for `v<VERSION>`, requires matching npm/Carg
 
 The job has `contents: write` to create the draft with the automatic `GITHUB_TOKEN`; no personal access token or Codex authentication is needed. Repository or organization rules can restrict tag/release creation. The workflow leaves the release as a **draft prerelease** for you to review and publish. It does not run live protocol reads, installation smoke checks, or interactive Windows checks, and builds remain unsigned.
 
-Configuration was added locally on 2026-10-24. Local syntax/packaging validation is recorded below; a GitHub-hosted run has not yet been performed. This configuration does not establish installer or portable runtime compatibility.
+Configuration was added on 2026-10-24. The first GitHub-hosted build completed and [v0.1.0 was published as a public preview](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.0), with installer, portable ZIP, and checksum assets confirmed through the GitHub release API. Local syntax/packaging validation is recorded below. Publication does not establish installer or portable runtime compatibility.
 
 ### Local validation — 2026-10-24
 
