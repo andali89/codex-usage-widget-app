@@ -1,0 +1,48 @@
+{
+  "name": "codex-usage-widget",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": ">=24.17.0 <25",
+    "npm": ">=11.13.0 <12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "audit:publication": "node scripts/audit-publication.mjs",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build --no-bundle",
+    "desktop:package": "tauri build --bundles nsis",
+    "release:build": "powershell.exe -NoProfile -File scripts/build-release.ps1",
+    "package:check": "powershell.exe -NoProfile -File scripts/check-package.ps1",
+    "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --locked",
+    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml --locked && cargo test --manifest-path src-tauri/Cargo.toml --locked -p auto-launch --lib",
+    "protocol:probe": "cargo test --manifest-path src-tauri/Cargo.toml --locked live_read_only_protocol_gate -- --ignored --nocapture",
+    "native:stress": "powershell.exe -NoProfile -File scripts/measure-native-stress.ps1",
+    "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && rustfmt --edition 2021 --config skip_children=true --check src-tauri/vendor/auto-launch/src/lib.rs src-tauri/vendor/auto-launch/src/windows.rs",
+    "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@tauri-apps/cli": "2.12.4",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
+  }
+}

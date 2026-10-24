@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "surfaces",
+  "description": "Compact shell and preview subscribe to shared state and send validated presentation actions only.",
+  "windows": ["shell", "preview"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten", "allow-get-state", "allow-surface-action"]
+}

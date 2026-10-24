@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Bundled dashboard: shared state, validated settings, configuration folder selection and lifecycle only. No general shell, filesystem or network access.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:allow-listen", "core:event:allow-unlisten",
+    "allow-get-state", "allow-refresh", "allow-save-settings", "allow-view-ready",
+    "allow-inspect-storage-location", "allow-choose-storage-folder",
+    "allow-hide-dashboard", "allow-quit", "allow-surface-action", "allow-reminder-action", "allow-retry-autostart"
+  ]
+}
