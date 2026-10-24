@@ -34,6 +34,8 @@ On a protocol incompatibility, the owned app-server is stopped before a best-eff
 
 Focused tests cover forward-compatible protocol replies, missing/null optional quota data, malformed/unsupported methods versus transient/auth errors, arbitrary bounded version text, failed/oversized/timeout version processes and a synthetic native-pipe transaction. Frontend diagnostics were extracted into a pure helper for behavioral tests; other callers retain their existing import/API. A rendered Overview test verifies the version/fallback warning, Connection settings action, paused status and warning removal after recovery.
 
+CI fixture follow-up (2026-10-24): the supplied GitHub Actions log shows both PowerShell-backed version/proxy success assertions returning `None`. Cold PowerShell startup exceeding the shared two-second deadline is the suspected cause; the helper collapses several failure paths to `None`, so the log does not prove a timeout. These fixtures now use a separate 15-second test timeout, including the nonzero-exit, empty-output and oversized-output cases. The production two-second version deadline and explicit 50 ms timeout test remain unchanged. Local `npm.cmd run rust:fmt` and `npm.cmd run rust:check` passed. `npm.cmd run rust:test` passed 134 application tests (live probe ignored) and 3 dependency tests, with process-local `TEMP`/`TMP` set to `src-tauri/target/validation/test-temp` for the existing storage-test sandbox constraint. Incremental-cache hard-link warnings fell back to copying. A GitHub-hosted rerun remains unverified; no live Codex read or commit was made for this follow-up.
+
 Validation:
 
 | Command or check | Result |

@@ -586,6 +586,11 @@ mod tests {
         );
     }
 
+    // Allow for cold PowerShell startup on hosted Windows runners. Production
+    // version queries retain VERSION_TIMEOUT; timeout behavior is tested below.
+    #[cfg(windows)]
+    const POWERSHELL_FIXTURE_TIMEOUT: Duration = Duration::from_secs(15);
+
     #[cfg(windows)]
     fn powershell(script: &str) -> Command {
         let mut process = command(Path::new("powershell.exe"));
@@ -599,7 +604,7 @@ mod tests {
         assert_eq!(
             version_from_command(
                 powershell("Write-Output 'future custom build'; exit 0"),
-                VERSION_TIMEOUT
+                POWERSHELL_FIXTURE_TIMEOUT
             )
             .await
             .as_deref(),
@@ -610,9 +615,11 @@ mod tests {
             "exit 0",
             "Write-Output ('x' * 4097)",
         ] {
-            assert!(version_from_command(powershell(script), VERSION_TIMEOUT)
-                .await
-                .is_none());
+            assert!(
+                version_from_command(powershell(script), POWERSHELL_FIXTURE_TIMEOUT)
+                    .await
+                    .is_none()
+            );
         }
         assert!(version_from_command(
             powershell("Start-Sleep -Seconds 30"),
@@ -635,7 +642,7 @@ mod tests {
         let previous = std::env::var_os("HTTPS_PROXY");
         crate::proxy::apply(&mut child, Some("http://127.0.0.1:7890")).unwrap();
         assert_eq!(
-            version_from_command(child, VERSION_TIMEOUT)
+            version_from_command(child, POWERSHELL_FIXTURE_TIMEOUT)
                 .await
                 .as_deref(),
             Some("child-proxy-configured")
