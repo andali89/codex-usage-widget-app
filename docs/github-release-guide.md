@@ -1,5 +1,37 @@
 # Publish from a new folder and create a GitHub release
 
+## GitHub Actions release branch (current automated path)
+
+[The Windows workflow](../.github/workflows/release.yml) runs on pushes to the GitHub `release` branch. It can also be run manually with `release` selected; other branches are skipped. Manual dispatch requires the workflow to be present on the default branch first. No local `release` branch is needed: you can create it on GitHub from the reviewed `main` commit and merge future release changes into it through GitHub pull requests.
+
+Each run installs locked npm dependencies, runs frontend policy tests, Rust formatting and Rust behavioral tests, then calls the existing `release:build` script (including frontend type checking/build and source-path checks). It stages these three draft-release attachments:
+
+- `Codex Usage Widget_<VERSION>_x64-setup.exe`.
+- `Codex Usage Widget_<VERSION>_x64-portable.zip`, containing only `codex-usage-widget.exe`, `notification.png`, and `LICENSE` at its root.
+- `SHA256SUMS.txt`, covering the installer and portable ZIP.
+
+Portable users extract the entire ZIP into a writable folder and run the executable. Both downloads require WebView2 Runtime 120 or newer and a separately installed, signed-in native Codex CLI. The portable ZIP does not install WebView2. Settings, logs, credentials and local usage data are excluded by the explicit packaging file list. Third-party notice review remains required before public distribution, as described in the root README.
+
+The workflow uses the Tauri version for `v<VERSION>`, requires matching npm/Cargo manifest versions and npm lockfile versions, checks that build commands leave lockfiles unchanged, and requires `docs/v<VERSION>-release-notes.md`. An existing version tag stops the workflow. The GitHub CLI targets the triggering commit when creating the draft/tag; existing releases and assets are never replaced. Update all version manifests and lockfiles together for each new release. A repeated run for an existing draft may fail rather than overwrite it; inspect any partial draft/assets before retrying.
+
+The job has `contents: write` to create the draft with the automatic `GITHUB_TOKEN`; no personal access token or Codex authentication is needed. Repository or organization rules can restrict tag/release creation. The workflow leaves the release as a **draft prerelease** for you to review and publish. It does not run live protocol reads, installation smoke checks, or interactive Windows checks, and builds remain unsigned.
+
+Configuration was added locally on 2026-10-24. Local syntax/packaging validation is recorded below; a GitHub-hosted run has not yet been performed. This configuration does not establish installer or portable runtime compatibility.
+
+### Local validation — 2026-10-24
+
+- Parsed `.github/workflows/release.yml` with installed Python/PyYAML (`yaml.BaseLoader`, preserving GitHub's `on` key); asserted release-push/manual triggers and the release-only job guard: passed.
+- Parsed every embedded `run` block with PowerShell's `System.Management.Automation.Language.Parser`: passed. Executed the version/notes block against the actual repository manifests: passed. Validation caught and corrected PowerShell's handling of the npm lockfile's empty root key by using `ConvertFrom-Json -AsHashtable`.
+- Executed the workflow's packaging block with synthetic executable/installer files and the real notification image/license in an isolated ignored fixture. Inspected the ZIP using `System.IO.Compression.ZipFile` and recomputed both checksum entries with `Get-FileHash`: passed. Only the three allowed files appeared at the ZIP root; an adjacent synthetic settings file was excluded. Asset paths are absolute for reliable .NET file writes.
+- `git diff --check`: passed. Fixtures/measurements are under ignored `src-tauri/target/validation/release-workflow/`.
+- No tools or dependencies were installed locally. No application compilation, live Codex read, hosted workflow run, tag/release creation, or runtime installation/portable check was performed for this configuration change. `actionlint` is unavailable, so the YAML parse is not a full GitHub Actions schema/expression validation.
+
+References: [Tauri GitHub Actions](https://v2.tauri.app/distribute/pipelines/github/), [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create).
+
+## Earlier manual publication path
+
+The sections below preserve the original source-snapshot and manual-upload procedure. They are an alternative to the automated release branch flow above.
+
 This workflow keeps the development folder and its Git history intact. The new public folder starts a fresh Git history from the reviewed source snapshot. Your normal Git author name/email remain public, as requested. Nothing has been pushed to GitHub automatically.
 
 ## 1. Use the prepared files

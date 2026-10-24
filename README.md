@@ -37,6 +37,8 @@ Run the installer, then open Codex Usage Widget. Authenticate through your local
 
 Until a release is published, developers can build an installer using the instructions under [Check and build](#check-and-build).
 
+The [Windows release workflow](.github/workflows/release.yml) is configured to build an installer, portable ZIP, and checksums into a draft prerelease on pushes to `release`. Its first GitHub-hosted run is pending; see the [release branch guide](docs/github-release-guide.md#github-actions-release-branch-current-automated-path).
+
 To publish your own copy from a new folder, follow the [GitHub publication and release guide](docs/github-release-guide.md). The [publication audit](docs/publication-audit.md) records the source/privacy review and prepared artifacts. `npm.cmd run release:build` creates a public installer with local compiler source paths remapped and a checksum file in `src-tauri/target/release-assets/v<VERSION>/`.
 
 ## Using the widget

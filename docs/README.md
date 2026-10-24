@@ -4,7 +4,7 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 ## Current references
 
-- [GitHub publication and release guide](github-release-guide.md): extract the reviewed source into a new folder, initialize a fresh public repository, push it, and publish a prerelease.
+- [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
 - [Publication audit](publication-audit.md): tracked-file/history review, privacy findings, release artifacts, and verification limits.
 - [Version 0.1.0 release notes](v0.1.0-release-notes.md): prepared public-preview description and known limitations.
 

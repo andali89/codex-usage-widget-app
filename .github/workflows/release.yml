@@ -1,0 +1,136 @@
+name: Windows release
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/release'
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTUP_TOOLCHAIN: stable
+
+    steps:
+      - name: Check out the triggering commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate release version and notes
+        id: version
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $version = $config.version
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw 'Unsupported release version.' }
+          if ($package.version -ne $version -or $lock.version -ne $version -or $lock.packages[''].version -ne $version) {
+            throw 'Update the npm, lockfile and Tauri versions together.'
+          }
+          if ($cargo -notmatch ('(?m)^version = "' + [regex]::Escape($version) + '"\r?$')) {
+            throw 'Cargo.toml version does not match Tauri.'
+          }
+          if (-not (Test-Path -LiteralPath "docs/v$version-release-notes.md")) { throw 'Add version-specific release notes.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Require an unused version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $refsJson = gh api "repos/$env:GH_REPO/git/matching-refs/tags/$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot check existing release tags.' }
+          $refs = $refsJson | ConvertFrom-Json
+          if (@($refs | Where-Object { $_.ref -eq "refs/tags/$env:RELEASE_TAG" }).Count -gt 0) {
+            throw 'This version tag already exists. Use a new version; existing tags are never moved.'
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Set up Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+
+      - name: Install locked frontend dependencies
+        run: npm.cmd ci
+
+      - name: Check frontend policies
+        run: npm.cmd test
+
+      - name: Check Rust formatting
+        run: npm.cmd run rust:fmt
+
+      - name: Run Rust behavioral tests (no live Codex access)
+        run: npm.cmd run rust:test
+
+      # Includes the frontend production build and local source-path checks.
+      - name: Build public Windows x64 installer
+        run: npm.cmd run release:build
+
+      - name: Verify dependency lockfiles were preserved
+        run: git diff --exit-code -- package-lock.json src-tauri/Cargo.lock
+
+      - name: Package portable ZIP and checksums
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_VERSION
+          $assets = Join-Path (Get-Location) "src-tauri/target/release-assets/v$version"
+          $portable = Join-Path $env:RUNNER_TEMP 'widget-portable'
+          New-Item -ItemType Directory -Path $portable | Out-Null
+          # Explicit allowlist: never archive a build directory or user state.
+          Copy-Item -LiteralPath 'src-tauri/target/publication-remapped/release/codex-usage-widget.exe' -Destination $portable
+          Copy-Item -LiteralPath 'src-tauri/icons/notification.png' -Destination $portable
+          Copy-Item -LiteralPath 'LICENSE' -Destination $portable
+          $zip = "Codex Usage Widget_${version}_x64-portable.zip"
+          Compress-Archive -Path "$portable/*" -DestinationPath (Join-Path $assets $zip)
+          $names = @("Codex Usage Widget_${version}_x64-setup.exe", $zip)
+          $lines = foreach ($name in $names) {
+            $hash = (Get-FileHash -LiteralPath (Join-Path $assets $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name"
+          }
+          [IO.File]::WriteAllText((Join-Path $assets 'SHA256SUMS.txt'), ($lines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
+
+      # Deliberately do not edit existing releases or replace their assets.
+      - name: Create draft prerelease with both downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          $version = $env:RELEASE_VERSION
+          $assets = "src-tauri/target/release-assets/v$version"
+          gh release create $env:RELEASE_TAG `
+            --target $env:RELEASE_COMMIT `
+            --title "$env:RELEASE_TAG — Windows x64 public preview" `
+            --notes-file "docs/v$version-release-notes.md" `
+            --draft --prerelease `
+            "$assets/Codex Usage Widget_${version}_x64-setup.exe" `
+            "$assets/Codex Usage Widget_${version}_x64-portable.zip" `
+            "$assets/SHA256SUMS.txt"
