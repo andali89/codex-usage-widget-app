@@ -23,7 +23,7 @@ The recommended implementation is **Tauri 2 + TypeScript/React**, with Rust owni
 - **Tray hover:** A two-row box, approximately 260 × 76 logical pixels, shows quota percentages and the next expected reset; click opens full detail.
 - **Appearance:** Follow Windows by default, with persistent Light and Dark overrides across all four modes. Windows high contrast takes precedence.
 - **Information levels:** Glance → Preview → Full Dashboard.
-- **Refresh:** One shared scheduler: 30 seconds with expanded detail visible, 60 seconds with a compact shell visible, and 120 seconds in tray-only background operation; configurable bounds and exceptions are in Section 7.5.
+- **Refresh:** One shared scheduler: 120 seconds by default for expanded detail, compact shells, and tray-only background operation; configurable bounds and exceptions are in Section 7.5.
 - **Reminders:** Off until enabled; configurable per quota window, with quiet hours, snooze, durable deduplication, and a local reminder history.
 - **Lifecycle:** Closing a window keeps monitoring in the tray; explicit Quit stops monitoring and reminders. Launch at sign-in is opt-in.
 - **Critical safeguard:** Mouse movement from trigger to popup must not cause accidental dismissal.
@@ -212,7 +212,7 @@ The following are initial design targets to validate in usability tests, rather 
 | Collapse grace period | Tray: 350 ms; other previews: 350 ms (tune within 250–500 ms) | Allows travel from trigger to card |
 | Re-enter during grace period | Cancel collapse immediately | Prevent flicker |
 | Countdown tick | 1 second only for visible second-resolution text; otherwise 1 minute | No per-second IPC, network traffic, or hidden-webview timer |
-| Quota refresh | 30 / 60 / 120 seconds by visibility | One scheduler; see Section 7.5 |
+| Quota refresh | 120 seconds by default for all visibility states | One scheduler; see Section 7.5 |
 
 Support reduced-motion settings by disabling or minimizing translation and scale transitions. Never require a hover interaction as the only means of accessing the data.
 
@@ -469,8 +469,8 @@ Use one scheduler and at most one in-flight quota read. Periodic ticks, manual r
 
 | Condition | Policy |
 |---|---|
-| Dashboard or hover preview (including the compact tray box) visible | Every 30 seconds by default |
-| Compact Floating/Edge/HUD visible | Every 60 seconds by default |
+| Dashboard or hover preview (including the compact tray box) visible | Every 120 seconds by default |
+| Compact Floating/Edge/HUD visible | Every 120 seconds by default |
 | Tray-only, hidden shells, or locked session | Every 120 seconds by default |
 | User configuration | Foreground 15–120 seconds; compact 30–300; background 60–600; validate foreground ≤ compact ≤ background |
 | Battery saver | Double intervals, cap at 600 seconds; manual refresh and one-shot reset checks still work |

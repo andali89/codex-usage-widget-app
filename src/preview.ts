@@ -13,7 +13,7 @@ const dark = query.get("theme") === "dark";
 const scenario = query.get("scenario") ?? "fresh";
 const state: AppState = {
   processEpoch: "synthetic-fixture", revision: 1, dashboardRequest:null, firstLaunch:query.has("welcome"),
-  settings: { schemaVersion: 5, autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 30, compactSeconds: 60, backgroundSeconds: 120, windows: { hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, visiblePeriods:{} }, reminders:defaultReminders() },
+  settings: { schemaVersion: 5, autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, visiblePeriods:{} }, reminders:defaultReminders() },
   appearance: { themePreference: "system", resolvedTheme: dark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
   usage: {
     accountContextKey: "synthetic-only", connectionGeneration: 1, selectedLimitId: "codex",
@@ -22,11 +22,11 @@ const state: AppState = {
       { key: "codex/secondary/10080", limitId: "codex", label: "Weekly", usedPercent: 58, remainingPercent: 42, durationMinutes: 10080, resetsAtMs: at + 390_000_000, validatedAtMs: at, quality: "valid", lastKnown: false },
     ],
     resetCreditsAvailable: 3, resetCredits: null, planType: "synthetic plan", ordinaryUsageAllowed: null,
-    additionalLimits: false, lastAttemptAtMs: at, lastSuccessAtMs: at, nextRefreshAtMs: at + 30000,
+    additionalLimits: false, lastAttemptAtMs: at, lastSuccessAtMs: at, nextRefreshAtMs: at + 120000,
     refreshInFlight: false, connection: "ready", freshness: "fresh", errorCode: null, codexCliVersion: null, consecutiveUnavailableReads:0, missingWindowReads:{},
   }, storage:{preferred:{kind:"executable"},activeDirectory:"Synthetic folder",fallback:false,diagnostic:null,portableLocator:true}, storageDiagnostic: null, trayAvailable: true, dashboardVisible: true,
   presentation: { generation:0, shell:"preview", detail:"window", hidden:false, suppressed:false, traySuppressed:false, previewSource:query.has("tray-hover") || !query.has("mode") ? "tray" : "shell", menuOpen:false, dragging:false },
-  windowDiagnostic:null, tooltipFallback:false, effectiveRefreshSeconds:30,
+  windowDiagnostic:null, tooltipFallback:false, effectiveRefreshSeconds:120,
   reminders:{deliveryPaused:false,snoozedUntil:null,pendingCount:0,history:[],diagnostic:"notification-adapter-unavailable",identityScope:"synthetic"},
   monitors:[{ name:"Synthetic display",width:1920,height:1080,scale:1 }],
 };

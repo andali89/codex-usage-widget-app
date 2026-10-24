@@ -2,6 +2,14 @@
 
 Updated: 2026-10-24. **In progress; not release complete.** Specification: [design report v1.9](codex-widget-design-report.md). The clean starting tree at `7492170` contained only the setup scaffold. Shared core was committed in `30c4eda`, the four-mode coordinator in `15a987a`, reminder policy/storage/settings in `9d5a5ac`, and the process-exit circuit in `9cdbb60`. Native lifetime/recycling was committed in `d1f75c5`, timing/contrast in `148877a` and native stress tooling in `06224b3`; single-instance/autostart integration is committed as `283f942` and packaging as `4f8fcaa`. The current worktree adds an ordinary notification adapter; its installed availability query fails. See the [focused investigation handoff](notification-error-investigation.md). No whole delivery phase is declared complete. Notification delivery, remaining installed lifecycle checks and required compatibility validation remain outstanding.
 
+## v0.1.1 source preparation — 2026-10-24
+
+Set the Rust Detail and Compact refresh defaults to 120 seconds, matching Background, and aligned the synthetic preview settings, effective interval and next-refresh timestamp. The proxy default remains `None`; the connection input now has no example-address placeholder. Existing saved settings are preserved, with no settings-schema migration. Cadence bounds, ordering validation, scheduler jitter, battery-saver adjustments and inherited network behavior are unchanged.
+
+Updated npm, Cargo and Tauri versions, both lockfiles and packaging-check defaults to 0.1.1. Added [release notes](v0.1.1-release-notes.md), updated the design defaults and documentation index, and retained published v0.1.0 download links in README. No dependencies were upgraded.
+
+Validation: source/diff review only. Tests, builds, live Codex reads and runtime checks were not run, as requested. No v0.1.1 artifacts, tag or GitHub release were created; this version is source-prepared and untested. Existing validation evidence below applies to earlier work.
+
 ## External activation and topmost stacking — 2026-10-24
 
 The isolated native regression reproduced a stacking gap before the repair: a competing topmost window could cover Screen Edge while the widget still had `WS_EX_TOPMOST`. The existing flag-repair logic then left its stacking order unchanged. The baseline check failed at `external-activation-restores-topmost-order`. This proves a native coordination gap; it does not establish that Photos is the competing topmost window in the user's reproduction.

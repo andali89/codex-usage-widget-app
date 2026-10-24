@@ -6,6 +6,7 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 - [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
 - [Publication audit](publication-audit.md): tracked-file/history review, privacy findings, release artifacts, and verification limits.
+- [Version 0.1.1 release notes](v0.1.1-release-notes.md): source-prepared defaults update; untested and not yet published.
 - [Version 0.1.0 release notes](v0.1.0-release-notes.md): prepared public-preview description and known limitations.
 
 - [Proxy, storage and compact periods](proxy-storage-periods-implementation-report.md): proxy settings, EXE/AppData/custom configuration migration and fallback, HUD/Edge period visibility, and validation evidence.

@@ -4,6 +4,8 @@ Keep Codex remaining quota and expected reset times in view on your Windows desk
 
 **[Download v0.1.0 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.0)** · [Release notes](docs/v0.1.0-release-notes.md) · [Documentation](docs/README.md)
 
+Source is prepared for [v0.1.1](docs/v0.1.1-release-notes.md), with an empty proxy field and 120-second refresh defaults for Detail, Compact, and Background. Existing saved settings are preserved. Downloads above remain v0.1.0 until v0.1.1 is published.
+
 An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.0 is a public preview; see [known limitations](#known-limitations).
 
 ## Download and install
