@@ -4,7 +4,7 @@ Updated: 2026-10-24. **In progress; not release complete.** Specification: [desi
 
 ## v0.1.1 source preparation — 2026-10-24
 
-Set the Rust Detail and Compact refresh defaults to 120 seconds, matching Background, and aligned the synthetic preview settings, effective interval and next-refresh timestamp. The proxy default remains `None`; the connection input now has no example-address placeholder. Existing saved settings are preserved, with no settings-schema migration. Cadence bounds, ordering validation, scheduler jitter, battery-saver adjustments and inherited network behavior are unchanged.
+Set the Rust Detail and Compact refresh defaults to 120 seconds, matching Background, and aligned the synthetic preview settings, effective interval and next-refresh timestamp. The proxy default remains `None`; the connection input shows `Example: http://127.0.0.1:7890` as a placeholder, explicitly labeling the address as a hint rather than a configured value. Existing saved settings are preserved, with no settings-schema migration. Cadence bounds, ordering validation, scheduler jitter, battery-saver adjustments and inherited network behavior are unchanged.
 
 Updated npm, Cargo and Tauri versions, both lockfiles and packaging-check defaults to 0.1.1. Added [release notes](v0.1.1-release-notes.md), updated the design defaults and documentation index, and retained published v0.1.0 download links in README. No dependencies were upgraded.
 
