@@ -10,6 +10,17 @@ Updated npm, Cargo and Tauri versions, both lockfiles and packaging-check defaul
 
 Validation: source/diff review only. Tests, builds, live Codex reads and runtime checks were not run, as requested. No v0.1.1 artifacts, tag or GitHub release were created; this version is source-prepared and untested. Existing validation evidence below applies to earlier work.
 
+### Release test correction — 2026-10-24
+
+The GitHub release test failure came from `settings_boundaries_and_defaults` implicitly relying on the previous 60-second Compact default: it expected Detail at 120 seconds to fail validation. Updated the test to assert the empty proxy and all three 120-second defaults, accept that valid configuration, and set explicit values for out-of-range Detail and both cadence-ordering violations. Production validation and defaults are unchanged.
+
+- `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib model::tests::settings_boundaries_and_defaults -- --exact`: passed.
+- `npm.cmd run rust:fmt`: passed after correcting the new tuple assertion's formatting.
+- Initial `npm.cmd run rust:test`: 117 passed, 17 storage-related failures, 1 live probe ignored, using the sandbox's default temporary directory.
+- Repeated `npm.cmd run rust:test` with process-local `TEMP` and `TMP` set to `src-tauri/target/validation/test-temp`: passed, 134 app tests and 3 maintained dependency tests; 1 live probe ignored. No machine environment changes. An incremental-cache hard-link fallback warning remains environmental.
+
+This supersedes the initial untested status for Rust only. Frontend compilation, packaged artifacts, Windows runtime behavior and a hosted release rerun remain unverified for this correction. No push or release action was performed.
+
 ## External activation and topmost stacking — 2026-10-24
 
 The isolated native regression reproduced a stacking gap before the repair: a competing topmost window could cover Screen Edge while the widget still had `WS_EX_TOPMOST`. The existing flag-repair logic then left its stacking order unchanged. The baseline check failed at `external-activation-restores-topmost-order`. This proves a native coordination gap; it does not establish that Photos is the competing topmost window in the user's reproduction.

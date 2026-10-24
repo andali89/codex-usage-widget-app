@@ -772,10 +772,27 @@ mod tests {
         let mut s = Settings::default();
         assert_eq!(s.theme_preference, ThemePreference::System);
         assert_eq!(s.mode, DisplayMode::SystemTray);
+        assert!(s.proxy_url.is_none());
+        assert_eq!(
+            (
+                s.foreground_seconds,
+                s.compact_seconds,
+                s.background_seconds
+            ),
+            (120, 120, 120)
+        );
         assert!(s.validate().is_ok());
         s.foreground_seconds = 5;
         assert!(s.validate().is_err());
+        s.foreground_seconds = 121;
+        assert!(s.validate().is_err());
         s.foreground_seconds = 120;
+        assert!(s.validate().is_ok());
+        s.compact_seconds = 60;
+        assert!(s.validate().is_err());
+        s.foreground_seconds = 60;
+        assert!(s.validate().is_ok());
+        s.compact_seconds = 121;
         assert!(s.validate().is_err());
     }
 }
