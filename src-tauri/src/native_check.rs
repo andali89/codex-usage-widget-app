@@ -1,4 +1,4 @@
-//! Debug-build integration check. Exercises this application's coordinator, never
+//! Explicit isolated native integration checks (appearance/sizing also in release). Exercises this application's coordinator, never
 //! sends OS mouse/keyboard input, and records no quota values or account identifiers.
 use crate::{
     interaction::{DetailState, ShellState, Surface},
@@ -42,23 +42,45 @@ async fn frontend_assert(
     Err(format!("timeout-{name}"))
 }
 pub fn requested() -> bool {
-    std::env::args().any(|arg| {
-        matches!(
-            arg.as_str(),
-            "--check-native-windows"
-                | "--check-native-stress"
-                | "--check-native-notifications"
-                | "--check-native-sizing"
-                | "--check-native-topmost"
-                | "--check-native-appearance"
-        )
-    })
+    appearance_requested()
+        || sizing_requested()
+        || cfg!(debug_assertions)
+            && std::env::args().any(|arg| {
+                matches!(
+                    arg.as_str(),
+                    "--check-native-windows"
+                        | "--check-native-stress"
+                        | "--check-native-notifications"
+                        | "--check-native-topmost"
+                )
+            })
+}
+
+pub fn validation_directory() -> std::path::PathBuf {
+    std::env::current_exe()
+        .expect("validation executable")
+        .parent()
+        .expect("executable directory")
+        .join("../validation")
+        .join(if appearance_requested() {
+            "native-appearance"
+        } else {
+            "native-sizing"
+        })
+}
+
+static CHECK_LOG: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+fn record(message: String) {
+    println!("{message}");
+    if let Ok(mut log) = CHECK_LOG.lock() {
+        log.push(message);
+    }
 }
 
 pub fn appearance_requested() -> bool {
     std::env::args().any(|arg| arg == "--check-native-appearance")
 }
-pub fn composition_probe_requested() -> bool {
+fn composition_probe_requested() -> bool {
     appearance_requested() && std::env::args().any(|arg| arg == "--probe-native-composition")
 }
 pub fn presentation_requested() -> bool {
@@ -78,11 +100,11 @@ pub fn sizing_requested() -> bool {
 }
 
 pub fn topmost_requested() -> bool {
-    std::env::args().any(|arg| arg == "--check-native-topmost")
+    cfg!(debug_assertions) && std::env::args().any(|arg| arg == "--check-native-topmost")
 }
 
 pub fn notifications_requested() -> bool {
-    std::env::args().any(|arg| arg == "--check-native-notifications")
+    cfg!(debug_assertions) && std::env::args().any(|arg| arg == "--check-native-notifications")
 }
 
 pub fn prepare(mut loaded: crate::storage::Loaded) -> crate::storage::Loaded {
@@ -148,7 +170,7 @@ async fn save_settings(service: &Service, settings: Settings) -> Result<(), Stri
 }
 fn require(value: bool, label: &str) -> Result<(), String> {
     if value {
-        println!("native-check {label}=pass");
+        record(format!("native-check {label}=pass"));
         Ok(())
     } else {
         Err(label.into())
@@ -193,6 +215,11 @@ async fn second_launch(background: bool) -> Result<(), String> {
 }
 
 pub fn start(app: AppHandle, service: Service) {
+    if presentation_requested() {
+        let directory = validation_directory();
+        let _ = std::fs::create_dir_all(&directory);
+        let _ = std::fs::write(directory.join("result.log"), "native-check result=running");
+    }
     tauri::async_runtime::spawn(async move {
         let mut result = if appearance_requested() {
             appearance_check(&app, &service).await
@@ -203,15 +230,25 @@ pub fn start(app: AppHandle, service: Service) {
         } else {
             run(&app, &service).await
         };
-        if result.is_ok() && std::env::args().any(|arg| arg == "--check-native-stress") {
+        if cfg!(debug_assertions)
+            && result.is_ok()
+            && std::env::args().any(|arg| arg == "--check-native-stress")
+        {
             result = stress(&app, &service).await;
         }
         if result.is_ok() && notifications_requested() {
             result = notification_check(&app, &service).await;
         }
         match result {
-            Ok(()) => println!("native-check result=pass"),
-            Err(error) => eprintln!("native-check result=failed code={error}"),
+            Ok(()) => record("native-check result=pass".into()),
+            Err(error) => record(format!("native-check result=failed code={error}")),
+        }
+        if presentation_requested() {
+            let directory = validation_directory();
+            let _ = std::fs::create_dir_all(&directory);
+            if let Ok(log) = CHECK_LOG.lock() {
+                let _ = std::fs::write(directory.join("result.log"), log.join("\n"));
+            }
         }
         service.dispatch(Action::Quit);
     });
@@ -576,25 +613,47 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                 snapshot.appearance.widget.background_alpha
             );
             shell.eval("window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:'paint='+getComputedStyle(document.querySelector('.shell')).backgroundImage}})").map_err(|_|"paint-style")?;
+            require(
+                snapshot.appearance.widget.composition_available
+                    && snapshot.appearance.transparency_allowed,
+                "native-composition-and-windows-transparency-available",
+            )?;
+            let alpha = snapshot.appearance.widget.background_alpha;
+            let expression=format!("(()=>{{const s=document.querySelector('.shell');return s&&getComputedStyle(s).opacity==='1'&&Math.abs(parseFloat(s.style.getPropertyValue('--widget-base-paint').split(',').pop())-{alpha})<.001;}})()");
+            frontend_assert(
+                app,
+                "shell",
+                &expression,
+                "requested-background-alpha-with-opaque-foreground",
+            )
+            .await?;
+            if mode == DisplayMode::Floating && percent > 0 {
+                frontend_assert(app,"shell","(()=>{const s=document.querySelector('.shell'),c=s?.querySelector('.widget-credits'),probe=document.createElement('span');if(!s||!c)return false;probe.style.backgroundColor=s.style.getPropertyValue('--widget-wash-paint');return getComputedStyle(c).backgroundColor===probe.style.backgroundColor;})()","translucent-original-credits-retain-wash-color").await?;
+            }
             if !composition_probe_requested() {
-                require(
-                    snapshot.appearance.widget.background_alpha == 1.0
-                        && !snapshot.appearance.widget.composition_available
-                        && snapshot.appearance.widget.reason
-                            == Some("native-composition-unverified"),
-                    "opaque-native-fallback-retains-request",
-                )?;
                 continue;
             }
             let black = composition_probe(app, &shell, false).await?;
             let white = composition_probe(app, &shell, true).await?;
+            if percent == 0 {
+                let background = &snapshot.appearance.widget.palette["background"];
+                require(
+                    (0..3).all(|channel| {
+                        black[channel].abs_diff(
+                            u8::from_str_radix(&background[1 + channel * 2..3 + channel * 2], 16)
+                                .unwrap(),
+                        ) <= 24
+                    }),
+                    "opaque-capture-calibrates-to-rendered-theme",
+                )?;
+            }
             let expected = 255.0 * f64::from(percent) / 100.0;
-            println!(
+            record(format!(
                 "native-check composition requested={percent} delta={:?}",
                 (0..3)
                     .map(|i| i16::from(white[i]) - i16::from(black[i]))
                     .collect::<Vec<_>>()
-            );
+            ));
             require(
                 (0..3).all(|channel| {
                     (f64::from(white[channel]) - f64::from(black[channel]) - expected).abs() <= 10.0
@@ -612,8 +671,181 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
         "synthetic-check-has-no-quota-read",
     )?;
     original_style_check(app, service).await?;
+    showcase_style_check(app, service).await?;
+    dashboard_navigation_check(app, service).await?;
     settings_preview_check(app, service).await?;
     save_settings(service, original).await?;
+    Ok(())
+}
+
+async fn showcase_style_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    use crate::widget_appearance::{PresetId, WidgetAppearance};
+    let catalog: serde_json::Value =
+        serde_json::from_str(include_str!("../../src/appearance-presets.json")).unwrap();
+    service.dispatch(Action::Window(Input::Close));
+    for dark in [false, true] {
+        for id in catalog.as_object().unwrap().keys() {
+            let preset: PresetId = serde_json::from_value(id.clone().into()).unwrap();
+            for mode in [
+                DisplayMode::Floating,
+                DisplayMode::ScreenEdge,
+                DisplayMode::CompactHud,
+            ] {
+                let mut settings = service.snapshot().await?.settings;
+                settings.mode = mode;
+                settings
+                    .windows
+                    .visible_periods
+                    .insert("screen-edge".into(), VisiblePeriods::Both);
+                settings
+                    .windows
+                    .visible_periods
+                    .insert("compact-hud".into(), VisiblePeriods::Both);
+                settings.theme_preference = if dark {
+                    ThemePreference::Dark
+                } else {
+                    ThemePreference::Light
+                };
+                settings.widget_appearance = WidgetAppearance {
+                    preset_id: Some(preset),
+                    ..Default::default()
+                };
+                save_settings(service, settings).await?;
+                let palette =
+                    serde_json::to_string(&crate::widget_appearance::preset_palette(preset, dark))
+                        .unwrap();
+                let (five, weekly) = match mode {
+                    DisplayMode::Floating => (
+                        ".period-five-hour .quota-reading strong",
+                        ".period-weekly .quota-reading strong",
+                    ),
+                    DisplayMode::ScreenEdge => (
+                        ".edge-values>.edge-value:not(.weekly) .ring-reading>strong",
+                        ".weekly .ring-reading>strong",
+                    ),
+                    _ => (".hud-quota:not(.weekly)>strong", ".hud-quota.weekly>strong"),
+                };
+                let theme = if dark { "dark" } else { "light" };
+                let expression=format!("(()=>{{if(document.documentElement.dataset.theme!=='{theme}')return false;const s=document.querySelector('.shell'),p={palette},rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';if(!s)return false;const f=s.querySelector('{five}'),w=s.querySelector('{weekly}');return f&&w&&getComputedStyle(f).color===rgb(p.fiveHour)&&getComputedStyle(w).color===rgb(p.weekly)&&getComputedStyle(s).backgroundImage.includes(rgb(p.background));}})()");
+                frontend_assert(
+                    app,
+                    "shell",
+                    &expression,
+                    &format!("showcase-{id}-{theme}-{mode:?}"),
+                )
+                .await?;
+            }
+            // Use this session's own shell as a synthetic tray anchor. This
+            // checks tray rendering without requiring real pointer input.
+            let shell = app.get_webview_window("shell").ok_or("tray-style-anchor")?;
+            let position = shell.outer_position().map_err(|_| "tray-style-position")?;
+            let size = shell.outer_size().map_err(|_| "tray-style-size")?;
+            let mut settings = service.snapshot().await?.settings;
+            settings.mode = DisplayMode::SystemTray;
+            save_settings(service, settings).await?;
+            service.dispatch(Action::Window(Input::Tray {
+                rect: crate::geometry::Rect {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    width: f64::from(size.width),
+                    height: f64::from(size.height),
+                },
+                activate: false,
+                open_window: false,
+                menu: false,
+            }));
+            open_hover(app, service, Surface::Tray).await?;
+            let palette = crate::widget_appearance::preset_palette(preset, dark);
+            let background = if preset == PresetId::Original {
+                if dark {
+                    "#10213A"
+                } else {
+                    "#FFFFFF"
+                }
+            } else {
+                &palette["contentSurface"]
+            };
+            let text = &palette["text"];
+            let expression=format!("(()=>{{const s=document.querySelector('.tray-summary'),rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';return s&&!s.querySelector('button')&&getComputedStyle(s).backgroundColor===rgb('{background}')&&getComputedStyle(s).color===rgb('{text}');}})()");
+            frontend_assert(
+                app,
+                "preview",
+                &expression,
+                &format!(
+                    "showcase-{id}-{}-TrayPreview",
+                    if dark { "dark" } else { "light" }
+                ),
+            )
+            .await?;
+            service.dispatch(Action::Window(Input::Request(
+                Surface::Preview,
+                Request::Collapse,
+            )));
+        }
+    }
+    Ok(())
+}
+
+async fn dashboard_navigation_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    service.dispatch(Action::Window(Input::Close));
+    service.dispatch(Action::Window(Input::InspectPopup));
+    dashboard_settled(app, service).await?;
+    let main = app.get_webview_window("main").ok_or("sizing-main")?;
+    let popup_size = main.outer_size().map_err(|_| "sizing-popup")?;
+    for section in [
+        "Display",
+        "Reminders",
+        "General",
+        "Connection & diagnostics",
+    ] {
+        main.eval("document.querySelector('nav[aria-label=Dashboard] button[aria-label=Settings]').click()").map_err(|_|"sizing-settings")?;
+        main.eval(format!("[...document.querySelectorAll('.settings-tabs button')].find(b=>b.textContent==='{section}').click()")).map_err(|_|"sizing-section")?;
+        frontend_assert(
+            app,
+            "main",
+            "!!document.querySelector('[data-settings]:not([hidden])')",
+            "settings-page-visible",
+        )
+        .await?;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        require(
+            main.outer_size().map_err(|_| "sizing-popup")? == popup_size,
+            "popup-navigation-preserves-bounds",
+        )?;
+        main.eval("document.querySelector('nav[aria-label=Dashboard] button[aria-label=Overview]').click()").map_err(|_|"sizing-overview")?;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        require(
+            main.outer_size().map_err(|_| "sizing-popup")? == popup_size,
+            "popup-overview-preserves-bounds",
+        )?;
+    }
+    service.dispatch(Action::Window(Input::Request(
+        Surface::Main,
+        Request::Promote,
+    )));
+    dashboard_settled(app, service).await?;
+    main.set_size(tauri::LogicalSize::new(700.0, 520.0))
+        .map_err(|_| "sizing-manual")?;
+    service.dispatch(Action::Window(Input::MainUserSizing));
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let window_size = main.outer_size().map_err(|_| "sizing-window")?;
+    main.eval(
+        "document.querySelector('nav[aria-label=Dashboard] button[aria-label=Settings]').click()",
+    )
+    .map_err(|_| "sizing-settings")?;
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    require(
+        main.outer_size().map_err(|_| "sizing-window")? == window_size,
+        "standard-navigation-preserves-manual-bounds",
+    )?;
+    service.dispatch(Action::Window(Input::Close));
+    service.dispatch(Action::Window(Input::InspectPopup));
+    dashboard_settled(app, service).await?;
+    require(
+        main.outer_size().map_err(|_| "sizing-reopen")? == popup_size,
+        "popup-reopen-keeps-independent-bounds",
+    )?;
+    service.dispatch(Action::Window(Input::Close));
     Ok(())
 }
 
@@ -751,10 +983,10 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
     .await?;
     let saved = service.snapshot().await?.settings;
     let main = app.get_webview_window("main").ok_or("preview-main")?;
-    main.eval("document.querySelectorAll('.preset-grid button')[1].click()")
+    main.eval("document.querySelector('[data-preset=glacier]').click()")
         .map_err(|_| "preview-click")?;
     wait(app, service, "preview-preset", |s| {
-        s.appearance.widget.palette["background"] == "#E8F4FF"
+        s.appearance.widget.palette["background"] == "#E8F8FF"
     })
     .await?;
     require(
@@ -765,10 +997,14 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
         .map_err(|_| "preview-theme")?;
     wait(app, service, "preview-dark", |s| {
         s.appearance.resolved_theme == "dark"
-            && s.appearance.widget.palette["background"] == "#071C2D"
+            && s.appearance.widget.palette["background"] == "#09283B"
     })
     .await?;
-    frontend_assert(app,"main","document.querySelector('.preset-grid').parentElement.textContent.includes('Editing Dark colors for Ocean')&&!document.querySelector('.appearance-preview')","active-theme-editor-no-embedded-preview").await?;
+    frontend_assert(app,"main","document.querySelector('.preset-grid').parentElement.textContent.includes('Editing Dark colors for Glacier')&&!document.querySelector('.appearance-preview')","active-theme-editor-no-embedded-preview").await?;
+    main.eval("window.__themeFont=document.documentElement.style.fontSize;document.documentElement.style.fontSize='24px'").map_err(|_|"theme-text-scale")?;
+    frontend_assert(app,"main","(()=>{document.documentElement.style.fontSize='24px';const g=document.querySelector('.preset-grid');return getComputedStyle(document.documentElement).fontSize==='24px'&&g&&g.scrollWidth<=g.clientWidth+1&&[...g.querySelectorAll('button')].every(b=>b.scrollWidth<=b.clientWidth+1);})()","theme-selector-fits-at-synthetic-150-percent-text").await?;
+    main.eval("document.documentElement.style.fontSize=window.__themeFont")
+        .map_err(|_| "theme-text-scale-restore")?;
     main.eval("[...document.querySelectorAll('label')].find(el=>el.textContent==='Use custom quota colors').querySelector('input').click()").map_err(|_|"preview-custom")?;
     frontend_assert(
         app,
@@ -824,17 +1060,17 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
         service.snapshot().await?.settings.revision == saved.revision,
         "cancel-keeps-saved-revision",
     )?;
-    main.eval("document.querySelectorAll('.preset-grid button')[2].click()")
-        .map_err(|_| "preview-forest")?;
-    wait(app, service, "preview-forest", |s| {
-        s.appearance.widget.palette["background"] == "#EAF4EC"
+    main.eval("document.querySelector('[data-preset=matcha]').click()")
+        .map_err(|_| "preview-matcha")?;
+    wait(app, service, "preview-matcha", |s| {
+        s.appearance.widget.palette["background"] == "#F0F6E4"
     })
     .await?;
     main.eval("document.querySelector('.save-bar button[type=submit]').click()")
         .map_err(|_| "preview-save")?;
     wait(app, service, "preview-save-once", |s| {
         s.settings.revision == saved.revision + 1
-            && s.settings.widget_appearance.preset_id == Some(PresetId::Forest)
+            && s.settings.widget_appearance.preset_id == Some(PresetId::Matcha)
     })
     .await?;
     service.dispatch(Action::Window(Input::Close));
@@ -849,7 +1085,7 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
             .settings
             .widget_appearance
             .preset_id
-            == Some(PresetId::Forest),
+            == Some(PresetId::Matcha),
         "close-retains-saved-preset",
     )?;
     Ok(())
@@ -867,15 +1103,101 @@ impl Drop for PaintBackdrop {
         });
     }
 }
+unsafe extern "system" fn paint_backdrop_proc(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    message: u32,
+    wparam: usize,
+    lparam: isize,
+) -> isize {
+    use windows_sys::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::*};
+    unsafe {
+        match message {
+            WM_NCCREATE => {
+                let create = &*(lparam as *const CREATESTRUCTW);
+                SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
+                1
+            }
+            WM_ERASEBKGND => 1,
+            WM_PAINT => {
+                let mut paint = std::mem::zeroed();
+                let dc = BeginPaint(hwnd, &mut paint);
+                let mut rect = std::mem::zeroed();
+                GetClientRect(hwnd, &mut rect);
+                let brush = GetStockObject(if GetWindowLongPtrW(hwnd, GWLP_USERDATA) == 1 {
+                    WHITE_BRUSH
+                } else {
+                    BLACK_BRUSH
+                });
+                FillRect(dc, &rect, brush);
+                EndPaint(hwnd, &paint);
+                0
+            }
+            _ => DefWindowProcW(hwnd, message, wparam, lparam),
+        }
+    }
+}
+unsafe fn capture_composed_pixel(
+    point: windows_sys::Win32::Foundation::POINT,
+) -> Result<u32, &'static str> {
+    use windows_sys::Win32::Graphics::Gdi::*;
+    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+    unsafe {
+        // GetDC coordinates are virtualized when a WebView2 callback has changed
+        // the thread context. Our verified window rectangles are physical pixels.
+        let module = GetModuleHandleW("user32.dll\0".encode_utf16().collect::<Vec<_>>().as_ptr());
+        let setter = GetProcAddress(module, c"SetThreadDpiAwarenessContext".as_ptr().cast()).map(
+            |function| {
+                std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    unsafe extern "system" fn(isize) -> isize,
+                >(function)
+            },
+        );
+        let previous_dpi = setter.map_or(0, |set| set(-4));
+        let source = GetDC(std::ptr::null_mut());
+        let mut clip = std::mem::zeroed();
+        let region = GetClipBox(source, &mut clip);
+        let memory = CreateCompatibleDC(source);
+        let bitmap = CreateCompatibleBitmap(source, 1, 1);
+        let previous = SelectObject(memory, bitmap);
+        let copied = BitBlt(
+            memory,
+            0,
+            0,
+            1,
+            1,
+            source,
+            point.x,
+            point.y,
+            SRCCOPY | CAPTUREBLT,
+        );
+        let value = if copied != 0 {
+            GetPixel(memory, 0, 0)
+        } else {
+            u32::MAX
+        };
+        record(format!("native-check composed-capture dc={} region={region} clip={}x{} copied={copied} value={value:08X}",!source.is_null(),clip.right-clip.left,clip.bottom-clip.top));
+        SelectObject(memory, previous);
+        DeleteObject(bitmap);
+        DeleteDC(memory);
+        ReleaseDC(std::ptr::null_mut(), source);
+        if previous_dpi != 0 {
+            if let Some(set) = setter {
+                set(previous_dpi);
+            }
+        }
+        if region == NULLREGION || value == u32::MAX {
+            Err("native-capture-unavailable")
+        } else {
+            Ok(value)
+        }
+    }
+}
 async fn composition_probe(
     app: &AppHandle,
     shell: &tauri::WebviewWindow,
     white: bool,
 ) -> Result<[u8; 3], String> {
-    // Win32 STATIC rectangle styles; kept local to this debug-only paint probe.
-    const SS_BLACKRECT: u32 = 0x0004;
-    const SS_WHITERECT: u32 = 0x0006;
-    const SS_NOTIFY: u32 = 0x0100;
     use windows_sys::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::*};
     let position = shell.outer_position().map_err(|_| "paint-position")?;
     let size = shell.outer_size().map_err(|_| "paint-size")?;
@@ -883,13 +1205,31 @@ async fn composition_probe(
     let shell_handle = shell.hwnd().map_err(|_| "paint-handle")?.0 as usize;
     let (send, receive) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
-        let class = "STATIC\0".encode_utf16().collect::<Vec<_>>();
+        let class = "CodexUsageValidationBackdrop\0"
+            .encode_utf16()
+            .collect::<Vec<_>>();
+        static REGISTERED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let registered = *REGISTERED.get_or_init(|| unsafe {
+            let definition = WNDCLASSW {
+                lpfnWndProc: Some(paint_backdrop_proc),
+                hInstance: windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(
+                    std::ptr::null(),
+                ),
+                lpszClassName: class.as_ptr(),
+                ..std::mem::zeroed()
+            };
+            RegisterClassW(&definition) != 0
+        });
+        if !registered {
+            let _ = send.send(0);
+            return;
+        }
         let handle = unsafe {
             CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
                 class.as_ptr(),
                 std::ptr::null(),
-                WS_POPUP | SS_NOTIFY | if white { SS_WHITERECT } else { SS_BLACKRECT },
+                WS_POPUP,
                 position.x - 8,
                 position.y - 8,
                 size.width as i32 + 16,
@@ -897,7 +1237,7 @@ async fn composition_probe(
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()),
-                std::ptr::null(),
+                usize::from(white) as *const std::ffi::c_void,
             )
         };
         if !handle.is_null() {
@@ -935,37 +1275,33 @@ async fn composition_probe(
             };
             let hit = WindowFromPoint(point);
             if GetAncestor(hit, GA_ROOT) != shell_handle as _ {
-                None
+                Err("paint-sample-occluded")
             } else {
-                let dc = GetDC(std::ptr::null_mut());
                 let outside = windows_sys::Win32::Foundation::POINT {
                     x: position.x - 4,
                     y: position.y + (size.height / 2) as i32,
                 };
                 let backdrop_hit = GetAncestor(WindowFromPoint(outside), GA_ROOT);
                 let backdrop = if backdrop_hit == handle as _ {
-                    GetPixel(dc, outside.x, outside.y)
+                    let dc = GetDC(handle as _);
+                    let mut local=outside;
+                    ScreenToClient(handle as _,&mut local);
+                    let value=GetPixel(dc,local.x,local.y);
+                    ReleaseDC(handle as _,dc);
+                    value
                 } else {
                     u32::MAX
                 };
-                let color = GetPixel(dc, point.x, point.y);
-                ReleaseDC(std::ptr::null_mut(), dc);
+                let color = capture_composed_pixel(point);
                 let expected = if white { 0x00FFFFFF } else { 0 };
-                println!("native-check own-backdrop-valid={}", backdrop == expected);
-                if backdrop == expected {
-                    Some(color)
-                } else {
-                    None
-                }
+                record(format!("native-check own-backdrop-valid={} root={} expected={expected:08X} actual={backdrop:08X} sample={color:?}", backdrop == expected, backdrop_hit == handle as _));
+                if backdrop == expected { color } else { Err("paint-backdrop-unverified") }
             }
         };
         let _ = send.send(color);
     })
     .map_err(|_| "paint-sample-thread")?;
-    let color = receive
-        .await
-        .map_err(|_| "paint-sample")?
-        .ok_or("paint-sample-occluded")?;
+    let color = receive.await.map_err(|_| "paint-sample")??;
     // Only this app's decorative shell over an app-owned solid backdrop is sampled.
     // The difference cancels gradient tint and measures CSS background alpha.
     Ok([

@@ -1,8 +1,56 @@
 # Widget appearance and snapping — implementation evidence
 
+## Sizing, showcase themes, and release transparency — 26 October 2026
+
+Source/application version remains **0.1.2**; settings schema is now **8**. No dependencies, permission capabilities, protocol behavior, refresh scheduling, or reminder policies changed. The supplied theme showcase remains a private, ignored local reference; no copy is distributed.
+
+### Causes and changes
+
+- **Height changes:** React reports natural page height, and the native coordinator previously treated page changes and subsequent fit requests as permission to resize. Settings could therefore expand the dashboard or anchored single-click popup. Each presentation now fits once at its preferred width, then keeps independent logical client bounds during navigation, disclosures, and refreshes. Longer content scrolls. Direct Settings opens use the existing 640/600 logical-pixel initial heights; manually resized standard windows and reopened popups keep their own sizes. Existing placement, work-area clamping, and native frame accounting remain in use.
+- **Theme similarity:** partial presets inherited Original’s surfaces/dividers, and quota choices were harvested from that small catalog. Ten complete Light/Dark palettes now follow the showcase: Graphite, Glacier, Matcha, Rosewood, Terracotta, Sapphire, Sunrise, Mint, Orchid, and Slate. Each supplies all eight color roles, coordinated gradients and themed hover surfaces. Widget hover selections use the theme’s track color. Layouts, typography, artwork, semantic status/focus colors, and dashboard/Settings structure remain intact.
+- **More quota colors:** an independent catalog provides **16 named choices** in each theme, plus the selected preset’s defaults and retained saved colors. All offered choices pass the existing 4.5:1 text and 3:1 quota-track rules across widget and dashboard surfaces. The active palette retains separate 5-hour/weekly opt-in controls and keyboard selection.
+- **Migration:** schema 7’s Ocean → Glacier, Forest → Matcha, Plum → Orchid, and Amber → Terracotta; Original and Slate retain identifiers. Both enabled and inactive Light/Dark customization entries move with their selections. The format-4 checksummed settings/reminder transaction, revisions, placement, and other preferences are preserved. Legacy structural customizations remain supported.
+- **Transparency:** a hard-coded false capability gate disabled ordinary debug and release shells. Original additionally bypassed the RGBA paint class. Both builds now use the same DWM capability check and transparent shell creation; Original takes the alpha paint path only when needed, preserving its 0% appearance. The optional no-redirection bitmap flag was removed: pinned Tao 0.37.1 skips its normal DWM transparent-window setup when that flag is enabled. Windows high contrast, disabled/unknown transparency, and native creation failures retain opaque fallbacks; Settings explains the effective Windows fallback. Main/preview reading windows remain opaque, and foreground elements keep protected backing.
+- **Original comparison:** the base Light/Dark token blocks are identical to the actual v0.1.0 tag. Native assertions retain its frame, gradients, raised/wash surfaces, credits, badges, hover, synthetic tray-preview and dashboard colors. No speculative recoloring was applied to Original.
+- **Release checks:** the ordinary executable accepts the existing isolated appearance/sizing flags. They use a separate validation identity and EXE-relative configuration under target/validation, synthetic usage, disabled reminders, and no Codex worker. Diagnostic frontend IPC is rejected outside these sessions. Normal startup and narrow capabilities are unchanged.
+
+### Verification
+
+Environment: Windows **26200.9711 (25H2)**, WebView2 **155.0.4283.62**. The current native sizing run reports scale **1.0**; it does not establish a multi-DPI matrix.
+
+| Check | Result |
+| --- | --- |
+| npm.cmd test | Passed: **76** frontend tests, including all 22 palettes, every offered quota swatch, Original fixtures and customization memory. |
+| npm.cmd run build | Passed, including TypeScript checking. |
+| npm.cmd run rust:test | Passed: **149 app tests**, one explicit live probe ignored, plus **3 autostart tests**. Includes schema-7 migration, inactive colors, one-time fitting, navigation, and separate popup bounds. |
+| npm.cmd run rust:fmt | Passed. |
+| npm.cmd run rust:check | Passed during implementation; final source is also compiled by release build and all-target Clippy. |
+| npm.cmd run rust:clippy | Passed with all targets and warnings denied. |
+| npm.cmd run desktop:build | Blocked by the existing local Tauri CLI binding: invalid Win32 application / ERR_DLOPEN_FAILED. No tooling was installed or changed. |
+| cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol | Passed; embeds the production frontend in the actual requested release executable. No installer/bundler validation is claimed. |
+| Release --check-native-appearance | Passed: **88 theme/mode combinations** (66 desktop shells plus 22 tray previews using an app-owned synthetic anchor), Original Light/Dark native cascades, 0/20/80 requested background alpha without whole-widget opacity, Settings sections, manual resize, popup reopening, draft Save/Cancel behavior, Original’s translucent credit tint, and a synthetic 150% text-size selector layout check. |
+| Release --check-native-sizing | Passed: **104 compact combinations**, client/rounded-region sizing, period/countdown/label combinations, docking, popup placement/stacking, foreground preservation, tray recovery and the appearance/navigation assertions. |
+| Release composition pixel probe | **Blocked by capture availability:** failed with native-capture-unavailable; artifact identity is recorded below. CSS/native capability checks do not establish actual desktop pixel blending. |
+
+The final capture probe uses explicit app-owned black/white backdrops, verifies sample ownership, rejects invalid pixels, and calibrates opaque samples before accepting alpha deltas. Ordinary screen capture returns a valid DC with an **empty clipping region**, so the composed WebView sample is unavailable. Normal-desktop-access retries show the same limitation. This is not evidence that alpha blending fails, and no capture failure is treated as a pass. GDI child-window reads can produce blank pixels and are not accepted as proof of composition.
+
+Validation logs are ignored under src-tauri/target/validation/: showcase-frontend-tests.log, showcase-frontend-build.log, showcase-rust-tests.log, showcase-clippy.log, showcase-release-appearance.log, and showcase-release-sizing.log. Native result.log markers are checked explicitly because the application exit code alone does not establish a passing check. Native runs still emit the previously observed tray-removal/WebView2 class-unregistration shutdown diagnostics.
+
+Final executable: `src-tauri/target/release/codex-usage-widget.exe`, **13,530,112 bytes**, file/product version **0.1.2**, SHA-256 `C9AA8A6D503B6DE29E2847D8D649886DDC8A84587C7351ACEFD128122E0516CA`. Release appearance and broad sizing checks ended with `native-check result=pass`. The separate final release composition probe ended with `native-check result=failed code=native-capture-unavailable`; its record is `src-tauri/target/validation/showcase-release-composition.log`. The broad sizing run preceded the final credit-paint, responsive-selector and fallback-message refinement; the final appearance/navigation check passed afterward. Actual desktop blending still requires manual confirmation. All validation application processes exited.
+
+### Reproduce current release checks
+
+Run npm.cmd run build, then the embedded Cargo release command above. Execute src-tauri/target/release/codex-usage-widget.exe with --check-native-appearance or --check-native-sizing, one at a time. Add --probe-native-composition to the appearance command for the explicit desktop pixel test. Each exits automatically; require native-check result=pass in its EXE-relative validation result.log.
+
+Manually confirm actual desktop blending at 0/20/80 over light, dark, patterned and moving backgrounds. Windows 10, mixed-DPI pointer drags, text scaling/high-contrast transitions, auto-hide taskbars, Explorer recovery, screen readers, startup flashes, and visual screenshot review remain unverified. No inference requests, credential access, reset-credit operations, notification submissions, installer, publication, or push formed part of this work.
+
+---
+
+The dated evidence below describes earlier iterations and is retained as history; it does not override the current status above.
+
 Date: 25 October 2026. Source version: 0.1.2. Design: [appearance and consistent snapping](widget-appearance-and-snap-design.md).
 
-## Delivered behavior
+## Earlier delivered behavior — 25 October
 
 - App version is **0.1.2** in npm, Cargo, Tauri, lockfiles and package-check defaults. No dependency versions changed.
 - Settings schema **7** stores one paired preset (Original, Ocean, Forest, Plum, Slate, Amber) and independent per-preset Light/Dark custom quota switches and values. The checksummed storage envelope remains format 4, with settings and reminder bookkeeping in one atomic transaction.
@@ -15,9 +63,9 @@ Date: 25 October 2026. Source version: 0.1.2. Design: [appearance and consistent
 - Rust validates all stored quota customizations, including disabled/inactive preset/theme entries, allowed role names and hex colors. The shared JSON catalog and defaults feed both Rust and TypeScript. Schema-6 defaults migrate to Original without activating hidden overrides; quota-only customizations retain both themes; unmatched structural customizations retain their legacy appearance as Saved custom appearance. Schema-6 gaps/anchors are preserved. The older pre-6 anchor migration remains separate.
 - Floating, HUD and Edge share release/restore geometry with a 12 logical px attraction distance. Destination DPI is applied once. Anchor intent survives gap/size changes; free axes remain free; nudges clear affected anchors; explicit Reset position works while locked. Popup spacing remains 8 logical px. Auto-hide taskbar safety floors and insufficient-space constraints remain enforced.
 
-## Native transparency gate
+## Historical native transparency gate — 25 October
 
-**Desktop transparency is unavailable in the shipped path.** A compact advanced row explains the disabled numeric control; stored preferences, preset colors and gap editing remain available.
+**In the 25 October implementation, desktop transparency was unavailable in the shipped path.** A compact advanced row explains the disabled numeric control; stored preferences, preset colors and gap editing remain available.
 
 The shell prototype uses Tauri transparent creation, an optional no-redirection bitmap, CSS background alpha, and the existing rounded native region. Main/preview reading windows remain opaque. Failed transparent creation retries an opaque shell and records a bounded diagnostic.
 

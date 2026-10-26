@@ -26,7 +26,7 @@ test("appearance controls show only active-theme custom quotas and no embedded p
   const state={settings:draft,appearance:{resolvedTheme:"light",highContrast:false,transparencyAllowed:false,widget:resolveWidgetAppearance(appearance,"light",false,false),placementConstraints:{}},usage:{windows:[{...quota,label:"PRIVATE_REAL_VALUE"}],freshness:"stale"},presentation:{previewSource:"shell"},trayAvailable:true};
   const before=structuredClone(state);
   const html=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{throw new Error("Rendering must not save");}}));
-  assert.match(html,/Background transparency/);assert.match(html,/Editing Light colors for Original/);assert.match(html,/Use custom quota colors/);
+  assert.match(html,/Background transparency/);assert.match(html,/Currently opaque because Windows transparency is off or unavailable/);assert.match(html,/Editing Light colors for Original/);assert.match(html,/Use custom quota colors/);
   assert.doesNotMatch(html,/Requested style|Effective style|PRIVATE_REAL_VALUE|radiogroup|Load preset colors|type="color"/);
   draft.widgetAppearance.quotaCustomizations={original:{light:{enabled:true},dark:{enabled:false}}};
   const enabled=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{}}));

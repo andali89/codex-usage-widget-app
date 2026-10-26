@@ -57,18 +57,33 @@ for(const id of presetIds)for(const theme of ["light","dark"])test(id+" "+theme+
   const settings={...defaultWidgetAppearance(),presetId:id};
   assert.deepEqual(appearanceIssues(settings),[]);
   for(const role of ["fiveHour","weekly"]) {
-    const choices=quotaSwatches(settings,theme,role);assert.ok(choices.includes(presetPalette(id,theme)[role]));
+    const choices=quotaSwatches(settings,theme,role);assert.ok(choices.includes(presetPalette(id,theme)[role]));assert.ok(choices.length>=12);
     for(const color of choices) {const customized={...settings,quotaCustomizations:{[id]:{[theme]:{enabled:true,[role]:color}}}};assert.deepEqual(appearanceIssues(customized),[]);}
   }
 });
+
+test("showcase provides ten complete paired themes and keeps Original unchanged",()=>{
+  assert.deepEqual(presetIds,["original","graphite","glacier","matcha","rosewood","terracotta","sapphire","sunrise","mint","orchid","slate"]);
+  const reference=JSON.parse(readFileSync(new URL("./fixtures/original-v0.1.0-colors.json",import.meta.url),"utf8"));
+  for(const theme of ["light","dark"]) {
+    const original=presetPalette("original",theme);
+    for(const [role,token] of Object.entries({background:"--shell",contentSurface:"--raised",text:"--text",secondaryText:"--secondary",fiveHour:"--accent",weekly:"--weekly",track:"--track",border:"--border"}))assert.equal(original[role],reference[theme][token]);
+    const bodies=new Set();
+    for(const id of presetIds.slice(1)) {
+      const palette=presetPalette(id,theme);bodies.add(palette.background);
+      for(const role of ["text","secondaryText","fiveHour","weekly"])assert.ok(contrast(palette[role],palette.contentSurface)>=4.5);
+    }
+    assert.equal(bodies.size,10,"each theme has its own body color");
+  }
+});
 test("each preset and theme retains independent opt-in quota choices",()=>{
-  const value=defaultWidgetAppearance();value.quotaCustomizations={original:{light:{enabled:true,fiveHour:"#6D28D9"},dark:{enabled:false,fiveHour:"#34D399"}},forest:{light:{enabled:true,weekly:"#6D28D9"}}};
+  const value=defaultWidgetAppearance();value.quotaCustomizations={original:{light:{enabled:true,fiveHour:"#6D28D9"},dark:{enabled:false,fiveHour:"#34D399"}},matcha:{light:{enabled:true,weekly:"#6D28D9"}}};
   assert.equal(paletteFor(value,"light").fiveHour,"#6D28D9");assert.equal(paletteFor(value,"dark").fiveHour,"#60A5FA");
-  value.presetId="forest";assert.equal(paletteFor(value,"light").weekly,"#6D28D9");assert.equal(paletteFor(value,"light").background,"#EAF4EC");
+  value.presetId="matcha";assert.equal(paletteFor(value,"light").weekly,"#6D28D9");assert.equal(paletteFor(value,"light").background,"#F0F6E4");
   value.presetId="original";value.quotaCustomizations.original.light.enabled=false;assert.equal(paletteFor(value,"light").fiveHour,"#005FCC");assert.equal(value.quotaCustomizations.original.light.fiveHour,"#6D28D9");
   value.quotaCustomizations.original.light.enabled=true;assert.equal(resolveWidgetAppearance(value,"light").originalStructure,true);
 });
 test("invalid dormant colors are rejected against their own preset and theme",()=>{
-  const value=defaultWidgetAppearance();value.quotaCustomizations={forest:{light:{enabled:false,fiveHour:"#FFFFFF"}}};
-  assert.ok(appearanceIssues(value).some(i=>i.field.includes("quotaCustomizations.forest.light.fiveHour")));
+  const value=defaultWidgetAppearance();value.quotaCustomizations={matcha:{light:{enabled:false,fiveHour:"#FFFFFF"}}};
+  assert.ok(appearanceIssues(value).some(i=>i.field.includes("quotaCustomizations.matcha.light.fiveHour")));
 });

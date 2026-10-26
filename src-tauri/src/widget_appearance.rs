@@ -30,21 +30,31 @@ pub struct Palettes {
 #[serde(rename_all = "lowercase")]
 pub enum PresetId {
     Original,
-    Ocean,
-    Forest,
-    Plum,
+    Glacier,
+    Matcha,
+    Orchid,
     Slate,
-    Amber,
+    Graphite,
+    Rosewood,
+    Sapphire,
+    Sunrise,
+    Mint,
+    Terracotta,
 }
 impl PresetId {
     pub fn key(self) -> &'static str {
         match self {
             Self::Original => "original",
-            Self::Ocean => "ocean",
-            Self::Forest => "forest",
-            Self::Plum => "plum",
+            Self::Glacier => "glacier",
+            Self::Matcha => "matcha",
+            Self::Orchid => "orchid",
             Self::Slate => "slate",
-            Self::Amber => "amber",
+            Self::Graphite => "graphite",
+            Self::Rosewood => "rosewood",
+            Self::Sapphire => "sapphire",
+            Self::Sunrise => "sunrise",
+            Self::Mint => "mint",
+            Self::Terracotta => "terracotta",
         }
     }
 }
@@ -161,11 +171,16 @@ mod tests {
     fn presets_and_retained_customizations_validate_both_themes() {
         for id in [
             PresetId::Original,
-            PresetId::Ocean,
-            PresetId::Forest,
-            PresetId::Plum,
+            PresetId::Glacier,
+            PresetId::Matcha,
+            PresetId::Orchid,
             PresetId::Slate,
-            PresetId::Amber,
+            PresetId::Terracotta,
+            PresetId::Graphite,
+            PresetId::Rosewood,
+            PresetId::Sapphire,
+            PresetId::Sunrise,
+            PresetId::Mint,
         ] {
             let mut settings = WidgetAppearance {
                 preset_id: Some(id),
@@ -406,11 +421,16 @@ impl WidgetAppearance {
         let mut issues = self.legacy_issues();
         for id in [
             PresetId::Original,
-            PresetId::Ocean,
-            PresetId::Forest,
-            PresetId::Plum,
+            PresetId::Glacier,
+            PresetId::Matcha,
+            PresetId::Orchid,
             PresetId::Slate,
-            PresetId::Amber,
+            PresetId::Terracotta,
+            PresetId::Graphite,
+            PresetId::Rosewood,
+            PresetId::Sapphire,
+            PresetId::Sunrise,
+            PresetId::Mint,
         ] {
             if self.preset_id != Some(id) && !self.quota_customizations.contains_key(&id) {
                 continue;
@@ -521,9 +541,12 @@ impl WidgetAppearance {
         } else {
             &self.palettes.light
         };
-        let divider = if !high_contrast
-            && matches!(self.color_mode, ColorMode::Custom)
-            && overrides.contains_key("border")
+        let original_structure = self.preset_id == Some(PresetId::Original)
+            || (self.preset_id.is_none() && matches!(self.color_mode, ColorMode::ThemeDefaults));
+        let divider = if !original_structure
+            || (!high_contrast
+                && matches!(self.color_mode, ColorMode::Custom)
+                && overrides.contains_key("border"))
         {
             palette["border"].clone()
         } else {

@@ -31,11 +31,8 @@ pub enum Action {
         reply: Option<oneshot::Sender<AppState>>,
     },
     Snapshot(oneshot::Sender<AppState>),
-    #[cfg(debug_assertions)]
     ShellContentSize(oneshot::Sender<Option<(f64, f64)>>),
-    #[cfg(debug_assertions)]
     PreviewContentSize(oneshot::Sender<Option<(f64, f64)>>),
-    #[cfg(debug_assertions)]
     DashboardSettled(oneshot::Sender<bool>),
     Refresh,
     Autostart(oneshot::Sender<Result<AppState, String>>),
@@ -140,12 +137,6 @@ fn resolve_display(app: &AppHandle, state: &mut AppState) {
 }
 fn publish(app: &AppHandle, state: &mut AppState) {
     resolve_display(app, state);
-    #[cfg(debug_assertions)]
-    if crate::native_check::presentation_requested() {
-        // Exercise requested CSS without changing Windows accessibility settings.
-        state.appearance.high_contrast = false;
-        state.appearance.transparency_allowed = true;
-    }
     let composition = crate::native_windows::composition_available()
         && state.window_diagnostic.as_deref() != Some("native-composition-failed");
     state.appearance.widget = effective_settings(state).widget_appearance.resolve(
@@ -280,7 +271,6 @@ pub fn start(
     let (store, loaded) = Store::open(portable_directory, directory);
     let store = std::sync::Arc::new(store);
     app.manage(store.clone());
-    #[cfg(debug_assertions)]
     let loaded = crate::native_check::prepare(loaded);
     let first_launch = loaded.first_launch;
     let dashboard = crate::lifecycle::initial_dashboard(
@@ -288,7 +278,6 @@ pub fn start(
         tray_available,
         crate::lifecycle::background_launch(std::env::args()),
     );
-    #[cfg(debug_assertions)]
     let dashboard = dashboard && !crate::native_check::presentation_requested();
     let mut persisted_reminders = serde_json::to_vec(&loaded.reminders).unwrap_or_default();
     let mut reminders = reminders::Engine::new(loaded.reminders, loaded.settings.reminders.enabled);
@@ -335,7 +324,6 @@ pub fn start(
         first_launch,
     };
     let mut durable_identity = identity_salt.is_some();
-    #[cfg(debug_assertions)]
     if crate::native_check::presentation_requested() {
         state.usage = crate::native_check::fixture_usage();
     }
@@ -503,10 +491,7 @@ pub fn start(
                 publish(&app, &mut state);
             }
             if scheduler.start_if_due(now) {
-                #[cfg(debug_assertions)]
                 let synthetic = crate::native_check::presentation_requested();
-                #[cfg(not(debug_assertions))]
-                let synthetic = false;
                 if synthetic {
                     scheduler.finish(now, true, true, interval, false);
                 } else {
@@ -632,11 +617,8 @@ pub fn start(
                             if let Some(reply)=reply {let _=reply.send(state.clone());}
                         },
                         Action::Snapshot(reply) => { state.storage = store.status(); let _ = reply.send(state.clone()); },
-                        #[cfg(debug_assertions)]
                         Action::ShellContentSize(reply) => { let _ = reply.send(windows.shell_content_size()); },
-                        #[cfg(debug_assertions)]
                         Action::PreviewContentSize(reply) => { let _ = reply.send(windows.preview_content_size()); },
-                        #[cfg(debug_assertions)]
                         Action::DashboardSettled(reply) => { let _ = reply.send(windows.dashboard_settled()); },
                         Action::Refresh => { scheduler.retry(now); },
                         Action::Autostart(reply) => {

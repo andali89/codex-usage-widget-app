@@ -32,7 +32,6 @@ pub fn double_click_interval() -> u64 {
     unsafe { windows_sys::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime() as u64 }
 }
 
-#[cfg(debug_assertions)]
 pub fn identity_matches(identifier: &str) -> bool {
     let mut value = std::ptr::null_mut();
     if unsafe { GetCurrentProcessExplicitAppUserModelID(&mut value) } < 0 || value.is_null() {
@@ -191,13 +190,10 @@ pub fn configure(window: &WebviewWindow, policy: WindowPolicy) -> Result<(), &'s
     })
 }
 
-#[cfg(debug_assertions)]
 static CONTROL_RECONCILES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-#[cfg(debug_assertions)]
 pub fn control_reconciles() -> u64 {
     CONTROL_RECONCILES.load(std::sync::atomic::Ordering::SeqCst)
 }
-#[cfg(debug_assertions)]
 pub fn post_control_check() -> Result<u64, &'static str> {
     let hooks = HOOKS
         .get()
@@ -457,7 +453,6 @@ unsafe extern "system" fn control_proc(
         }
         WM_DISPLAYCHANGE => Some(Input::Layout),
         WM_TIMECHANGE => {
-            #[cfg(debug_assertions)]
             CONTROL_RECONCILES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Some(Input::Reconcile)
         }
@@ -802,16 +797,6 @@ pub fn taskbar_safety(monitor: Rect) -> ([bool; 4], bool) {
 }
 
 pub fn composition_available() -> bool {
-    // Release gate: native sampling could not establish reliable composition in
-    // the current environment. See the appearance/snap implementation report.
-    const TRANSPARENCY_RELEASE_VALIDATED: bool = false;
-    #[cfg(debug_assertions)]
-    let probe = crate::native_check::composition_probe_requested();
-    #[cfg(not(debug_assertions))]
-    let probe = false;
-    if !TRANSPARENCY_RELEASE_VALIDATED && !probe {
-        return false;
-    }
     #[link(name = "dwmapi")]
     unsafe extern "system" {
         fn DwmIsCompositionEnabled(enabled: *mut i32) -> i32;
@@ -820,7 +805,6 @@ pub fn composition_available() -> bool {
     unsafe { DwmIsCompositionEnabled(&mut enabled) >= 0 && enabled != 0 }
 }
 
-#[cfg(debug_assertions)]
 pub fn has_rounded_corners(window: &WebviewWindow) -> bool {
     use windows_sys::Win32::Graphics::Gdi::*;
     let (Ok(hwnd), Ok(size)) = (window.hwnd(), window.outer_size()) else {

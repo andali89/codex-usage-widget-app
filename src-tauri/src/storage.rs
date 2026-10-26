@@ -84,7 +84,7 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
         .get("schemaVersion")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    if version > 7 {
+    if version > 8 {
         return Err("storage-future-version");
     }
     if version < 6 {
@@ -146,6 +146,36 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
             a.insert("colorMode".into(), "theme-defaults".into());
         } else {
             a.insert("presetId".into(), serde_json::Value::Null);
+        }
+    }
+    if version < 8 {
+        let obj = value.as_object_mut().ok_or("storage-corrupt")?;
+        obj.insert("schemaVersion".into(), 8.into());
+        if let Some(a) = obj
+            .get_mut("widgetAppearance")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            for (old, new) in [
+                ("ocean", "glacier"),
+                ("forest", "matcha"),
+                ("plum", "orchid"),
+                ("amber", "terracotta"),
+            ] {
+                if a.get("presetId").and_then(serde_json::Value::as_str) == Some(old) {
+                    a.insert("presetId".into(), new.into());
+                }
+                if let Some(maps) = a
+                    .get_mut("quotaCustomizations")
+                    .and_then(serde_json::Value::as_object_mut)
+                {
+                    if let Some(colors) = maps.remove(old) {
+                        // A schema-7 file cannot contain the new identifiers.
+                        if maps.insert(new.into(), colors).is_some() {
+                            return Err("storage-corrupt");
+                        }
+                    }
+                }
+            }
         }
     }
     let settings: Settings = serde_json::from_value(value).map_err(|_| "storage-corrupt")?;
@@ -363,6 +393,47 @@ mod tests {
     use super::*;
     use crate::model::ThemePreference;
     #[test]
+    fn schema_seven_remaps_themes_and_retains_inactive_quota_choices() {
+        for (old, new) in [
+            ("original", "original"),
+            ("ocean", "glacier"),
+            ("forest", "matcha"),
+            ("plum", "orchid"),
+            ("amber", "terracotta"),
+            ("slate", "slate"),
+        ] {
+            let mut settings = serde_json::to_value(Settings::default()).unwrap();
+            settings["schemaVersion"] = 7.into();
+            settings["revision"] = 42.into();
+            settings["themePreference"] = "dark".into();
+            settings["windows"]["snapGapLogicalPx"] = 24.into();
+            settings["widgetAppearance"]["presetId"] = old.into();
+            let choices = serde_json::json!({"light":{"enabled":true,"fiveHour":"#047857"},"dark":{"enabled":false,"weekly":"#34D399"}});
+            settings["widgetAppearance"]["quotaCustomizations"] =
+                serde_json::json!({old:choices.clone()});
+            let bytes = serde_json::to_vec(&Envelope {
+                format: 1,
+                checksum: format!(
+                    "{:x}",
+                    Sha256::digest(serde_json::to_vec(&settings).unwrap())
+                ),
+                settings,
+            })
+            .unwrap();
+            let loaded = decode(&bytes).unwrap();
+            assert_eq!(loaded.settings.schema_version, 8);
+            assert_eq!(loaded.settings.revision, 42);
+            assert_eq!(loaded.settings.theme_preference, ThemePreference::Dark);
+            assert_eq!(loaded.settings.windows.snap_gap_logical_px, 24);
+            let appearance = serde_json::to_value(&loaded.settings.widget_appearance).unwrap();
+            assert_eq!(appearance["presetId"], new);
+            assert_eq!(appearance["quotaCustomizations"][new], choices);
+            let round_trip: Settings =
+                serde_json::from_value(serde_json::to_value(loaded.settings).unwrap()).unwrap();
+            assert!(round_trip.validate().is_ok());
+        }
+    }
+    #[test]
     fn schema_six_preserves_gap_anchors_and_migrates_only_quota_customizations() {
         use crate::widget_appearance::PresetId;
         let decode_settings = |settings: serde_json::Value| {
@@ -442,7 +513,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 7);
+        assert_eq!(migrated.settings.schema_version, 8);
         assert_eq!(migrated.settings.revision, 42);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert_eq!(
@@ -491,7 +562,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 7);
+        assert_eq!(migrated.settings.schema_version, 8);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(migrated.settings.proxy_url.is_none());
         assert_eq!(
@@ -600,7 +671,7 @@ mod tests {
             serde_json::json!({"schemaVersion":3,"themePreference":"dark"}),
         ))
         .unwrap();
-        assert_eq!(migrated.settings.schema_version, 7);
+        assert_eq!(migrated.settings.schema_version, 8);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(!migrated.settings.autostart.requested);
         assert!(!migrated.settings.autostart.pending);

@@ -4,7 +4,6 @@ mod geometry;
 mod interaction;
 mod lifecycle;
 mod model;
-#[cfg(debug_assertions)]
 mod native_check;
 mod native_windows;
 mod notification;
@@ -213,7 +212,11 @@ fn surface_action(
     service: tauri::State<'_, Service>,
     request: Request,
 ) -> Result<(), String> {
-    #[cfg(debug_assertions)]
+    if matches!(request, Request::InspectFrontend { .. })
+        && !crate::native_check::presentation_requested()
+    {
+        return Err("validation-only-command".into());
+    }
     if crate::native_check::requested() {
         if let Request::Ready {
             generation,
@@ -457,7 +460,6 @@ pub fn run() {
     let context = tauri::generate_context!();
     // Coordinator/sizing checks must neither forward into a running user instance
     // nor resolve its configuration. Installed notification checks retain the real identity.
-    #[cfg(debug_assertions)]
     let context = {
         let mut context = context;
         if native_check::requested() && !native_check::notifications_requested() {
@@ -499,16 +501,9 @@ pub fn run() {
             lifecycle::verify_single_instance(app.handle()).map_err(std::io::Error::other)?;
             let tray_available = tray(app).is_ok();
             let directory = app.path().app_local_data_dir()?;
-            #[cfg(debug_assertions)]
             let directory = if native_check::requested() {
                 if native_check::presentation_requested() {
-                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                        if native_check::appearance_requested() {
-                            "target/validation/native-appearance"
-                        } else {
-                            "target/validation/native-sizing"
-                        },
-                    )
+                    native_check::validation_directory()
                 } else {
                     directory.join(if native_check::topmost_requested() {
                         "native-topmost-check"
@@ -523,7 +518,6 @@ pub fn run() {
                 .parent()
                 .ok_or_else(|| std::io::Error::other("executable directory unavailable"))?
                 .to_path_buf();
-            #[cfg(debug_assertions)]
             let portable_directory = if native_check::requested() {
                 directory.clone()
             } else {
@@ -544,7 +538,6 @@ pub fn run() {
                 service.dispatch_reliable(Action::Window(Input::NativeFault(code)));
             }
             service.dispatch_reliable(Action::Window(Input::Environment));
-            #[cfg(debug_assertions)]
             if native_check::requested() {
                 native_check::start(app.handle().clone(), service.clone());
             }

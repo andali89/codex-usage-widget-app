@@ -31,7 +31,6 @@ pub enum Request {
     Collapse,
     Escape,
     Drag,
-    #[cfg(debug_assertions)]
     InspectFrontend {
         message: String,
     },
@@ -87,13 +86,9 @@ pub enum Input {
     MainUserSizing,
     Minimized(bool),
     Destroyed(Surface),
-    #[cfg(debug_assertions)]
     RetireHidden,
-    #[cfg(debug_assertions)]
     InspectPopup,
-    #[cfg(debug_assertions)]
     InspectActivationDenied,
-    #[cfg(debug_assertions)]
     InspectDragStart,
 }
 
@@ -163,6 +158,7 @@ pub struct Windows {
     layout_dirty: bool,
     fit_after_transition: bool,
     main_user_sized: bool,
+    main_sizes: [Option<(f64, f64)>; 2],
 }
 
 impl Windows {
@@ -242,6 +238,7 @@ impl Windows {
             layout_dirty: false,
             fit_after_transition: false,
             main_user_sized: false,
+            main_sizes: [None, None],
         }
     }
     pub fn next_deadline(&self) -> Option<u64> {
@@ -259,7 +256,7 @@ impl Windows {
         page: DashboardPage,
         width: f64,
         height: f64,
-        fit: bool,
+        _fit: bool,
     ) {
         if generation != self.interaction.state.generation
             || !width.is_finite()
@@ -283,19 +280,19 @@ impl Windows {
         {
             self.main_user_sized = true;
         }
-        let can_fit = self.interaction.state.detail != DetailState::Window || !self.main_user_sized;
-        if can_fit
-            && (self.main_content.is_none()
-                || self.main_page != page
-                || (self.fit_after_transition && at_preferred_width)
-                || (fit
-                    && self
-                        .main_content
-                        .is_some_and(|(_, previous)| (previous - height).abs() > 1.0)))
-        {
+        // Content reports acknowledge hydration; they do not grant permission to
+        // resize an established presentation. Longer pages scroll in React.
+        let index = usize::from(self.interaction.state.detail == DetailState::Window);
+        if self.main_sizes[index].is_none() && at_preferred_width {
+            let initial_height = if page == DashboardPage::Overview {
+                height.max(if index == 1 { 420.0 } else { 300.0 })
+            } else if index == 1 {
+                640.0
+            } else {
+                600.0
+            };
+            self.main_sizes[index] = Some((preferred, initial_height));
             self.layout_dirty = true;
-        }
-        if at_preferred_width {
             self.fit_after_transition = false;
         }
         self.main_content = Some((width, height));
@@ -362,19 +359,18 @@ impl Windows {
                 self.interaction.expanded_visible()
             }
     }
-    #[cfg(debug_assertions)]
     pub fn shell_content_size(&self) -> Option<(f64, f64)> {
         (self.ready_shell == Some(self.interaction.state.generation)).then_some(self.shell_size)
     }
-    #[cfg(debug_assertions)]
     pub fn preview_content_size(&self) -> Option<(f64, f64)> {
         (self.ready_preview == Some(self.interaction.state.generation)).then_some(self.preview_size)
     }
-    #[cfg(debug_assertions)]
     pub fn dashboard_settled(&self) -> bool {
         self.ready_main
             && self.pending_focus.is_none()
             && self.clicks.deadline().is_none()
+            && !self.fit_after_transition
+            && !self.layout_dirty
             && self.last_detail == self.interaction.state.detail
             && self.interaction.state.detail != DetailState::Closed
     }
@@ -503,7 +499,6 @@ impl Windows {
                 height,
                 fit,
             } => self.dashboard_layout(generation, page, width, height, fit),
-            #[cfg(debug_assertions)]
             Input::InspectDragStart => {
                 self.begin_drag(app, settings);
             }
@@ -611,9 +606,7 @@ impl Windows {
                 self.idle[index].destroyed();
                 self.interaction.retire_view();
             }
-            #[cfg(debug_assertions)]
             Input::RetireHidden => self.retire_idle(app, now + crate::view_lifecycle::IDLE_MS),
-            #[cfg(debug_assertions)]
             Input::InspectPopup => {
                 // Geometry/stacking gate uses the real popup hydration path,
                 // independently of Windows granting foreground activation.
@@ -629,7 +622,6 @@ impl Windows {
                 self.attention_pending = false;
                 self.main_user_sized = false;
             }
-            #[cfg(debug_assertions)]
             Input::InspectActivationDenied => self.activation_denied(),
             Input::Close => {
                 self.interaction.close_detail();
@@ -699,7 +691,6 @@ impl Windows {
                 }
             }
             Input::Request(source, request) => match request {
-                #[cfg(debug_assertions)]
                 Request::InspectFrontend { message }
                     if crate::native_check::presentation_requested() =>
                 {
@@ -714,7 +705,6 @@ impl Windows {
                     width,
                     height,
                 } => {
-                    #[cfg(debug_assertions)]
                     if crate::native_check::presentation_requested() {
                         println!("native-check ready source={source:?} generation={generation} current={} width={width} height={height}",self.interaction.state.generation);
                     }
@@ -937,14 +927,11 @@ impl Windows {
             return Ok(Some(window));
         }
         let standard = label == "main";
-        #[cfg(debug_assertions)]
         let diagnostic_script = if crate::native_check::presentation_requested() {
             r#"window.addEventListener('error',e=>window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:String(e.message)}}));window.addEventListener('unhandledrejection',e=>window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:String(e.reason)}}));"#
         } else {
             ""
         };
-        #[cfg(not(debug_assertions))]
-        let diagnostic_script = "";
         let create = |transparent| {
             WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
                 .title("Codex Usage Widget")
@@ -958,7 +945,9 @@ impl Windows {
                 .resizable(standard)
                 .shadow(standard)
                 .transparent(transparent)
-                .no_redirection_bitmap(transparent)
+                // Keep Tao's DWM transparent-window setup. NOREDIRECTIONBITMAP
+                // bypasses it in the pinned Tao version and is unnecessary while
+                // this window is hidden until the frontend has hydrated.
                 .on_page_load(|window, payload| {
                     if window.label() == "main"
                         && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
@@ -970,7 +959,6 @@ impl Windows {
                             });
                         }
                     }
-                    #[cfg(debug_assertions)]
                     if crate::native_check::requested() {
                         println!(
                             "native-check page label={} event={:?}",
@@ -978,8 +966,6 @@ impl Windows {
                             payload.event()
                         );
                     }
-                    #[cfg(not(debug_assertions))]
-                    let _ = (window, payload);
                 })
                 .inner_size(size.0, size.1)
                 .min_inner_size(
@@ -1500,6 +1486,15 @@ impl Windows {
             app.get_webview_window("main")
         };
         if let Some(main) = main {
+            if self.last_detail != DetailState::Closed
+                && !self.fit_after_transition
+                && !self.layout_dirty
+            {
+                if let (Ok(size), Ok(dpi)) = (main.inner_size(), main.scale_factor()) {
+                    self.main_sizes[usize::from(self.last_detail == DetailState::Window)] =
+                        Some((f64::from(size.width) / dpi, f64::from(size.height) / dpi));
+                }
+            }
             if state.detail != DetailState::Closed && !self.locked {
                 let standard = state.detail == DetailState::Window;
                 native::configure(
@@ -1518,20 +1513,17 @@ impl Windows {
                         && !standard
                         && self.main_page == DashboardPage::Settings)
                 {
-                    let preferred_width = if standard { 620.0 } else { 480.0 };
+                    let index = usize::from(standard);
+                    let (preferred_width, content_height) =
+                        self.main_sizes[index].unwrap_or(if standard {
+                            (620.0, 640.0)
+                        } else {
+                            (480.0, 600.0)
+                        });
                     if self.last_detail != state.detail {
                         self.main_user_sized = false;
-                        self.fit_after_transition = self
-                            .main_content
-                            .is_none_or(|(width, _)| (width - preferred_width).abs() > 2.0);
+                        self.fit_after_transition = self.main_sizes[index].is_none();
                     }
-                    // Measure client content at the preferred width before fitting;
-                    // frame insets are physical and must not be counted twice.
-                    let content_height = self
-                        .main_content
-                        .filter(|(width, _)| (*width - preferred_width).abs() <= 2.0)
-                        .map(|(_, height)| height)
-                        .unwrap_or(if standard { 640.0 } else { 600.0 });
                     let size = native::content_outer_size(
                         &main,
                         (
@@ -1599,13 +1591,13 @@ impl Windows {
                             }),
                             native::content_outer_size(
                                 &main,
-                                (480.0, content_height.max(300.0)),
+                                (preferred_width, content_height.max(300.0)),
                                 detail_scale,
                             )?
                             .0,
                             native::content_outer_size(
                                 &main,
-                                (480.0, content_height.max(300.0)),
+                                (preferred_width, content_height.max(300.0)),
                                 detail_scale,
                             )?
                             .1,
@@ -1623,7 +1615,13 @@ impl Windows {
                 if standard && self.main_user_sized {
                     self.layout_dirty = false;
                 }
-                if self.ready_main {
+                if !self.fit_after_transition {
+                    if let (Ok(size), Ok(dpi)) = (main.inner_size(), main.scale_factor()) {
+                        self.main_sizes[usize::from(standard)] =
+                            Some((f64::from(size.width) / dpi, f64::from(size.height) / dpi));
+                    }
+                }
+                if self.ready_main && !self.fit_after_transition {
                     if self.pending_focus == Some(Surface::Main) {
                         // Consume before attempting activation, including failures.
                         self.pending_focus = None;
@@ -1783,8 +1781,8 @@ mod tests {
         );
         windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 530.0, true);
         assert!(
-            windows.layout_dirty,
-            "new usage content can fit before manual resizing"
+            !windows.layout_dirty,
+            "new usage content scrolls after the initial fit"
         );
         windows.layout_dirty = false;
         windows.dashboard_layout(generation, DashboardPage::Overview, 700.0, 540.0, true);
@@ -1804,10 +1802,45 @@ mod tests {
         );
         windows.layout_dirty = false;
         windows.main_user_sized = false;
+        windows.main_sizes[1] = None;
         windows.fit_after_transition = true;
         windows.dashboard_layout(generation, DashboardPage::Settings, 620.0, 1000.0, true);
         assert!(windows.layout_dirty);
         assert!(!windows.fit_after_transition);
+        assert_eq!(windows.main_sizes[1], Some((620.0, 640.0)));
+        windows.layout_dirty = false;
+        windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 300.0, true);
+        assert!(!windows.layout_dirty);
+        assert_eq!(windows.main_sizes[1], Some((620.0, 640.0)));
+    }
+    #[test]
+    fn popup_navigation_and_reopening_keep_a_separate_size() {
+        let mut windows = Windows::new(&Settings::default(), false);
+        windows.interaction.open_detail(false);
+        let generation = windows.interaction.state.generation;
+        windows.dashboard_layout(generation, DashboardPage::Overview, 480.0, 510.0, true);
+        assert_eq!(windows.main_sizes[0], Some((480.0, 510.0)));
+        assert_eq!(windows.main_sizes[1], None);
+        windows.layout_dirty = false;
+        for page in [
+            DashboardPage::Settings,
+            DashboardPage::Overview,
+            DashboardPage::Settings,
+        ] {
+            windows.dashboard_layout(generation, page, 480.0, 2400.0, true);
+            assert!(!windows.layout_dirty);
+            assert_eq!(windows.main_sizes[0], Some((480.0, 510.0)));
+        }
+        windows.interaction.close_detail();
+        windows.interaction.open_detail(false);
+        windows.dashboard_layout(
+            windows.interaction.state.generation,
+            DashboardPage::Overview,
+            480.0,
+            600.0,
+            true,
+        );
+        assert_eq!(windows.main_sizes[0], Some((480.0, 510.0)));
     }
     #[test]
     fn activation_denial_promotes_once_without_replaying_focus_or_changing_page() {
