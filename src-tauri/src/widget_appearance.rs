@@ -596,12 +596,13 @@ impl WidgetAppearance {
         } else {
             &palette["border"]
         };
-        let frame_border =
-            if dark && (self.preset_id.is_none() || self.preset_id == Some(PresetId::Original)) {
-                frame_base.clone()
-            } else {
-                mix_color(frame_base, &palette["background"], 0.35)
-            };
+        let frame_border = if !dark && !high_contrast && self.preset_id == Some(PresetId::Sunrise) {
+            "transparent".into()
+        } else if dark && (self.preset_id.is_none() || self.preset_id == Some(PresetId::Original)) {
+            frame_base.clone()
+        } else {
+            mix_color(frame_base, &palette["background"], 0.35)
+        };
         let quota_text = quota_paint(&palette, dark);
         EffectiveAppearance {
             frame_border,

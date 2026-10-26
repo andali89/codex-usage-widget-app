@@ -367,7 +367,7 @@
     "id": "sunrise",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#C8AC94",
+    "frameBorder": "transparent",
     "divider": "#AB8668",
     "quotaText": {
       "fiveHour": "#AC4C00",
@@ -382,7 +382,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#C8AC94",
+    "frameBorder": "transparent",
     "divider": "#AB8668",
     "quotaText": {
       "fiveHour": "#826A0B",

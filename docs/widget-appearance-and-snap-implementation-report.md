@@ -1,5 +1,13 @@
 # Widget appearance and snapping — implementation evidence
 
+## Sunrise Light border preview — 26 October 2026
+
+Sunrise in Light mode now paints the outer widget/preview frame transparent while retaining its 1 px layout space. The 5H/weekly middle divider, internal borders, Original and all other themes, Sunrise Dark, and high-contrast borders are unchanged. Shared Rust/TypeScript frame resolution and the existing expected fixture values were updated.
+
+Requested validation: builds only, no tests or runtime checks. `npm.cmd run build` and `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` passed. The release EXE was rebuilt for the user’s manual review. No tests or runtime checks were run.
+
+---
+
 ## Quota outline removal — 26 October 2026
 
 Removed the extra contrast stroke beneath rings and the inset outlines on progress bars, HUD bars and reset segments. All selected colors now use the same indicator treatment. Percentage text retains its readable related shade; stale/unavailable/focus markings, tracks, dimensions, frames, transparency and saved choices remain unchanged.
