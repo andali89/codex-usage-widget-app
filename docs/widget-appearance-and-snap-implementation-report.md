@@ -1,5 +1,13 @@
 # Widget appearance and snapping — implementation evidence
 
+## Borderless new Light themes — 26 October 2026
+
+Extended the Sunrise preview treatment to all ten new Light presets: their outer widget/preview frames are transparent, with the existing 1 px layout space retained. Original Light, all Dark themes, high-contrast borders, internal borders and the 5H/weekly middle divider are unchanged. Shared Rust/TypeScript resolution and the existing fixtures were updated; settings remain schema 9.
+
+Requested validation: builds only, no tests or runtime checks. `npm.cmd run build` and `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` passed. The requested release EXE was rebuilt. No tests or runtime checks were run.
+
+---
+
 ## Sunrise Light border preview — 26 October 2026
 
 Sunrise in Light mode now paints the outer widget/preview frame transparent while retaining its 1 px layout space. The 5H/weekly middle divider, internal borders, Original and all other themes, Sunrise Dark, and high-contrast borders are unchanged. Shared Rust/TypeScript frame resolution and the existing expected fixture values were updated.

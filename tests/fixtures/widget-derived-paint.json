@@ -55,7 +55,7 @@
     "id": "graphite",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#9EAAB8",
+    "frameBorder": "transparent",
     "divider": "#718296",
     "quotaText": {
       "fiveHour": "#376D9C",
@@ -70,7 +70,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#9EAAB8",
+    "frameBorder": "transparent",
     "divider": "#718296",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -107,7 +107,7 @@
     "id": "glacier",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#90AFBF",
+    "frameBorder": "transparent",
     "divider": "#60889D",
     "quotaText": {
       "fiveHour": "#006BC0",
@@ -122,7 +122,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#90AFBF",
+    "frameBorder": "transparent",
     "divider": "#60889D",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -159,7 +159,7 @@
     "id": "matcha",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#A4B091",
+    "frameBorder": "transparent",
     "divider": "#7B8B64",
     "quotaText": {
       "fiveHour": "#237332",
@@ -174,7 +174,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#A4B091",
+    "frameBorder": "transparent",
     "divider": "#7B8B64",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -211,7 +211,7 @@
     "id": "rosewood",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#C7A0AF",
+    "frameBorder": "transparent",
     "divider": "#AA788C",
     "quotaText": {
       "fiveHour": "#A51F45",
@@ -226,7 +226,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#C7A0AF",
+    "frameBorder": "transparent",
     "divider": "#AA788C",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -263,7 +263,7 @@
     "id": "terracotta",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#BFA991",
+    "frameBorder": "transparent",
     "divider": "#9F8367",
     "quotaText": {
       "fiveHour": "#B04400",
@@ -278,7 +278,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#BFA991",
+    "frameBorder": "transparent",
     "divider": "#9F8367",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -315,7 +315,7 @@
     "id": "sapphire",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#9BADC9",
+    "frameBorder": "transparent",
     "divider": "#7188AC",
     "quotaText": {
       "fiveHour": "#064DC5",
@@ -330,7 +330,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#9BADC9",
+    "frameBorder": "transparent",
     "divider": "#7188AC",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -419,7 +419,7 @@
     "id": "mint",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#96B9AE",
+    "frameBorder": "transparent",
     "divider": "#6B9689",
     "quotaText": {
       "fiveHour": "#00766D",
@@ -434,7 +434,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#96B9AE",
+    "frameBorder": "transparent",
     "divider": "#6B9689",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -471,7 +471,7 @@
     "id": "orchid",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#B6A3C6",
+    "frameBorder": "transparent",
     "divider": "#947CA7",
     "quotaText": {
       "fiveHour": "#7134B5",
@@ -486,7 +486,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#B6A3C6",
+    "frameBorder": "transparent",
     "divider": "#947CA7",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -523,7 +523,7 @@
     "id": "slate",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "#A0ADBF",
+    "frameBorder": "transparent",
     "divider": "#7688A0",
     "quotaText": {
       "fiveHour": "#34516D",
@@ -538,7 +538,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "#A0ADBF",
+    "frameBorder": "transparent",
     "divider": "#7688A0",
     "quotaText": {
       "fiveHour": "#826A0B",

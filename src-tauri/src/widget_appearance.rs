@@ -596,7 +596,10 @@ impl WidgetAppearance {
         } else {
             &palette["border"]
         };
-        let frame_border = if !dark && !high_contrast && self.preset_id == Some(PresetId::Sunrise) {
+        let frame_border = if !dark
+            && !high_contrast
+            && self.preset_id.is_some_and(|id| id != PresetId::Original)
+        {
             "transparent".into()
         } else if dark && (self.preset_id.is_none() || self.preset_id == Some(PresetId::Original)) {
             frame_base.clone()

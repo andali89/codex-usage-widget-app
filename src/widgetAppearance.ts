@@ -117,7 +117,7 @@ export function resolveWidgetAppearance(settings:WidgetAppearanceSettings, theme
   const originalStructure=settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults");
   const divider=!originalStructure || (!highContrast && settings.colorMode==="custom" && settings.palettes[theme].border) ? palette.border : theme==="dark"?"#334B6B":"#CBD5E1";
   const frameBase=originalStructure?divider:palette.border;
-  const frameBorder=theme==="light"&&!highContrast&&settings.presetId==="sunrise"?"transparent":theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
+  const frameBorder=theme==="light"&&!highContrast&&!!settings.presetId&&settings.presetId!=="original"?"transparent":theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
   const quota=quotaPaint(palette,theme);
   return {frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
 }
