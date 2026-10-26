@@ -4,7 +4,7 @@ Keep Codex remaining quota and expected reset times in view on your Windows desk
 
 **[Download v0.1.0 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.0)** · [Release notes](docs/v0.1.0-release-notes.md) · [Documentation](docs/README.md)
 
-Source is prepared for [v0.1.1](docs/v0.1.1-release-notes.md), with an empty proxy default, a clearly labeled example placeholder, and 120-second refresh defaults for Detail, Compact, and Background. Existing saved settings are preserved. Downloads above remain v0.1.0 until v0.1.1 is published.
+Source is prepared for [v0.1.2](docs/v0.1.2-release-notes.md), with an empty proxy default, a clearly labeled example placeholder, and 120-second refresh defaults for Detail, Compact, and Background. Existing saved settings are preserved. Downloads above remain v0.1.0 until a newer release is published.
 
 An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.0 is a public preview; see [known limitations](#known-limitations).
 
@@ -40,6 +40,7 @@ GitHub's **Source code** ZIP/TAR archives are for building the project, not runn
 - View remaining quota, expected resets, data freshness, and reset-credit information when provided by Codex.
 - Choose 5-hour, weekly, or both periods independently for Edge and HUD, with optional countdowns and word or badge labels.
 - Select Light, Dark, or Follow Windows appearance; configure position lock, always on top, and launch at sign-in.
+- Choose a paired color preset, optionally customize its active Light/Dark quota colors using readable swatches, and set one snap gap for Floating, Edge, and HUD (0–48 logical px; default 8). Appearance and gap edits temporarily update the active widget; Save keeps them and Cancel restores saved settings. Background transparency is currently disabled pending native composition validation; the requested preference is retained with an opaque fallback. See the [appearance and snapping report](docs/widget-appearance-and-snap-implementation-report.md).
 - Configure an HTTP/HTTPS proxy without credentials for the widget's Codex process and choose EXE-adjacent, AppData, or custom configuration storage.
 
 ## Using the widget

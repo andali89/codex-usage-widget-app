@@ -1,0 +1,19 @@
+{
+  "palettes": [
+    {"name":"theme defaults", "theme":"light", "roles":{}, "valid":true},
+    {"name":"independent period identities", "theme":"light", "roles":{"fiveHour":"#6d28d9","weekly":"#005fcc"}, "valid":true},
+    {"name":"inactive dark palette rejects black text", "theme":"dark", "roles":{"text":"#000000"}, "valid":false},
+    {"name":"dashboard quota text rejects white", "theme":"light", "roles":{"fiveHour":"#FFFFFF"}, "valid":false},
+    {"name":"essential track contrast", "theme":"dark", "roles":{"track":"#60A5FA"}, "valid":false},
+    {"name":"semantic statuses survive customization", "theme":"light", "roles":{"contentSurface":"#000000","text":"#FFFFFF"}, "valid":false},
+    {"name":"reject shorthand", "theme":"light", "roles":{"weekly":"#fff"}, "valid":false},
+    {"name":"reject arbitrary CSS", "theme":"light", "roles":{"background":"url(https://example.invalid)"}, "valid":false},
+    {"name":"reject unknown role", "theme":"dark", "roles":{"focus":"#FFFFFF"}, "valid":false}
+  ],
+  "composition": [
+    {"foreground":"#757575","backing":"#FFFFFF","alpha":0,"worst":1},
+    {"foreground":"#005FCC","backing":"#FFFFFF","alpha":0,"worst":1},
+    {"foreground":"#FFFFFF","backing":"#FFFFFF","alpha":1,"worst":1},
+    {"foreground":"#000000","backing":"#FFFFFF","alpha":1,"worst":21}
+  ]
+}

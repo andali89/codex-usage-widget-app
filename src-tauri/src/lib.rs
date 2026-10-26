@@ -1,4 +1,5 @@
 mod configuration_dialog;
+mod display_preview;
 mod geometry;
 mod interaction;
 mod lifecycle;
@@ -16,6 +17,7 @@ mod service;
 mod storage;
 mod storage_location;
 mod view_lifecycle;
+mod widget_appearance;
 mod windows;
 
 use interaction::Surface;
@@ -70,13 +72,80 @@ async fn reminder_action(
 }
 
 #[tauri::command]
+async fn begin_display_preview(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Service>,
+    session: String,
+    expected_revision: u64,
+) -> Result<model::AppState, String> {
+    if window.label() != "main" {
+        return Err("preview-owner-window".into());
+    }
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    service
+        .0
+        .send(Action::BeginPreview {
+            session,
+            expected_revision,
+            reply: tx,
+        })
+        .await
+        .map_err(|_| "service-stopped")?;
+    rx.await.map_err(|_| "service-stopped")?
+}
+#[tauri::command]
+async fn update_display_preview(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Service>,
+    session: String,
+    sequence: u64,
+    patch: Option<display_preview::Patch>,
+) -> Result<model::AppState, String> {
+    if window.label() != "main" {
+        return Err("preview-owner-window".into());
+    }
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    service
+        .0
+        .send(Action::UpdatePreview {
+            session,
+            sequence,
+            patch,
+            reply: tx,
+        })
+        .await
+        .map_err(|_| "service-stopped")?;
+    rx.await.map_err(|_| "service-stopped")?
+}
+#[tauri::command]
+async fn end_display_preview(
+    window: tauri::WebviewWindow,
+    service: tauri::State<'_, Service>,
+    session: String,
+) -> Result<model::AppState, String> {
+    if window.label() != "main" {
+        return Err("preview-owner-window".into());
+    }
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    service
+        .0
+        .send(Action::EndPreview {
+            session: Some(session),
+            reply: Some(tx),
+        })
+        .await
+        .map_err(|_| "service-stopped")?;
+    rx.await.map_err(|_| "service-stopped".into())
+}
+
+#[tauri::command]
 async fn save_settings(
     service: tauri::State<'_, Service>,
     expected_revision: u64,
     settings: model::Settings,
     storage_resolution: Option<storage_location::Resolution>,
     storage_token: Option<String>,
-) -> Result<model::AppState, String> {
+) -> Result<model::AppState, serde_json::Value> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     service
         .0
@@ -89,7 +158,9 @@ async fn save_settings(
         })
         .await
         .map_err(|_| "service-stopped")?;
-    rx.await.map_err(|_| "service-stopped")?
+    rx.await
+        .map_err(|_| "service-stopped")?
+        .map_err(|code| serde_json::from_str(&code).unwrap_or(serde_json::Value::String(code)))
 }
 
 #[tauri::command]
@@ -414,6 +485,9 @@ pub fn run() {
             refresh,
             retry_autostart,
             save_settings,
+            begin_display_preview,
+            update_display_preview,
+            end_display_preview,
             inspect_storage_location,
             choose_storage_folder,
             view_ready,
@@ -427,11 +501,21 @@ pub fn run() {
             let directory = app.path().app_local_data_dir()?;
             #[cfg(debug_assertions)]
             let directory = if native_check::requested() {
-                directory.join(if native_check::topmost_requested() {
-                    "native-topmost-check"
+                if native_check::presentation_requested() {
+                    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+                        if native_check::appearance_requested() {
+                            "target/validation/native-appearance"
+                        } else {
+                            "target/validation/native-sizing"
+                        },
+                    )
                 } else {
-                    "native-window-check"
-                })
+                    directory.join(if native_check::topmost_requested() {
+                        "native-topmost-check"
+                    } else {
+                        "native-window-check"
+                    })
+                }
             } else {
                 directory
             };

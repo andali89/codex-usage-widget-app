@@ -1,3 +1,4 @@
+import type { WidgetAppearanceSettings, EffectiveWidgetAppearance } from "./widgetAppearance";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
@@ -21,7 +22,8 @@ export interface Settings {
   schemaVersion: number; revision: number; themePreference: ThemePreference;
   mode: DisplayMode; codexPath: string | null; proxyUrl: string | null; storageLocation: StorageLocation;
   foregroundSeconds: number; compactSeconds: number; backgroundSeconds: number;
-  windows: { hoverEnabled: boolean; lockPosition: boolean; alwaysOnTop: boolean; suppressFullscreen: boolean; edgeSide: "left" | "right"; quotaLabelStyle: QuotaLabelStyle; placements: Partial<Record<DisplayMode, { monitor: string | null; x: number; y: number }>>; resetCountdowns: Partial<Record<DisplayMode, ResetCountdowns>>; visiblePeriods: Partial<Record<"screen-edge" | "compact-hud", VisiblePeriods>> };
+  widgetAppearance: WidgetAppearanceSettings;
+  windows: { snapGapLogicalPx:number; snapAnchors:Partial<Record<DisplayMode,{horizontal:"none"|"left"|"right";vertical:"none"|"top"|"bottom"}>>; hoverEnabled: boolean; lockPosition: boolean; alwaysOnTop: boolean; suppressFullscreen: boolean; edgeSide: "left" | "right"; quotaLabelStyle: QuotaLabelStyle; placements: Partial<Record<DisplayMode, { monitor: string | null; x: number; y: number }>>; resetCountdowns: Partial<Record<DisplayMode, ResetCountdowns>>; visiblePeriods: Partial<Record<"screen-edge" | "compact-hud", VisiblePeriods>> };
   reminders: ReminderPreferences;
   autostart: {requested:boolean;pending:boolean;effective:boolean|null;diagnostic:string|null};
 }
@@ -50,6 +52,7 @@ export interface AppState {
   dashboardRequest:{sequence:number;page:"overview"|"settings"}|null;
   firstLaunch:boolean;
   appearance: {
+    widget: EffectiveWidgetAppearance; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
     themePreference: ThemePreference; resolvedTheme: "light" | "dark";
     highContrast: boolean; transparencyAllowed: boolean; reducedMotion: boolean; textScale: number;
   };
@@ -64,6 +67,8 @@ export interface AppState {
 export function applyAppearance(state: AppState) {
   const root = document.documentElement;
   root.dataset.theme = state.appearance.resolvedTheme;
+  root.style.setProperty("--quota-five-hour", state.appearance.highContrast ? "LinkText" : state.appearance.widget.palette.fiveHour);
+  root.style.setProperty("--quota-weekly", state.appearance.highContrast ? "LinkText" : state.appearance.widget.palette.weekly);
   root.dataset.highContrast = String(state.appearance.highContrast);
   root.dataset.reducedMotion = String(state.appearance.reducedMotion);
   root.dataset.largeText = String(state.appearance.textScale >= 150);

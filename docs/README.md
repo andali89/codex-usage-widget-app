@@ -6,6 +6,7 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 - [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
 - [Publication audit](publication-audit.md): tracked-file/history review, privacy findings, release artifacts, and verification limits.
+- [Version 0.1.2 release notes](v0.1.2-release-notes.md): widget presets, temporary display edits and shared snapping; local validation in the appearance report, not published.
 - [Version 0.1.1 release notes](v0.1.1-release-notes.md): source-prepared defaults update; local Rust checks passed, not yet published.
 - [Version 0.1.0 release notes](v0.1.0-release-notes.md): prepared public-preview description and known limitations.
 
@@ -13,6 +14,8 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 - [Layout polish implementation](layout-polish-implementation-report.md): compact spacing, Edge docking, optional quota badges, stable Edge/HUD sizes, richer hover details, centered HUD click popups, expandable credit rows, Floating close-to-tray, artwork/native coordination, and validation.
 - [UI/UX design report](codex-widget-design-report.md): canonical design specification.
+- [Widget appearance and snapping design](widget-appearance-and-snap-design.md): proposed background transparency, custom element colors, and one configurable snap gap for Floating, Screen Edge, and HUD; includes settings behavior and validation criteria, not implementation evidence.
+- [Widget appearance and snapping implementation](widget-appearance-and-snap-implementation-report.md): paired presets, optional active-theme quota swatches, temporary native display edits, shared gap/anchor policy, schema migration, validation evidence, and the disabled native transparency gate.
 - [Project kickoff prompt and goal](project-kickoff-prompt.md): copyable instructions and completion objective for implementing the complete application in stages.
 - The supplied design board and HUD/Edge reference images are private, local-only design inputs and are not distributed.
 - [Implementation and evidence](implementation-report.md): protocol-based CLI compatibility and version diagnostics, phased checklist, core/four modes/reminders/lifecycle, widget click timing/countdowns/content sizing, dependency patch, NSIS install/upgrade checks, stress measurements, compatibility gates, and AC-01–AC-40 status.

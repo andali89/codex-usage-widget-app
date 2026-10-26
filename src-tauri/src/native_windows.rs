@@ -767,6 +767,59 @@ pub fn round_corners(window: &WebviewWindow, radius: f64) -> Result<(), &'static
     Ok(())
 }
 
+/// Query only the shell's appbar metadata; never inspect desktop artwork.
+pub fn taskbar_safety(monitor: Rect) -> ([bool; 4], bool) {
+    use windows_sys::Win32::UI::Shell::{
+        SHAppBarMessage, ABM_GETAUTOHIDEBAREX, ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA,
+    };
+    let mut data = APPBARDATA {
+        cbSize: std::mem::size_of::<APPBARDATA>() as u32,
+        ..Default::default()
+    };
+    let tray_class = "Shell_TrayWnd\0".encode_utf16().collect::<Vec<_>>();
+    if unsafe { FindWindowW(tray_class.as_ptr(), std::ptr::null()) }.is_null() {
+        return ([true; 4], true);
+    }
+    if unsafe { SHAppBarMessage(ABM_GETSTATE, &mut data) } & ABS_AUTOHIDE as usize == 0 {
+        return ([false; 4], false);
+    }
+    data.rc = windows_sys::Win32::Foundation::RECT {
+        left: monitor.x as i32,
+        top: monitor.y as i32,
+        right: monitor.right() as i32,
+        bottom: monitor.bottom() as i32,
+    };
+    let mut sides = [false; 4];
+    for (edge, side) in sides.iter_mut().enumerate() {
+        data.uEdge = edge as u32;
+        *side = unsafe { SHAppBarMessage(ABM_GETAUTOHIDEBAREX, &mut data) } != 0;
+    }
+    if sides.iter().any(|s| *s) {
+        (sides, false)
+    } else {
+        ([true; 4], true)
+    }
+}
+
+pub fn composition_available() -> bool {
+    // Release gate: native sampling could not establish reliable composition in
+    // the current environment. See the appearance/snap implementation report.
+    const TRANSPARENCY_RELEASE_VALIDATED: bool = false;
+    #[cfg(debug_assertions)]
+    let probe = crate::native_check::composition_probe_requested();
+    #[cfg(not(debug_assertions))]
+    let probe = false;
+    if !TRANSPARENCY_RELEASE_VALIDATED && !probe {
+        return false;
+    }
+    #[link(name = "dwmapi")]
+    unsafe extern "system" {
+        fn DwmIsCompositionEnabled(enabled: *mut i32) -> i32;
+    }
+    let mut enabled = 0;
+    unsafe { DwmIsCompositionEnabled(&mut enabled) >= 0 && enabled != 0 }
+}
+
 #[cfg(debug_assertions)]
 pub fn has_rounded_corners(window: &WebviewWindow) -> bool {
     use windows_sys::Win32::Graphics::Gdi::*;

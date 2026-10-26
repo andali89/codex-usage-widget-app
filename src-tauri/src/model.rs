@@ -101,6 +101,21 @@ pub struct WindowSettings {
     pub placements: BTreeMap<String, crate::geometry::Placement>,
     pub reset_countdowns: BTreeMap<String, ResetCountdowns>,
     pub visible_periods: BTreeMap<String, VisiblePeriods>,
+    #[serde(deserialize_with = "deserialize_snap_gap")]
+    pub snap_gap_logical_px: u8,
+    pub snap_anchors: BTreeMap<String, crate::geometry::SnapAnchors>,
+}
+fn deserialize_snap_gap<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<u8, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    value
+        .as_u64()
+        .filter(|value| *value <= 48)
+        .map(|value| value as u8)
+        .ok_or_else(|| {
+            serde::de::Error::custom(
+                "windows.snapGapLogicalPx: use a whole gap from 0 to 48 logical px",
+            )
+        })
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -120,6 +135,11 @@ impl Default for WindowSettings {
             quota_label_style: QuotaLabelStyle::Words,
             reset_countdowns: BTreeMap::new(),
             visible_periods: BTreeMap::new(),
+            snap_gap_logical_px: 8,
+            snap_anchors: ["floating", "screen-edge", "compact-hud"]
+                .into_iter()
+                .map(|mode| (mode.into(), crate::geometry::SnapAnchors::default()))
+                .collect(),
             placements: [
                 ("floating", 24.0, 120.0),
                 ("screen-edge", 0.0, 120.0),
@@ -166,6 +186,7 @@ pub struct Settings {
     pub compact_seconds: u64,
     pub background_seconds: u64,
     pub windows: WindowSettings,
+    pub widget_appearance: crate::widget_appearance::WidgetAppearance,
     pub reminders: crate::reminders::Preferences,
     pub autostart: crate::lifecycle::Autostart,
 }
@@ -173,7 +194,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            schema_version: 5,
+            schema_version: 7,
             revision: 0,
             theme_preference: ThemePreference::System,
             mode: DisplayMode::SystemTray,
@@ -184,6 +205,10 @@ impl Default for Settings {
             compact_seconds: 120,
             background_seconds: 120,
             windows: WindowSettings::default(),
+            widget_appearance: crate::widget_appearance::WidgetAppearance {
+                preset_id: Some(crate::widget_appearance::PresetId::Original),
+                ..Default::default()
+            },
             reminders: crate::reminders::Preferences::default(),
             autostart: crate::lifecycle::Autostart::default(),
         }
@@ -192,10 +217,25 @@ impl Default for Settings {
 
 impl Settings {
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.schema_version != 5 {
+        if self.schema_version != 7 {
             return Err("settings-version");
         }
         self.storage_location.validate()?;
+        if self.windows.snap_gap_logical_px > 48 {
+            return Err("invalid-snap-gap");
+        }
+        if self.windows.snap_anchors.len() > 3
+            || self.windows.snap_anchors.iter().any(|(mode, anchor)| {
+                !["floating", "screen-edge", "compact-hud"].contains(&mode.as_str())
+                    || mode == "screen-edge"
+                        && anchor.horizontal != crate::geometry::HorizontalAnchor::None
+            })
+        {
+            return Err("invalid-snap-anchors");
+        }
+        if !self.widget_appearance.issues().is_empty() {
+            return Err("invalid-widget-appearance");
+        }
         if let Some(url) = &self.proxy_url {
             crate::proxy::validate(url)?;
         }
@@ -243,12 +283,16 @@ impl Settings {
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Appearance {
+    pub preview_session: Option<String>,
+    pub preview_sequence: u64,
     pub theme_preference: ThemePreference,
     pub resolved_theme: String,
     pub high_contrast: bool,
     pub transparency_allowed: bool,
     pub reduced_motion: bool,
     pub text_scale: u32,
+    pub widget: crate::widget_appearance::EffectiveAppearance,
+    pub placement_constraints: crate::geometry::GapConstraints,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -322,6 +366,8 @@ pub fn freshness_deadline(usage: &Usage, interval_ms: u64) -> Option<i64> {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppState {
+    #[serde(skip)]
+    pub display_preview: Option<crate::display_preview::Session>,
     pub process_epoch: String,
     pub revision: u64,
     pub settings: Settings,
@@ -583,7 +629,7 @@ mod tests {
     #[test]
     fn quota_label_style_defaults_and_round_trips_in_current_schema() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":5,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":7,"windows":{}})).unwrap();
         assert_eq!(old.windows.quota_label_style, QuotaLabelStyle::Words);
         for style in [QuotaLabelStyle::Words, QuotaLabelStyle::Badges] {
             let mut settings = old.clone();
@@ -601,7 +647,7 @@ mod tests {
     #[test]
     fn countdown_options_default_for_old_settings_and_round_trip_per_mode() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":5,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":7,"windows":{}})).unwrap();
         assert!(old.windows.reset_countdowns.is_empty());
         let mut next = old;
         next.windows.reset_countdowns.insert(

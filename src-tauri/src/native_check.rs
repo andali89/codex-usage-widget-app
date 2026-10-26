@@ -12,6 +12,35 @@ use crate::{
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
+static FRONTEND_ASSERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn record_frontend_assertion(message: &str) {
+    if message == "assert-native:pass" {
+        FRONTEND_ASSERT.store(1, std::sync::atomic::Ordering::SeqCst);
+    } else if message == "assert-native:fail" {
+        FRONTEND_ASSERT.store(2, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+async fn frontend_assert(
+    app: &AppHandle,
+    label: &str,
+    expression: &str,
+    name: &str,
+) -> Result<(), String> {
+    FRONTEND_ASSERT.store(0, std::sync::atomic::Ordering::SeqCst);
+    let window = app
+        .get_webview_window(label)
+        .ok_or("assert-webview-missing")?;
+    let code=format!("(()=>{{let count=0;const check=()=>{{let ok=false;try{{ok=Boolean({expression});}}catch{{}}if(!ok&&++count<150){{setTimeout(check,25);return;}}if(!ok)window.__TAURI_INTERNALS__.invoke('surface_action',{{request:{{type:'inspect-frontend',message:'assert-detail='+String(window.__styleFailure)}}}});window.__TAURI_INTERNALS__.invoke('surface_action',{{request:{{type:'inspect-frontend',message:'assert-native:'+(ok?'pass':'fail')}}}});}};check();}})()");
+    window.eval(&code).map_err(|_| "assert-eval")?;
+    for _ in 0..180 {
+        match FRONTEND_ASSERT.load(std::sync::atomic::Ordering::SeqCst) {
+            1 => return require(true, name),
+            2 => return Err(name.into()),
+            _ => tokio::time::sleep(Duration::from_millis(25)).await,
+        }
+    }
+    Err(format!("timeout-{name}"))
+}
 pub fn requested() -> bool {
     std::env::args().any(|arg| {
         matches!(
@@ -21,8 +50,27 @@ pub fn requested() -> bool {
                 | "--check-native-notifications"
                 | "--check-native-sizing"
                 | "--check-native-topmost"
+                | "--check-native-appearance"
         )
     })
+}
+
+pub fn appearance_requested() -> bool {
+    std::env::args().any(|arg| arg == "--check-native-appearance")
+}
+pub fn composition_probe_requested() -> bool {
+    appearance_requested() && std::env::args().any(|arg| arg == "--probe-native-composition")
+}
+pub fn presentation_requested() -> bool {
+    appearance_requested() || sizing_requested()
+}
+pub fn fixture_usage() -> crate::model::Usage {
+    let now = crate::model::now_ms();
+    crate::model::normalize(
+        &serde_json::json!({"rateLimits":{"limitId":"codex","primary":{"usedPercent":32,"windowDurationMins":300,"resetsAt":now/1000+8220},"secondary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":now/1000+390000}},"rateLimitResetCredits":{"availableCount":3}}),
+        now,
+        &crate::model::Usage::default(),
+    )
 }
 
 pub fn sizing_requested() -> bool {
@@ -146,7 +194,9 @@ async fn second_launch(background: bool) -> Result<(), String> {
 
 pub fn start(app: AppHandle, service: Service) {
     tauri::async_runtime::spawn(async move {
-        let mut result = if topmost_requested() {
+        let mut result = if appearance_requested() {
+            appearance_check(&app, &service).await
+        } else if topmost_requested() {
             reveal_check(&app, &service).await
         } else if sizing_requested() {
             compact_sizing(&app, &service).await
@@ -374,13 +424,24 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                             crate::native_windows::is_above(&preview, &shell),
                             "preview-above-shell",
                         )?;
-                        require(
-                            unsafe {
-                                windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow()
-                            } as usize
-                                == foreground,
-                            "hover-preserves-foreground",
-                        )?;
+                        let after = unsafe {
+                            windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow()
+                        } as usize;
+                        if after != foreground {
+                            let owned = |window: usize| {
+                                let mut process = 0;
+                                unsafe {
+                                    windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(window as _,&mut process);
+                                };
+                                process == std::process::id()
+                            };
+                            println!(
+                                "native-check foreground-change before-owned={} after-owned={}",
+                                owned(foreground),
+                                owned(after)
+                            );
+                        }
+                        require(after == foreground, "hover-preserves-foreground")?;
                         service.dispatch(Action::Window(Input::Request(
                             Surface::Preview,
                             Request::Collapse,
@@ -418,12 +479,500 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
         }
     }
     edge_docking(app, service).await?;
+    appearance_check(app, service).await?;
     reveal_check(app, service).await?;
     popup_stacking(app, service).await?;
     floating_close_to_tray(app, service).await?;
     activation_fallback(app, service).await?;
     save_settings(service, original).await?;
     require(true, "compact-client-sizing")
+}
+
+/// Synthetic native paint/placement check. No Codex process or OS input is used.
+async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    use crate::geometry::{HorizontalAnchor, VerticalAnchor};
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let original = service.snapshot().await?.settings;
+    let foreground = unsafe { GetForegroundWindow() } as usize;
+    service.dispatch(Action::Window(Input::Close));
+    for mode in [
+        DisplayMode::Floating,
+        DisplayMode::ScreenEdge,
+        DisplayMode::CompactHud,
+    ] {
+        for gap in [0, 8, 16, 48] {
+            let mut settings = service.snapshot().await?.settings;
+            settings.mode = mode;
+            settings.windows.snap_gap_logical_px = gap;
+            settings.windows.lock_position = true;
+            settings.windows.always_on_top = true;
+            settings.windows.suppress_fullscreen = false;
+            settings.widget_appearance.background_transparency_percent = 0;
+            save_settings(service, settings).await?;
+            let revision = service.snapshot().await?.settings.revision;
+            service.dispatch(Action::Window(Input::Request(
+                Surface::Tray,
+                Request::ResetPosition,
+            )));
+            wait(app, service, "gap-reset", |s| {
+                s.settings.revision > revision && visible(app, "shell")
+            })
+            .await?;
+            let shell = app.get_webview_window("shell").ok_or("gap-shell")?;
+            let monitor = shell
+                .current_monitor()
+                .map_err(|_| "gap-monitor")?
+                .ok_or("gap-monitor")?;
+            let work = monitor.work_area();
+            let mut matched = false;
+            for _ in 0..100 {
+                let state = service.snapshot().await?;
+                let p = shell.outer_position().map_err(|_| "gap-position")?;
+                let size = shell.outer_size().map_err(|_| "gap-size")?;
+                let m = state.appearance.placement_constraints.margins;
+                let x = if mode == DisplayMode::ScreenEdge
+                    && state.settings.windows.edge_side == crate::model::EdgeSide::Right
+                {
+                    f64::from(work.position.x) + f64::from(work.size.width)
+                        - f64::from(size.width)
+                        - m[2]
+                } else {
+                    f64::from(work.position.x) + m[0]
+                };
+                if (f64::from(p.x) - x).abs() <= 1.0
+                    && (f64::from(p.y) - f64::from(work.position.y) - m[1]).abs() <= 1.0
+                {
+                    matched = true;
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(30)).await;
+            }
+            require(matched, "shared-gap-visible-bounds")?;
+            let state = service.snapshot().await?;
+            let anchors = &state.settings.windows.snap_anchors[mode.key()];
+            require(
+                anchors.vertical == VerticalAnchor::Top
+                    && anchors.horizontal
+                        == if mode == DisplayMode::ScreenEdge {
+                            HorizontalAnchor::None
+                        } else {
+                            HorizontalAnchor::Left
+                        },
+                "reset-persists-anchor-intent",
+            )?;
+            require(
+                crate::native_windows::has_rounded_corners(&shell),
+                "transparent-shell-retains-rounded-region",
+            )?;
+        }
+        for percent in [0, 20, 80] {
+            let mut settings = service.snapshot().await?.settings;
+            settings.widget_appearance.background_transparency_percent = percent;
+            save_settings(service, settings).await?;
+            let shell = app.get_webview_window("shell").ok_or("paint-shell")?;
+            let snapshot = service.snapshot().await?;
+            println!(
+                "native-check requested-alpha={percent} effective={}",
+                snapshot.appearance.widget.background_alpha
+            );
+            shell.eval("window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:'paint='+getComputedStyle(document.querySelector('.shell')).backgroundImage}})").map_err(|_|"paint-style")?;
+            if !composition_probe_requested() {
+                require(
+                    snapshot.appearance.widget.background_alpha == 1.0
+                        && !snapshot.appearance.widget.composition_available
+                        && snapshot.appearance.widget.reason
+                            == Some("native-composition-unverified"),
+                    "opaque-native-fallback-retains-request",
+                )?;
+                continue;
+            }
+            let black = composition_probe(app, &shell, false).await?;
+            let white = composition_probe(app, &shell, true).await?;
+            let expected = 255.0 * f64::from(percent) / 100.0;
+            println!(
+                "native-check composition requested={percent} delta={:?}",
+                (0..3)
+                    .map(|i| i16::from(white[i]) - i16::from(black[i]))
+                    .collect::<Vec<_>>()
+            );
+            require(
+                (0..3).all(|channel| {
+                    (f64::from(white[channel]) - f64::from(black[channel]) - expected).abs() <= 10.0
+                }),
+                "background-only-native-composition",
+            )?;
+        }
+    }
+    require(
+        unsafe { GetForegroundWindow() } as usize == foreground,
+        "appearance-preserves-foreground",
+    )?;
+    require(
+        !service.snapshot().await?.usage.refresh_in_flight,
+        "synthetic-check-has-no-quota-read",
+    )?;
+    original_style_check(app, service).await?;
+    settings_preview_check(app, service).await?;
+    save_settings(service, original).await?;
+    Ok(())
+}
+
+async fn original_style_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    use crate::widget_appearance::{PresetId, WidgetAppearance};
+    let reference: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/fixtures/original-v0.1.0-colors.json"
+    ))
+    .unwrap();
+    for dark in [false, true] {
+        for mode in [
+            DisplayMode::Floating,
+            DisplayMode::ScreenEdge,
+            DisplayMode::CompactHud,
+        ] {
+            let mut settings = service.snapshot().await?.settings;
+            settings.theme_preference = if dark {
+                ThemePreference::Dark
+            } else {
+                ThemePreference::Light
+            };
+            settings.mode = mode;
+            settings.windows.quota_label_style = QuotaLabelStyle::Badges;
+            settings.widget_appearance = WidgetAppearance {
+                preset_id: Some(PresetId::Original),
+                ..Default::default()
+            };
+            save_settings(service, settings).await?;
+            wait(app, service, "original-shell", |_| visible(app, "shell")).await?;
+            let theme = if dark { "dark" } else { "light" };
+            let expected = serde_json::to_string(&reference[theme]).unwrap();
+            let script=format!("(()=>{{const root=getComputedStyle(document.documentElement),s=document.querySelector('.shell');if(!s||s.classList.contains('widget-palette')||document.documentElement.dataset.theme!=='{theme}')return false;const ref={expected};const rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';const style=getComputedStyle(s);if(Math.abs(parseFloat(style.borderTopWidth)-Math.max(1,Math.floor(devicePixelRatio))/devicePixelRatio)>.02||style.borderTopColor!==rgb(ref['--divider'])){{window.__styleFailure='border='+style.borderTopWidth+' '+style.borderTopColor;return false;}}if(!Object.entries(ref).every(([k,v])=>{{let c=root.getPropertyValue(k).trim().toUpperCase();if(c.length===4)c='#'+[...c.slice(1)].map(x=>x+x).join('');return c===v;}}))return false;const start=s.classList.contains('mode-floating')?'--wash':'--raised';if(!style.backgroundImage.includes(rgb(ref[start]))||!style.backgroundImage.includes(rgb(ref['--shell'])))return false;for(const [q,token]of [['.widget-credits','--wash'],['.compact-card','--raised'],['.period-badge','--wash']]){{for(const el of s.querySelectorAll(q))if(getComputedStyle(el).backgroundColor!==rgb(ref[token]))return false;}}return true;}})()");
+            frontend_assert(
+                app,
+                "shell",
+                &script,
+                &format!("original-{theme}-{mode:?}-v010-cascade"),
+            )
+            .await?;
+            if mode != DisplayMode::Floating {
+                open_hover(app, service, Surface::Shell).await?;
+                let expression=format!("(()=>{{const s=document.querySelector('.native-surface.preview');if(!s||s.classList.contains('widget-palette')||document.documentElement.dataset.theme!=='{theme}')return false;const c=getComputedStyle(s),ref={expected};const rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';return c.borderTopColor===rgb(ref['--divider'])&&c.backgroundImage.includes(rgb(ref['--wash']))&&c.backgroundImage.includes(rgb(ref['--shell']));}})()");
+                frontend_assert(
+                    app,
+                    "preview",
+                    &expression,
+                    &format!("original-{theme}-{mode:?}-hover-cascade"),
+                )
+                .await?;
+                service.dispatch(Action::Window(Input::Request(
+                    Surface::Preview,
+                    Request::Collapse,
+                )));
+            }
+            let mut custom = service.snapshot().await?.settings;
+            let pair = custom
+                .widget_appearance
+                .quota_customizations
+                .entry(PresetId::Original)
+                .or_default();
+            let selected = if dark {
+                &mut pair.dark
+            } else {
+                &mut pair.light
+            };
+            selected.enabled = true;
+            selected.five_hour = Some(if dark { "#34D399" } else { "#047857" }.into());
+            selected.weekly = Some(if dark { "#60A5FA" } else { "#005FCC" }.into());
+            save_settings(service, custom).await?;
+            let reading = if mode == DisplayMode::Floating {
+                ".period-weekly .quota-reading strong"
+            } else if mode == DisplayMode::ScreenEdge {
+                ".weekly .ring-reading>strong"
+            } else {
+                ".hud-quota.weekly>strong"
+            };
+            let color = if dark {
+                "rgb(96, 165, 250)"
+            } else {
+                "rgb(0, 95, 204)"
+            };
+            let expression=format!("(()=>{{const s=document.querySelector('.shell'),r=document.querySelector('{reading}');return s&&!s.classList.contains('widget-palette')&&r&&getComputedStyle(r).color==='{color}';}})()");
+            frontend_assert(
+                app,
+                "shell",
+                &expression,
+                &format!("original-{theme}-{mode:?}-custom-quota-cascade"),
+            )
+            .await?;
+        }
+        service.dispatch(Action::Window(Input::Open {
+            standard: true,
+            settings: false,
+        }));
+        wait(app, service, "original-dashboard", |s| {
+            s.presentation.detail == DetailState::Window && visible(app, "main")
+        })
+        .await?;
+        let theme = if dark { "dark" } else { "light" };
+        let expected = serde_json::to_string(&reference[theme]).unwrap();
+        let expression=format!("(()=>{{const frame=document.querySelector('.app-frame'),header=document.querySelector('.app-header'),card=document.querySelector('.quota-card');if(!frame||!header||!card||document.documentElement.dataset.theme!=='{theme}')return false;const ref={expected},rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';return getComputedStyle(frame).backgroundColor===rgb(ref['--canvas'])&&getComputedStyle(header).backgroundColor===rgb(ref['--surface'])&&getComputedStyle(card).backgroundColor===rgb(ref['--surface']);}})()");
+        frontend_assert(
+            app,
+            "main",
+            &expression,
+            &format!("original-{theme}-dashboard-cascade"),
+        )
+        .await?;
+        service.dispatch(Action::Window(Input::Close));
+    }
+    Ok(())
+}
+async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    use crate::widget_appearance::{PresetId, WidgetAppearance};
+    let mut settings = service.snapshot().await?.settings;
+    settings.mode = DisplayMode::Floating;
+    settings.theme_preference = ThemePreference::Light;
+    settings.windows.snap_gap_logical_px = 8;
+    settings.widget_appearance = WidgetAppearance {
+        preset_id: Some(PresetId::Original),
+        ..Default::default()
+    };
+    save_settings(service, settings).await?;
+    service.dispatch(Action::Window(Input::Request(
+        Surface::Tray,
+        Request::ResetPosition,
+    )));
+    service.dispatch(Action::Window(Input::Open {
+        standard: false,
+        settings: true,
+    }));
+    wait(app, service, "settings-preview-session", |s| {
+        s.appearance.preview_session.is_some() && visible(app, "main")
+    })
+    .await?;
+    let saved = service.snapshot().await?.settings;
+    let main = app.get_webview_window("main").ok_or("preview-main")?;
+    main.eval("document.querySelectorAll('.preset-grid button')[1].click()")
+        .map_err(|_| "preview-click")?;
+    wait(app, service, "preview-preset", |s| {
+        s.appearance.widget.palette["background"] == "#E8F4FF"
+    })
+    .await?;
+    require(
+        service.snapshot().await?.settings.revision == saved.revision,
+        "preview-does-not-save",
+    )?;
+    main.eval("document.querySelector('input[name=theme][value=dark]').click()")
+        .map_err(|_| "preview-theme")?;
+    wait(app, service, "preview-dark", |s| {
+        s.appearance.resolved_theme == "dark"
+            && s.appearance.widget.palette["background"] == "#071C2D"
+    })
+    .await?;
+    frontend_assert(app,"main","document.querySelector('.preset-grid').parentElement.textContent.includes('Editing Dark colors for Ocean')&&!document.querySelector('.appearance-preview')","active-theme-editor-no-embedded-preview").await?;
+    main.eval("[...document.querySelectorAll('label')].find(el=>el.textContent==='Use custom quota colors').querySelector('input').click()").map_err(|_|"preview-custom")?;
+    frontend_assert(
+        app,
+        "main",
+        "document.querySelectorAll('.quota-swatches').length===2",
+        "custom-controls-opt-in",
+    )
+    .await?;
+    main.eval("document.querySelector('.quota-swatches button[aria-label*=\"#34D399\"]').click()")
+        .map_err(|_| "preview-swatch")?;
+    wait(app, service, "preview-color", |s| {
+        s.appearance.widget.palette["fiveHour"] == "#34D399"
+    })
+    .await?;
+    let position = main.outer_position().map_err(|_| "preview-position")?;
+    main.eval("(()=>{const range=document.querySelector('.snap-gap input[type=range]');range.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:1}));const input=document.querySelector('#snap-gap');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'48');input.dispatchEvent(new Event('input',{bubbles:true}));})()").map_err(|_|"preview-gap")?;
+    wait(app, service, "preview-gap-moves-widget", |s| {
+        s.appearance.placement_constraints.margins[0] >= 48.0
+    })
+    .await?;
+    require(
+        main.outer_position().map_err(|_| "preview-position")? == position,
+        "gap-drag-freezes-settings-popup",
+    )?;
+    main.eval("(()=>{const input=document.querySelector('#snap-gap');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'');input.dispatchEvent(new Event('input',{bubbles:true}));})()").map_err(|_|"preview-incomplete-gap")?;
+    frontend_assert(app,"main","document.querySelector('#snap-gap').value===''&&document.querySelector('#snap-gap').getAttribute('aria-invalid')==='true'","incomplete-gap-stays-invalid").await?;
+    main.eval("document.querySelector('.snap-gap input[type=range]').dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:1}))").map_err(|_|"preview-gap-release")?;
+    wait(app, service, "invalid-gap-still-releases-popup", |s| {
+        s.display_preview
+            .as_ref()
+            .and_then(|p| p.patch.as_ref())
+            .is_some_and(|p| !p.freeze_popup && p.snap_gap_logical_px == 48)
+    })
+    .await?;
+    require(
+        service
+            .snapshot()
+            .await?
+            .settings
+            .windows
+            .snap_gap_logical_px
+            == 8,
+        "preview-gap-not-persisted",
+    )?;
+    main.eval("[...document.querySelectorAll('.save-bar button')].find(el=>el.textContent==='Cancel').click()").map_err(|_|"preview-cancel")?;
+    wait(app, service, "preview-cancel-restores", |s| {
+        s.appearance.resolved_theme == "light"
+            && s.appearance.widget.palette["background"] == "#EAF2FF"
+            && s.appearance.placement_constraints.margins[0] < 48.0
+    })
+    .await?;
+    require(
+        service.snapshot().await?.settings.revision == saved.revision,
+        "cancel-keeps-saved-revision",
+    )?;
+    main.eval("document.querySelectorAll('.preset-grid button')[2].click()")
+        .map_err(|_| "preview-forest")?;
+    wait(app, service, "preview-forest", |s| {
+        s.appearance.widget.palette["background"] == "#EAF4EC"
+    })
+    .await?;
+    main.eval("document.querySelector('.save-bar button[type=submit]').click()")
+        .map_err(|_| "preview-save")?;
+    wait(app, service, "preview-save-once", |s| {
+        s.settings.revision == saved.revision + 1
+            && s.settings.widget_appearance.preset_id == Some(PresetId::Forest)
+    })
+    .await?;
+    service.dispatch(Action::Window(Input::Close));
+    wait(app, service, "preview-close-retires-session", |s| {
+        s.appearance.preview_session.is_none() && !visible(app, "main")
+    })
+    .await?;
+    require(
+        service
+            .snapshot()
+            .await?
+            .settings
+            .widget_appearance
+            .preset_id
+            == Some(PresetId::Forest),
+        "close-retains-saved-preset",
+    )?;
+    Ok(())
+}
+
+struct PaintBackdrop {
+    app: AppHandle,
+    handle: usize,
+}
+impl Drop for PaintBackdrop {
+    fn drop(&mut self) {
+        let handle = self.handle;
+        let _ = self.app.run_on_main_thread(move || unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::DestroyWindow(handle as _);
+        });
+    }
+}
+async fn composition_probe(
+    app: &AppHandle,
+    shell: &tauri::WebviewWindow,
+    white: bool,
+) -> Result<[u8; 3], String> {
+    // Win32 STATIC rectangle styles; kept local to this debug-only paint probe.
+    const SS_BLACKRECT: u32 = 0x0004;
+    const SS_WHITERECT: u32 = 0x0006;
+    const SS_NOTIFY: u32 = 0x0100;
+    use windows_sys::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::*};
+    let position = shell.outer_position().map_err(|_| "paint-position")?;
+    let size = shell.outer_size().map_err(|_| "paint-size")?;
+    let scale = shell.scale_factor().map_err(|_| "paint-scale")?;
+    let shell_handle = shell.hwnd().map_err(|_| "paint-handle")?.0 as usize;
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let class = "STATIC\0".encode_utf16().collect::<Vec<_>>();
+        let handle = unsafe {
+            CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP | SS_NOTIFY | if white { SS_WHITERECT } else { SS_BLACKRECT },
+                position.x - 8,
+                position.y - 8,
+                size.width as i32 + 16,
+                size.height as i32 + 16,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null()),
+                std::ptr::null(),
+            )
+        };
+        if !handle.is_null() {
+            unsafe {
+                SetWindowPos(
+                    handle,
+                    shell_handle as _,
+                    position.x - 8,
+                    position.y - 8,
+                    size.width as i32 + 16,
+                    size.height as i32 + 16,
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+                UpdateWindow(handle);
+            }
+        }
+        let _ = send.send(handle as usize);
+    })
+    .map_err(|_| "paint-backdrop-thread")?;
+    let handle = receive.await.map_err(|_| "paint-backdrop")?;
+    if handle == 0 {
+        return Err("paint-backdrop".into());
+    }
+    let _backdrop = PaintBackdrop {
+        app: app.clone(),
+        handle,
+    };
+    tokio::time::sleep(Duration::from_millis(180)).await;
+    let (send, receive) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let color = unsafe {
+            let point = windows_sys::Win32::Foundation::POINT {
+                x: position.x + (3.0 * scale).round() as i32,
+                y: position.y + (size.height / 2) as i32,
+            };
+            let hit = WindowFromPoint(point);
+            if GetAncestor(hit, GA_ROOT) != shell_handle as _ {
+                None
+            } else {
+                let dc = GetDC(std::ptr::null_mut());
+                let outside = windows_sys::Win32::Foundation::POINT {
+                    x: position.x - 4,
+                    y: position.y + (size.height / 2) as i32,
+                };
+                let backdrop_hit = GetAncestor(WindowFromPoint(outside), GA_ROOT);
+                let backdrop = if backdrop_hit == handle as _ {
+                    GetPixel(dc, outside.x, outside.y)
+                } else {
+                    u32::MAX
+                };
+                let color = GetPixel(dc, point.x, point.y);
+                ReleaseDC(std::ptr::null_mut(), dc);
+                let expected = if white { 0x00FFFFFF } else { 0 };
+                println!("native-check own-backdrop-valid={}", backdrop == expected);
+                if backdrop == expected {
+                    Some(color)
+                } else {
+                    None
+                }
+            }
+        };
+        let _ = send.send(color);
+    })
+    .map_err(|_| "paint-sample-thread")?;
+    let color = receive
+        .await
+        .map_err(|_| "paint-sample")?
+        .ok_or("paint-sample-occluded")?;
+    // Only this app's decorative shell over an app-owned solid backdrop is sampled.
+    // The difference cancels gradient tint and measures CSS background alpha.
+    Ok([
+        (color & 255) as u8,
+        ((color >> 8) & 255) as u8,
+        ((color >> 16) & 255) as u8,
+    ])
 }
 
 // Inject coordinator drag completion without OS mouse input. Actual cross-DPI

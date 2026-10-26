@@ -1,5 +1,8 @@
 export function diagnostic(code: string, codexCliVersion?: string | null): string {
   const messages: Record<string, string> = {
+    "invalid-snap-gap": "Use a whole snap gap from 0 to 48 logical px.",
+    "invalid-snap-anchors": "The saved anchor policy is invalid. Reset the widget position.",
+    "invalid-widget-appearance": "Review both widget palettes and background transparency before saving.",
     "invalid-proxy-url": "Enter an HTTP or HTTPS proxy URL with a valid host and port, without credentials, a path, query or fragment.",
     "invalid-storage-directory": "Enter an absolute configuration folder path.",
     "invalid-visible-periods": "Choose both periods, 5-hour only, or weekly only for HUD and Edge.",

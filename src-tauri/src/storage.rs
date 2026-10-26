@@ -84,18 +84,68 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
         .get("schemaVersion")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    if version > 5 {
+    if version > 7 {
         return Err("storage-future-version");
     }
-    if version < 5 {
+    if version < 6 {
         let obj = value.as_object_mut().ok_or("storage-corrupt")?;
-        obj.insert("schemaVersion".into(), 5.into());
+        obj.insert("schemaVersion".into(), 6.into());
+        // Missing entries mark legacy placements pending conservative resolution.
+        if let Some(windows) = obj
+            .entry("windows")
+            .or_insert_with(|| serde_json::json!({}))
+            .as_object_mut()
+        {
+            windows.insert("snapAnchors".into(), serde_json::json!({}));
+        }
         if !obj
             .get("themePreference")
             .and_then(serde_json::Value::as_str)
             .is_some_and(|s| ["system", "light", "dark"].contains(&s))
         {
             obj.insert("themePreference".into(), "system".into());
+        }
+    }
+    if version < 7 {
+        let obj = value.as_object_mut().ok_or("storage-corrupt")?;
+        obj.insert("schemaVersion".into(), 7.into());
+        let appearance = obj
+            .entry("widgetAppearance")
+            .or_insert_with(|| serde_json::json!({}));
+        let a = appearance.as_object_mut().ok_or("storage-corrupt")?;
+        let custom = a.get("colorMode").and_then(serde_json::Value::as_str) == Some("custom");
+        let maps = a
+            .get("palettes")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        let quota_only = ["light", "dark"].iter().all(|theme| {
+            maps.get(theme)
+                .and_then(serde_json::Value::as_object)
+                .is_none_or(|map| map.keys().all(|k| k == "fiveHour" || k == "weekly"))
+        });
+        if !custom || quota_only {
+            a.insert("presetId".into(), "original".into());
+            let mut themes = serde_json::json!({});
+            if custom {
+                for theme in ["light", "dark"] {
+                    let mut entry = maps
+                        .get(theme)
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}));
+                    if let Some(map) = entry.as_object_mut() {
+                        map.insert("enabled".into(), true.into());
+                    }
+                    themes[theme] = entry;
+                }
+            }
+            a.insert(
+                "quotaCustomizations".into(),
+                serde_json::json!({"original":themes}),
+            );
+            a.insert("palettes".into(), serde_json::json!({"light":{},"dark":{}}));
+            a.insert("colorMode".into(), "theme-defaults".into());
+        } else {
+            a.insert("presetId".into(), serde_json::Value::Null);
         }
     }
     let settings: Settings = serde_json::from_value(value).map_err(|_| "storage-corrupt")?;
@@ -313,6 +363,122 @@ mod tests {
     use super::*;
     use crate::model::ThemePreference;
     #[test]
+    fn schema_six_preserves_gap_anchors_and_migrates_only_quota_customizations() {
+        use crate::widget_appearance::PresetId;
+        let decode_settings = |settings: serde_json::Value| {
+            let body = serde_json::to_vec(&settings).unwrap();
+            let bytes = serde_json::to_vec(&Envelope {
+                format: 1,
+                checksum: format!("{:x}", Sha256::digest(body)),
+                settings,
+            })
+            .unwrap();
+            decode(&bytes).unwrap()
+        };
+        for custom in [false, true] {
+            let mut value = serde_json::to_value(Settings::default()).unwrap();
+            value["schemaVersion"] = 6.into();
+            value["revision"] = 42.into();
+            value["windows"]["snapGapLogicalPx"] = 24.into();
+            value["windows"]["snapAnchors"] =
+                serde_json::json!({"floating":{"horizontal":"left","vertical":"top"}});
+            value["widgetAppearance"] = serde_json::json!({"colorMode":if custom{"custom"}else{"theme-defaults"},"palettes":{"light":{"fiveHour":"#6D28D9"},"dark":{"weekly":"#34D399"}}});
+            let loaded = decode_settings(value);
+            let appearance = &loaded.settings.widget_appearance;
+            assert_eq!(loaded.settings.revision, 42);
+            assert_eq!(loaded.settings.windows.snap_gap_logical_px, 24);
+            assert_eq!(loaded.settings.windows.snap_anchors.len(), 1);
+            assert_eq!(appearance.preset_id, Some(PresetId::Original));
+            assert_eq!(
+                appearance.palette(false)["fiveHour"],
+                if custom { "#6D28D9" } else { "#005FCC" }
+            );
+            assert_eq!(
+                appearance.palette(true)["weekly"],
+                if custom { "#34D399" } else { "#A78BFA" }
+            );
+            assert_eq!(
+                appearance
+                    .quota_customizations
+                    .get(&PresetId::Original)
+                    .unwrap()
+                    .light
+                    .enabled,
+                custom
+            );
+        }
+        let value = serde_json::json!({"schemaVersion":6,"widgetAppearance":{"colorMode":"custom","palettes":{"light":{"background":"#E8F4FF"},"dark":{}}}});
+        let loaded = decode_settings(value);
+        assert_eq!(loaded.settings.widget_appearance.preset_id, None);
+        assert_eq!(
+            loaded.settings.widget_appearance.palette(false)["background"],
+            "#E8F4FF"
+        );
+    }
+    #[test]
+    fn schema_five_adds_appearance_and_pending_anchors_without_losing_saved_state() {
+        let mut settings = serde_json::to_value(Settings::default()).unwrap();
+        settings["schemaVersion"] = 5.into();
+        settings["revision"] = 42.into();
+        settings["themePreference"] = "dark".into();
+        settings["mode"] = "compact-hud".into();
+        settings["proxyUrl"] = "http://127.0.0.1:7890".into();
+        settings.as_object_mut().unwrap().remove("widgetAppearance");
+        let windows = settings["windows"].as_object_mut().unwrap();
+        windows.remove("snapGapLogicalPx");
+        windows.remove("snapAnchors");
+        windows.insert(
+            "placements".into(),
+            serde_json::json!({"compact-hud":{"monitor":"saved-monitor","x":0,"y":120}}),
+        );
+        let mut engine = crate::reminders::Engine::new(Durable::default(), false);
+        engine.test_claim(1000, 1).unwrap();
+        let value = serde_json::json!({"settings":settings,"reminders":engine.data,"profileId":new_profile_id(),"dataRevision":8});
+        let body = serde_json::to_vec(&value).unwrap();
+        let bytes = serde_json::to_vec(&Envelope {
+            format: 4,
+            checksum: format!("{:x}", Sha256::digest(body)),
+            settings: value,
+        })
+        .unwrap();
+        let migrated = decode(&bytes).unwrap();
+        assert_eq!(migrated.settings.schema_version, 7);
+        assert_eq!(migrated.settings.revision, 42);
+        assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
+        assert_eq!(
+            migrated.settings.mode,
+            crate::model::DisplayMode::CompactHud
+        );
+        assert_eq!(
+            migrated.settings.proxy_url.as_deref(),
+            Some("http://127.0.0.1:7890")
+        );
+        assert_eq!(migrated.settings.windows.snap_gap_logical_px, 8);
+        assert!(migrated.settings.windows.snap_anchors.is_empty());
+        assert_eq!(
+            migrated.settings.windows.placements["compact-hud"]
+                .monitor
+                .as_deref(),
+            Some("saved-monitor")
+        );
+        assert_eq!(
+            migrated
+                .settings
+                .widget_appearance
+                .background_transparency_percent,
+            0
+        );
+        assert!(migrated
+            .settings
+            .widget_appearance
+            .palettes
+            .light
+            .is_empty());
+        assert!(migrated.settings.widget_appearance.palettes.dark.is_empty());
+        assert_eq!(migrated.reminders.history.len(), 1);
+        assert_eq!(migrated.data_revision, 8);
+    }
+    #[test]
     fn schema_four_migrates_new_preferences_without_losing_reminder_claims() {
         let mut engine = crate::reminders::Engine::new(Durable::default(), false);
         engine.test_claim(1000, 1).unwrap();
@@ -325,7 +491,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 5);
+        assert_eq!(migrated.settings.schema_version, 7);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(migrated.settings.proxy_url.is_none());
         assert_eq!(
@@ -434,7 +600,7 @@ mod tests {
             serde_json::json!({"schemaVersion":3,"themePreference":"dark"}),
         ))
         .unwrap();
-        assert_eq!(migrated.settings.schema_version, 5);
+        assert_eq!(migrated.settings.schema_version, 7);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(!migrated.settings.autostart.requested);
         assert!(!migrated.settings.autostart.pending);

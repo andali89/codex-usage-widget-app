@@ -1,5 +1,218 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HorizontalAnchor {
+    #[default]
+    None,
+    Left,
+    Right,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VerticalAnchor {
+    #[default]
+    None,
+    Top,
+    Bottom,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default, deny_unknown_fields)]
+pub struct SnapAnchors {
+    pub horizontal: HorizontalAnchor,
+    pub vertical: VerticalAnchor,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GapConstraints {
+    pub margins: [f64; 4],
+    pub taskbar_uncertain: bool,
+    pub reduced_to_fit: bool,
+    pub content_exceeds_work_area: bool,
+}
+
+/// Margins are physical pixels in left/top/right/bottom order. Fit margins
+/// rather than silently resizing the content to satisfy a requested gap.
+pub fn gap_constraints(
+    work: Rect,
+    size: (f64, f64),
+    scale: f64,
+    gap: u8,
+    safety: [bool; 4],
+    uncertain: bool,
+) -> GapConstraints {
+    let mut margins =
+        safety.map(|safe| (f64::from(gap).max(if safe { 8.0 } else { 0.0 }) * scale).round());
+    let mut reduced = false;
+    for (a, b, available) in [
+        (0, 2, (work.width - size.0).max(0.0)),
+        (1, 3, (work.height - size.1).max(0.0)),
+    ] {
+        let total = margins[a] + margins[b];
+        if total > available {
+            let factor = available / total;
+            margins[a] = (margins[a] * factor).floor();
+            margins[b] = (margins[b] * factor).floor();
+            reduced = true;
+        }
+    }
+    GapConstraints {
+        margins,
+        taskbar_uncertain: uncertain,
+        reduced_to_fit: reduced,
+        content_exceeds_work_area: size.0 > work.width || size.1 > work.height,
+    }
+}
+pub fn resolve_anchors(
+    mut rect: Rect,
+    work: Rect,
+    anchors: SnapAnchors,
+    margins: [f64; 4],
+    free_safety: [f64; 4],
+    edge_right: Option<bool>,
+) -> Rect {
+    let horizontal = edge_right
+        .map(|right| {
+            if right {
+                HorizontalAnchor::Right
+            } else {
+                HorizontalAnchor::Left
+            }
+        })
+        .unwrap_or(anchors.horizontal);
+    rect.x = match horizontal {
+        HorizontalAnchor::Left => work.x + margins[0],
+        HorizontalAnchor::Right => work.right() - margins[2] - rect.width,
+        HorizontalAnchor::None => rect.x,
+    };
+    rect.y = match anchors.vertical {
+        VerticalAnchor::Top => work.y + margins[1],
+        VerticalAnchor::Bottom => work.bottom() - margins[3] - rect.height,
+        VerticalAnchor::None => rect.y,
+    };
+    let vertical = if edge_right.is_some() {
+        margins
+    } else {
+        free_safety
+    };
+    rect.x = rect.x.clamp(
+        work.x + free_safety[0],
+        (work.right() - rect.width - free_safety[2]).max(work.x + free_safety[0]),
+    );
+    rect.y = rect.y.clamp(
+        work.y + vertical[1],
+        (work.bottom() - rect.height - vertical[3]).max(work.y + vertical[1]),
+    );
+    rect
+}
+fn choose_axis(
+    position: f64,
+    size: f64,
+    work: (f64, f64),
+    before: f64,
+    after: f64,
+    attraction: f64,
+    previous: i8,
+) -> i8 {
+    let low = work.0 + before;
+    let high = work.1 - after - size;
+    let left = position <= low + attraction;
+    let right = position >= high - attraction;
+    match (left, right) {
+        (true, true) => {
+            let a = (position - low).abs();
+            let b = (position - high).abs();
+            if a == b {
+                if previous == 0 {
+                    -1
+                } else {
+                    previous
+                }
+            } else if a < b {
+                -1
+            } else {
+                1
+            }
+        }
+        (true, false) => -1,
+        (false, true) => 1,
+        _ => 0,
+    }
+}
+pub fn release_anchors(
+    rect: Rect,
+    work: Rect,
+    margins: [f64; 4],
+    scale: f64,
+    previous: SnapAnchors,
+    edge: bool,
+) -> SnapAnchors {
+    let h = choose_axis(
+        rect.x,
+        rect.width,
+        (work.x, work.right()),
+        margins[0],
+        margins[2],
+        12.0 * scale,
+        match previous.horizontal {
+            HorizontalAnchor::Left => -1,
+            HorizontalAnchor::Right => 1,
+            _ => 0,
+        },
+    );
+    let v = choose_axis(
+        rect.y,
+        rect.height,
+        (work.y, work.bottom()),
+        margins[1],
+        margins[3],
+        12.0 * scale,
+        match previous.vertical {
+            VerticalAnchor::Top => -1,
+            VerticalAnchor::Bottom => 1,
+            _ => 0,
+        },
+    );
+    SnapAnchors {
+        horizontal: if edge {
+            HorizontalAnchor::None
+        } else {
+            match h {
+                -1 => HorizontalAnchor::Left,
+                1 => HorizontalAnchor::Right,
+                _ => HorizontalAnchor::None,
+            }
+        },
+        vertical: match v {
+            -1 => VerticalAnchor::Top,
+            1 => VerticalAnchor::Bottom,
+            _ => VerticalAnchor::None,
+        },
+    }
+}
+pub fn infer_legacy(rect: Rect, work: Rect, scale: f64, edge: bool) -> SnapAnchors {
+    let inset = if edge { 8.0 * scale } else { 0.0 };
+    SnapAnchors {
+        horizontal: if edge {
+            HorizontalAnchor::None
+        } else if (rect.x - work.x).abs() <= scale {
+            HorizontalAnchor::Left
+        } else if (rect.right() - work.right()).abs() <= scale {
+            HorizontalAnchor::Right
+        } else {
+            HorizontalAnchor::None
+        },
+        vertical: if (rect.y - work.y - inset).abs() <= scale {
+            VerticalAnchor::Top
+        } else if (rect.bottom() - work.bottom() + inset).abs() <= scale {
+            VerticalAnchor::Bottom
+        } else {
+            VerticalAnchor::None
+        },
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rect {
     pub x: f64,
@@ -59,6 +272,7 @@ impl Placement {
             && self.monitor.as_ref().is_none_or(|s| s.len() <= 256)
     }
     // Placement offsets are logical; the outer size is already physical.
+    #[cfg(test)]
     pub fn physical(&self, work: Rect, scale: f64, size: (f64, f64)) -> Rect {
         Rect {
             x: work.x + self.x * scale,
@@ -78,6 +292,7 @@ impl Placement {
 }
 
 /// Dock a released Edge shell, retaining its side on an exact center tie.
+#[cfg(test)]
 pub fn dock_edge(mut rect: Rect, work: Rect, scale: f64, previous_right: bool) -> (Rect, bool) {
     let delta = rect.x + rect.width / 2.0 - (work.x + work.width / 2.0);
     let right = if delta == 0.0 {
@@ -218,6 +433,208 @@ pub fn corridor_contains(a: Rect, b: Rect, x: f64, y: f64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shared_gap_release_and_resize_preserve_anchor_intent_at_destination_dpi() {
+        for scale in [1.0, 1.25, 1.5, 2.0, 2.5] {
+            for gap in [0, 8, 16, 48] {
+                let work = Rect {
+                    x: -1600.0,
+                    y: -120.0,
+                    width: 1600.0,
+                    height: 1000.0,
+                };
+                let size = (200.0 * scale, 80.0 * scale);
+                let policy = gap_constraints(work, size, scale, gap, [false; 4], false);
+                let dropped = Rect {
+                    x: work.right() - size.0,
+                    y: work.bottom() - size.1,
+                    width: size.0,
+                    height: size.1,
+                };
+                let anchors = release_anchors(
+                    dropped,
+                    work,
+                    policy.margins,
+                    scale,
+                    SnapAnchors::default(),
+                    false,
+                );
+                assert_eq!(
+                    anchors,
+                    SnapAnchors {
+                        horizontal: HorizontalAnchor::Right,
+                        vertical: VerticalAnchor::Bottom
+                    }
+                );
+                let rect = resolve_anchors(dropped, work, anchors, policy.margins, [0.0; 4], None);
+                assert!((work.right() - rect.right() - f64::from(gap) * scale).abs() <= 1.0);
+                assert!((work.bottom() - rect.bottom() - f64::from(gap) * scale).abs() <= 1.0);
+                let larger = Rect {
+                    width: rect.width + 35.0,
+                    height: rect.height + 20.0,
+                    ..rect
+                };
+                let resized =
+                    resolve_anchors(larger, work, anchors, policy.margins, [0.0; 4], None);
+                assert_eq!(resized.right(), rect.right());
+                assert_eq!(resized.bottom(), rect.bottom());
+            }
+        }
+    }
+    #[test]
+    fn attraction_band_includes_outer_inset_and_fine_positions_remain_free() {
+        let work = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 800.0,
+            height: 600.0,
+        };
+        let rect = Rect {
+            x: 60.0,
+            y: 150.0,
+            width: 100.0,
+            height: 60.0,
+        };
+        let policy = gap_constraints(work, (100.0, 60.0), 1.0, 48, [false; 4], false);
+        assert_eq!(
+            release_anchors(
+                rect,
+                work,
+                policy.margins,
+                1.0,
+                SnapAnchors::default(),
+                false
+            )
+            .horizontal,
+            HorizontalAnchor::Left
+        );
+        assert_eq!(
+            release_anchors(
+                Rect { x: 60.01, ..rect },
+                work,
+                policy.margins,
+                1.0,
+                SnapAnchors::default(),
+                false
+            )
+            .horizontal,
+            HorizontalAnchor::None
+        );
+        let free = resolve_anchors(
+            Rect { x: 1.0, ..rect },
+            work,
+            SnapAnchors::default(),
+            policy.margins,
+            [0.0; 4],
+            None,
+        );
+        assert_eq!(free.x, 1.0);
+    }
+    #[test]
+    fn taskbar_safety_fit_and_oversized_content_are_explicit() {
+        let work = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 80.0,
+        };
+        let p = gap_constraints(
+            work,
+            (90.0, 60.0),
+            2.0,
+            48,
+            [false, false, false, true],
+            false,
+        );
+        assert!(p.reduced_to_fit);
+        assert!(p.margins[0] + p.margins[2] <= 10.0);
+        assert!(p.margins[1] + p.margins[3] <= 20.0);
+        let p = gap_constraints(
+            work,
+            (40.0, 30.0),
+            1.0,
+            0,
+            [false, false, false, true],
+            false,
+        );
+        assert_eq!(p.margins, [0.0, 0.0, 0.0, 8.0]);
+        let p = gap_constraints(work, (200.0, 100.0), 1.0, 8, [true; 4], true);
+        assert!(p.content_exceeds_work_area);
+        assert!(p.taskbar_uncertain);
+        assert_eq!(p.margins, [0.0; 4]);
+    }
+    #[test]
+    fn legacy_inference_is_conservative_and_edge_has_one_horizontal_owner() {
+        let work = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 800.0,
+            height: 600.0,
+        };
+        let rect = Rect {
+            x: 0.5,
+            y: 1.0,
+            width: 100.0,
+            height: 60.0,
+        };
+        assert_eq!(
+            infer_legacy(rect, work, 1.0, false),
+            SnapAnchors {
+                horizontal: HorizontalAnchor::Left,
+                vertical: VerticalAnchor::Top
+            }
+        );
+        assert_eq!(
+            infer_legacy(
+                Rect {
+                    x: 20.0,
+                    y: 20.0,
+                    ..rect
+                },
+                work,
+                1.0,
+                false
+            ),
+            SnapAnchors::default()
+        );
+        assert_eq!(
+            infer_legacy(Rect { y: 8.0, ..rect }, work, 1.0, true),
+            SnapAnchors {
+                horizontal: HorizontalAnchor::None,
+                vertical: VerticalAnchor::Top
+            }
+        );
+    }
+    #[test]
+    fn opposing_attraction_ties_retain_prior_anchor_then_choose_left_top() {
+        let work = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
+        let rect = Rect {
+            x: 10.0,
+            y: 10.0,
+            width: 80.0,
+            height: 80.0,
+        };
+        let prior = SnapAnchors {
+            horizontal: HorizontalAnchor::Right,
+            vertical: VerticalAnchor::Bottom,
+        };
+        assert_eq!(
+            release_anchors(rect, work, [8.0; 4], 1.0, prior, false),
+            prior
+        );
+        assert_eq!(
+            release_anchors(rect, work, [8.0; 4], 1.0, SnapAnchors::default(), false),
+            SnapAnchors {
+                horizontal: HorizontalAnchor::Left,
+                vertical: VerticalAnchor::Top
+            }
+        );
+    }
     #[test]
     fn edge_drop_chooses_side_clamps_height_and_keeps_ties_at_destination_dpi() {
         for scale in [1.0, 1.25, 1.5, 2.5] {

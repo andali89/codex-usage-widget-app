@@ -6,6 +6,8 @@
 **Target platform:** Windows 10/11  
 **Proposed stack:** Tauri 2 · TypeScript · React · Tailwind CSS · Rust application services
 
+**Proposed follow-up:** [Widget appearance and consistent snapping](widget-appearance-and-snap-design.md) specifies configurable background transparency, element colors, and a shared desktop snap gap. It is a design proposal; the current implementation and validation status remain in the implementation reports.
+
 ---
 
 ## 1. Executive summary

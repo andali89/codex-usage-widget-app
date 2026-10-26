@@ -15,6 +15,21 @@ fn close_to_tray_allowed(source: Surface, mode: model::DisplayMode, tray_availab
 }
 
 pub enum Action {
+    BeginPreview {
+        session: String,
+        expected_revision: u64,
+        reply: oneshot::Sender<Result<AppState, String>>,
+    },
+    UpdatePreview {
+        session: String,
+        sequence: u64,
+        patch: Option<crate::display_preview::Patch>,
+        reply: oneshot::Sender<Result<AppState, String>>,
+    },
+    EndPreview {
+        session: Option<String>,
+        reply: Option<oneshot::Sender<AppState>>,
+    },
     Snapshot(oneshot::Sender<AppState>),
     #[cfg(debug_assertions)]
     ShellContentSize(oneshot::Sender<Option<(f64, f64)>>),
@@ -78,13 +93,67 @@ fn save_placement(
     if let Some(side) = update.edge_side {
         next.windows.edge_side = side;
     }
+    if let Some(anchors) = update.anchors {
+        next.windows
+            .snap_anchors
+            .insert(next.mode.key().into(), anchors);
+    }
     next.revision += 1;
     save(&next)?;
     *settings = next;
     Ok(())
 }
 
+fn effective_settings(state: &AppState) -> Settings {
+    state
+        .display_preview
+        .as_ref()
+        .map(|p| p.effective(&state.settings))
+        .unwrap_or_else(|| state.settings.clone())
+}
+fn resolve_display(app: &AppHandle, state: &mut AppState) {
+    if state
+        .display_preview
+        .as_ref()
+        .is_some_and(|p| p.base_revision != state.settings.revision)
+    {
+        state.display_preview = None;
+    }
+    let effective = effective_settings(state);
+    let preference_changed = state.appearance.theme_preference != effective.theme_preference;
+    if preference_changed || state.display_preview.is_some() {
+        let resolved = platform::appearance(effective.theme_preference);
+        state.appearance.theme_preference = resolved.theme_preference;
+        state.appearance.resolved_theme = resolved.resolved_theme;
+        if preference_changed {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_theme(match effective.theme_preference {
+                    model::ThemePreference::System => None,
+                    model::ThemePreference::Light => Some(tauri::Theme::Light),
+                    model::ThemePreference::Dark => Some(tauri::Theme::Dark),
+                });
+            }
+        }
+    }
+    state.appearance.preview_session = state.display_preview.as_ref().map(|p| p.owner.clone());
+    state.appearance.preview_sequence = state.display_preview.as_ref().map_or(0, |p| p.sequence);
+}
 fn publish(app: &AppHandle, state: &mut AppState) {
+    resolve_display(app, state);
+    #[cfg(debug_assertions)]
+    if crate::native_check::presentation_requested() {
+        // Exercise requested CSS without changing Windows accessibility settings.
+        state.appearance.high_contrast = false;
+        state.appearance.transparency_allowed = true;
+    }
+    let composition = crate::native_windows::composition_available()
+        && state.window_diagnostic.as_deref() != Some("native-composition-failed");
+    state.appearance.widget = effective_settings(state).widget_appearance.resolve(
+        state.appearance.resolved_theme == "dark",
+        state.appearance.high_contrast,
+        state.appearance.transparency_allowed,
+        composition,
+    );
     if let Some(store) = app.try_state::<std::sync::Arc<Store>>() {
         state.storage = store.status();
     }
@@ -220,7 +289,7 @@ pub fn start(
         crate::lifecycle::background_launch(std::env::args()),
     );
     #[cfg(debug_assertions)]
-    let dashboard = dashboard && !crate::native_check::sizing_requested();
+    let dashboard = dashboard && !crate::native_check::presentation_requested();
     let mut persisted_reminders = serde_json::to_vec(&loaded.reminders).unwrap_or_default();
     let mut reminders = reminders::Engine::new(loaded.reminders, loaded.settings.reminders.enabled);
     let needs_salt = reminders.data.account_salt.is_none();
@@ -235,6 +304,7 @@ pub fn start(
     let foreground_seconds = loaded.settings.foreground_seconds;
     let mut notification = crate::notification::Adapter::new(&app);
     let mut state = AppState {
+        display_preview: None,
         process_epoch: format!("{}-{}", model::now_ms(), std::process::id()),
         revision: 0,
         settings: loaded.settings,
@@ -265,6 +335,10 @@ pub fn start(
         first_launch,
     };
     let mut durable_identity = identity_salt.is_some();
+    #[cfg(debug_assertions)]
+    if crate::native_check::presentation_requested() {
+        state.usage = crate::native_check::fixture_usage();
+    }
     if first_launch || needs_salt {
         match store.save(&state.settings, &reminders.data) {
             Err(code) => {
@@ -290,6 +364,14 @@ pub fn start(
         let mut timezone = platform::timezone_signature();
         loop {
             let now = started.elapsed().as_millis() as u64;
+            if state
+                .display_preview
+                .as_ref()
+                .is_some_and(|p| now >= p.expires || p.base_revision != state.settings.revision)
+            {
+                state.display_preview = None;
+                coordinate(&app, &mut state, &mut windows, &actor_service, None);
+            }
             let wall = model::now_ms();
             reminders.schedules(
                 &state.settings.reminders,
@@ -394,7 +476,8 @@ pub fn start(
                     scheduler.request(now);
                 }
                 let previous_high_contrast = state.appearance.high_contrast;
-                state.appearance = platform::appearance(state.settings.theme_preference);
+                state.appearance =
+                    platform::appearance(effective_settings(&state).theme_preference);
                 reconcile_timezone(
                     &mut timezone,
                     &mut state,
@@ -420,23 +503,35 @@ pub fn start(
                 publish(&app, &mut state);
             }
             if scheduler.start_if_due(now) {
-                state.usage.refresh_in_flight = true;
-                state.usage.last_attempt_at_ms = Some(wall);
-                let path = state.settings.codex_path.clone();
-                let proxy_url = state.settings.proxy_url.clone();
-                let epoch = identity_salt
-                    .clone()
-                    .unwrap_or_else(|| state.process_epoch.clone());
-                let tx = result_tx.clone();
-                let stop = stop_rx.clone();
-                let request_generation = generation;
-                worker = Some(tauri::async_runtime::spawn(async move {
-                    let outcome =
-                        protocol::read_cycle(path.as_deref(), proxy_url.as_deref(), &epoch, stop)
-                            .await;
-                    let _ = tx.send((request_generation, outcome)).await;
-                }));
-                publish(&app, &mut state);
+                #[cfg(debug_assertions)]
+                let synthetic = crate::native_check::presentation_requested();
+                #[cfg(not(debug_assertions))]
+                let synthetic = false;
+                if synthetic {
+                    scheduler.finish(now, true, true, interval, false);
+                } else {
+                    state.usage.refresh_in_flight = true;
+                    state.usage.last_attempt_at_ms = Some(wall);
+                    let path = state.settings.codex_path.clone();
+                    let proxy_url = state.settings.proxy_url.clone();
+                    let epoch = identity_salt
+                        .clone()
+                        .unwrap_or_else(|| state.process_epoch.clone());
+                    let tx = result_tx.clone();
+                    let stop = stop_rx.clone();
+                    let request_generation = generation;
+                    worker = Some(tauri::async_runtime::spawn(async move {
+                        let outcome = protocol::read_cycle(
+                            path.as_deref(),
+                            proxy_url.as_deref(),
+                            &epoch,
+                            stop,
+                        )
+                        .await;
+                        let _ = tx.send((request_generation, outcome)).await;
+                    }));
+                    publish(&app, &mut state);
+                }
             }
             state.usage.next_refresh_at_ms = scheduler
                 .next_deadline()
@@ -446,6 +541,12 @@ pub fn start(
                 .unwrap_or(next_reconcile)
                 .min(windows.next_deadline().unwrap_or(next_reconcile))
                 .min(next_reconcile)
+                .min(
+                    state
+                        .display_preview
+                        .as_ref()
+                        .map_or(u64::MAX, |p| p.expires),
+                )
                 .min(
                     model::freshness_deadline(&state.usage, interval)
                         .map(|at| now.saturating_add(at.saturating_sub(wall).max(0) as u64))
@@ -517,6 +618,19 @@ pub fn start(
                         other => other,
                     };
                     match action {
+                        Action::BeginPreview{session,expected_revision,reply}=>{
+                            let result=if expected_revision!=state.settings.revision {Err("settings-conflict".into())}
+                            else if let Some(existing)=&state.display_preview {if existing.owner==session {Ok(state.clone())}else{Err("display-preview-owned".into())}}
+                            else {crate::display_preview::Session::begin(session,expected_revision,now).map(|preview|{state.display_preview=Some(preview);publish(&app,&mut state);state.clone()})};let _=reply.send(result);
+                        },
+                        Action::UpdatePreview{session,sequence,patch,reply}=>{
+                            let result=state.display_preview.as_mut().ok_or_else(||"display-preview-ended".to_string()).and_then(|p|p.update(&session,sequence,patch,state.settings.revision,now));
+                            let result=result.map(|()|{coordinate(&app,&mut state,&mut windows,&actor_service,None);state.clone()});let _=reply.send(result);
+                        },
+                        Action::EndPreview{session,reply}=>{
+                            if session.is_none()||state.display_preview.as_ref().is_some_and(|p|Some(&p.owner)==session.as_ref()) {state.display_preview=None;coordinate(&app,&mut state,&mut windows,&actor_service,None);}
+                            if let Some(reply)=reply {let _=reply.send(state.clone());}
+                        },
                         Action::Snapshot(reply) => { state.storage = store.status(); let _ = reply.send(state.clone()); },
                         #[cfg(debug_assertions)]
                         Action::ShellContentSize(reply) => { let _ = reply.send(windows.shell_content_size()); },
@@ -533,7 +647,7 @@ pub fn start(
                             };
                             let _=reply.send(result);
                         },
-                        Action::Appearance => { reconcile_notifications(&app,&mut notification,&mut reminders,&mut scheduler,now);state.reminders=reminders.snapshot(notification.diagnostic());state.appearance = platform::appearance(state.settings.theme_preference);reconcile_timezone(&mut timezone,&mut state,&mut reminders,&mut scheduler,&mut generation,wall,now); coordinate(&app, &mut state, &mut windows, &actor_service, None); },
+                        Action::Appearance => { reconcile_notifications(&app,&mut notification,&mut reminders,&mut scheduler,now);state.reminders=reminders.snapshot(notification.diagnostic());state.appearance = platform::appearance(effective_settings(&state).theme_preference);reconcile_timezone(&mut timezone,&mut state,&mut reminders,&mut scheduler,&mut generation,wall,now); coordinate(&app, &mut state, &mut windows, &actor_service, None); },
                         Action::Tooltip => { if tooltip_enabled(&state) { if let Some(tray) = app.tray_by_id("main") { let _ = tray.set_tooltip(Some(tooltip(&state.usage))); } } },
                         Action::Window(input) => {
                             let reconcile = matches!(input, Input::Reconcile | Input::Lock(false));
@@ -541,8 +655,13 @@ pub fn start(
                             let explicit_open = matches!(&input, Input::Open { .. } | Input::Tray { activate:true, .. } | Input::Tray { open_window:true, .. } | Input::Request(_,crate::windows::Request::Activate | crate::windows::Request::OpenWindow | crate::windows::Request::Details));
                             let was_expanded = windows.expanded_visible();
                             let before = windows.interaction.state.generation;
-                            let (focus, placement) = windows.handle(&app, input, &state.settings, now);
+                            let leave_settings=matches!(&input,Input::Close|Input::Destroyed(Surface::Main)|Input::Minimized(true)|Input::DashboardLayout{page:model::DashboardPage::Overview,..}|Input::DragStarted|Input::DragFinished{..}|Input::Request(_,crate::windows::Request::Drag|crate::windows::Request::Nudge{..}|crate::windows::Request::ResetPosition));
+                            if leave_settings {state.display_preview=None;}
+                            let display=effective_settings(&state);
+                            let (focus, placement) = windows.handle(&app, input, &display, now);
+                            if windows.interaction.state.detail==DetailState::Closed {state.display_preview=None;}
                             if let Some(placement) = placement {
+                                state.display_preview=None;
                                 match save_placement(&mut state.settings, placement, |settings| store.save(settings, &reminders.data)) {
                                     Ok(()) => state.storage_diagnostic = None,
                                     Err(code) => state.storage_diagnostic = Some(code.into()),
@@ -554,7 +673,8 @@ pub fn start(
                             if (explicit_open || !was_expanded) && windows.expanded_visible() && wall - state.usage.last_success_at_ms.unwrap_or(0) > 15000 { scheduler.request(now); }
                         },
                         Action::SetMode(mode) => {
-                            let mut settings = state.settings.clone(); settings.mode = mode; settings.revision += 1;
+                            state.display_preview=None;
+                            let mut settings = state.settings.clone(); windows.merge_inferred(&mut settings); settings.mode = mode; settings.revision += 1;
                             match store.save(&settings,&reminders.data) {
                                 Err(code) => { state.storage_diagnostic = Some(code.into()); publish(&app, &mut state); },
                                 Ok(()) => { let reselect = state.settings.mode == mode; windows.settings_changed(&state.settings,&settings); if reselect { windows.reveal_mode(mode); } state.settings = settings; coordinate(&app,&mut state,&mut windows,&actor_service,None); scheduler.set_cadence(now, windows.cadence(&state.settings)); }
@@ -562,8 +682,18 @@ pub fn start(
                         },
                         Action::Save { expected_revision, settings, reply, storage_resolution, storage_token } => {
                             let mut settings=*settings;
+                            settings.widget_appearance.normalize();
+                            windows.merge_inferred(&mut settings);
+                            for (mode, next) in &settings.windows.placements {
+                                if let Some(previous) = state.settings.windows.placements.get(mode) {
+                                    let anchors=settings.windows.snap_anchors.entry(mode.clone()).or_default();
+                                    if next.x != previous.x || next.monitor != previous.monitor { anchors.horizontal=crate::geometry::HorizontalAnchor::None; }
+                                    if next.y != previous.y || next.monitor != previous.monitor { anchors.vertical=crate::geometry::VerticalAnchor::None; }
+                                }
+                            }
                             settings.autostart=state.settings.autostart.request(settings.autostart.requested);
                             let outcome = if expected_revision != state.settings.revision { Err("settings-conflict".into()) }
+                            else if !settings.widget_appearance.issues().is_empty() { Err(serde_json::json!({"code":"invalid-widget-settings","issues":settings.widget_appearance.issues()}).to_string()) }
                             else if let Err(code) = settings.validate() { Err(code.into()) }
                             else if let Err(code) = settings.reminders.validate_edit(&state.settings.reminders,wall) {Err(code.into())}
                             else {
@@ -592,14 +722,15 @@ pub fn start(
                                             scheduler.retry(now);
                                         }
                                         windows.settings_changed(&state.settings, &settings);
+                                        state.display_preview=None;
                                         state.settings = settings;
                                         state.storage_diagnostic = None;
                                         reconcile_autostart(&app,&mut state,&store,&reminders.data,true);
-                                        state.appearance = platform::appearance(state.settings.theme_preference);
+                                        state.appearance = platform::appearance(effective_settings(&state).theme_preference);
                                         windows.handle(&app, Input::Environment, &state.settings, now);
                                         coordinate(&app, &mut state, &mut windows, &actor_service, None);
                                         scheduler.set_cadence(now, windows.cadence(&state.settings));
-                                        state.appearance = platform::appearance(state.settings.theme_preference);
+                                        state.appearance = platform::appearance(effective_settings(&state).theme_preference);
                                         if let Some(window) = app.get_webview_window("main") {
                                             let theme = match state.settings.theme_preference { model::ThemePreference::System => None, model::ThemePreference::Light => Some(tauri::Theme::Light), model::ThemePreference::Dark => Some(tauri::Theme::Dark) };
                                             let _ = window.set_theme(theme);
@@ -773,9 +904,18 @@ fn coordinate(
     service: &Service,
     focus: Option<Surface>,
 ) {
+    resolve_display(app, state);
+    let display = effective_settings(state);
+    windows.set_preview_freeze(
+        state
+            .display_preview
+            .as_ref()
+            .and_then(|p| p.patch.as_ref())
+            .is_some_and(|p| p.freeze_popup),
+    );
     if let Err(code) = windows.synchronize(
         app,
-        &state.settings,
+        &display,
         service,
         focus,
         !state.appearance.high_contrast,
@@ -785,7 +925,7 @@ fn coordinate(
             windows.interaction.open_detail(true);
             let _ = windows.synchronize(
                 app,
-                &state.settings,
+                &display,
                 service,
                 None,
                 !state.appearance.high_contrast,
@@ -799,6 +939,7 @@ fn coordinate(
     } else {
         windows.coordination_fault = None;
     }
+    state.appearance.placement_constraints = windows.gap_constraints;
     state.presentation = windows.interaction.state.clone();
     state.dashboard_visible =
         state.presentation.detail != DetailState::Closed && !windows.locked && !windows.minimized;
@@ -851,6 +992,7 @@ mod tests {
                 x: 8.0,
                 y: 120.5,
             },
+            anchors: Some(crate::geometry::SnapAnchors::default()),
             edge_side: Some(crate::model::EdgeSide::Left),
         };
         assert_eq!(

@@ -1,0 +1,4 @@
+{
+  "light": {"background":"#EAF2FF","contentSurface":"#FFFFFF","text":"#12233F","secondaryText":"#475569","fiveHour":"#005FCC","weekly":"#6D28D9","track":"#E2E8F0","border":"#64748B"},
+  "dark": {"background":"#0A1B32","contentSurface":"#142A46","text":"#F4F7FC","secondaryText":"#B8C7DC","fiveHour":"#60A5FA","weekly":"#A78BFA","track":"#253B57","border":"#94A3B8"}
+}

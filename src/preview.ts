@@ -1,3 +1,4 @@
+import { defaultWidgetAppearance, resolveWidgetAppearance } from "./widgetAppearance";
 // This separate Vite development entry is never imported by the production application.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
@@ -13,8 +14,8 @@ const dark = query.get("theme") === "dark";
 const scenario = query.get("scenario") ?? "fresh";
 const state: AppState = {
   processEpoch: "synthetic-fixture", revision: 1, dashboardRequest:null, firstLaunch:query.has("welcome"),
-  settings: { schemaVersion: 5, autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, visiblePeriods:{} }, reminders:defaultReminders() },
-  appearance: { themePreference: "system", resolvedTheme: dark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
+  settings: { schemaVersion: 7, widgetAppearance:defaultWidgetAppearance(), autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { snapGapLogicalPx:8,snapAnchors:{}, hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, visiblePeriods:{} }, reminders:defaultReminders() },
+  appearance: { widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
   usage: {
     accountContextKey: "synthetic-only", connectionGeneration: 1, selectedLimitId: "codex",
     windows: [
@@ -56,14 +57,42 @@ if (["max-width", "long-reset"].includes(scenario)) state.usage.windows.forEach(
 if (scenario === "long-reset") state.usage.windows[1].resetsAtMs = at + 86340000;
 mockWindows(query.get("surface") === "shell" ? "shell" : query.get("surface") === "preview" ? "preview" : "main");
 const actionHistory: string[] = [];
+let displayPreview:{session:string;sequence:number}|null=null;
+const fixturePaint=(theme:Settings["themePreference"],appearance:Settings["widgetAppearance"],gap:number)=>{
+  state.appearance.themePreference=theme;
+  state.appearance.resolvedTheme=theme==="system"?(dark?"dark":"light"):theme;
+  state.appearance.widget=resolveWidgetAppearance(appearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
+  state.appearance.placementConstraints.margins=[gap,gap,gap,gap];
+};
+const fixturePublish=async()=>{state.revision++;await emit("widget-state",structuredClone(state));return structuredClone(state);};
 mockIPC(async (name, payload) => {
   if (name === "get_state") return structuredClone(state);
+  if(name==="begin_display_preview") {
+    const args=payload as {session:string;expectedRevision:number};
+    if(args.expectedRevision!==state.settings.revision)throw "settings-conflict";
+    if(displayPreview&&displayPreview.session!==args.session)throw "display-preview-owned";
+    displayPreview??={session:args.session,sequence:0};return structuredClone(state);
+  }
+  if(name==="update_display_preview") {
+    const args=payload as {session:string;sequence:number;patch:{themePreference:Settings["themePreference"];widgetAppearance:Settings["widgetAppearance"];snapGapLogicalPx:number}|null};
+    if(!displayPreview||displayPreview.session!==args.session)throw "display-preview-ended";
+    if(args.sequence<=displayPreview.sequence)throw "display-preview-outdated";
+    displayPreview.sequence=args.sequence;
+    if(args.patch)fixturePaint(args.patch.themePreference,args.patch.widgetAppearance,args.patch.snapGapLogicalPx);
+    return fixturePublish();
+  }
+  if(name==="end_display_preview") {
+    if(displayPreview?.session===(payload as {session:string}).session){displayPreview=null;fixturePaint(state.settings.themePreference,state.settings.widgetAppearance,state.settings.windows.snapGapLogicalPx);}
+    return fixturePublish();
+  }
   if (name === "save_settings") {
     const args = payload as { expectedRevision: number; settings: Settings };
     if (args.expectedRevision !== state.settings.revision) throw "settings-conflict";
+    displayPreview=null;
     state.settings = { ...args.settings, revision: state.settings.revision + 1 };
     state.appearance.themePreference = state.settings.themePreference;
     state.appearance.resolvedTheme = state.settings.themePreference === "system" ? dark ? "dark" : "light" : state.settings.themePreference;
+    state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
     state.revision++;
     await emit("widget-state", structuredClone(state));
     return structuredClone(state);

@@ -31,6 +31,10 @@ pub enum Request {
     Collapse,
     Escape,
     Drag,
+    #[cfg(debug_assertions)]
+    InspectFrontend {
+        message: String,
+    },
     ToggleHidden,
     ResetPosition,
     Nudge {
@@ -96,12 +100,14 @@ pub enum Input {
 pub struct PlacementUpdate {
     pub placement: Placement,
     pub edge_side: Option<EdgeSide>,
+    pub anchors: Option<geometry::SnapAnchors>,
 }
 impl From<Placement> for PlacementUpdate {
     fn from(placement: Placement) -> Self {
         Self {
             placement,
             edge_side: None,
+            anchors: None,
         }
     }
 }
@@ -121,6 +127,10 @@ impl DragSession {
 }
 
 pub struct Windows {
+    preview_freeze: bool,
+    pub gap_constraints: geometry::GapConstraints,
+    inferred_anchors: std::collections::BTreeMap<String, geometry::SnapAnchors>,
+    pub composition_failed: bool,
     pub interaction: Interaction,
     pub diagnostic: Option<String>,
     pub coordination_fault: Option<String>,
@@ -181,6 +191,10 @@ impl Windows {
 
     pub fn new(settings: &Settings, dashboard: bool) -> Self {
         Self {
+            preview_freeze: false,
+            gap_constraints: geometry::GapConstraints::default(),
+            inferred_anchors: std::collections::BTreeMap::new(),
+            composition_failed: false,
             interaction: Interaction::new(
                 settings.mode,
                 if dashboard {
@@ -680,20 +694,30 @@ impl Windows {
                             *bounds,
                         )
                     }) {
-                        placement = if settings.mode == DisplayMode::ScreenEdge {
-                            self.edge_drop(app, settings, bounds, pointer)
-                        } else {
-                            self.current_placement(app).map(Into::into)
-                        };
+                        placement = self.release_drop(app, settings, bounds, pointer);
                     }
                 }
             }
             Input::Request(source, request) => match request {
+                #[cfg(debug_assertions)]
+                Request::InspectFrontend { message }
+                    if crate::native_check::presentation_requested() =>
+                {
+                    crate::native_check::record_frontend_assertion(&message);
+                    println!(
+                        "native-check frontend={}",
+                        message.chars().take(200).collect::<String>()
+                    );
+                }
                 Request::Ready {
                     generation,
                     width,
                     height,
                 } => {
+                    #[cfg(debug_assertions)]
+                    if crate::native_check::presentation_requested() {
+                        println!("native-check ready source={source:?} generation={generation} current={} width={width} height={height}",self.interaction.state.generation);
+                    }
                     if width.is_finite()
                         && height.is_finite()
                         && (16.0..=2000.0).contains(&width)
@@ -809,7 +833,18 @@ impl Windows {
                     self.toggle_hidden(settings.mode);
                 }
                 Request::ResetPosition if settings.mode != DisplayMode::SystemTray => {
-                    placement = Some(Placement::default().into());
+                    placement = Some(PlacementUpdate {
+                        placement: Placement::default(),
+                        edge_side: None,
+                        anchors: Some(geometry::SnapAnchors {
+                            horizontal: if settings.mode == DisplayMode::ScreenEdge {
+                                geometry::HorizontalAnchor::None
+                            } else {
+                                geometry::HorizontalAnchor::Left
+                            },
+                            vertical: geometry::VerticalAnchor::Top,
+                        }),
+                    });
                     self.interaction.collapse();
                 }
                 Request::Nudge { dx, dy }
@@ -821,7 +856,18 @@ impl Windows {
                     if let Some(mut p) = self.current_placement(app) {
                         p.x += dx as f64;
                         p.y += dy as f64;
-                        placement = Some(p.into());
+                        let mut anchors = self.anchors(settings);
+                        if dx != 0 && settings.mode != DisplayMode::ScreenEdge {
+                            anchors.horizontal = geometry::HorizontalAnchor::None;
+                        }
+                        if dy != 0 {
+                            anchors.vertical = geometry::VerticalAnchor::None;
+                        }
+                        placement = Some(PlacementUpdate {
+                            placement: p,
+                            edge_side: None,
+                            anchors: Some(anchors),
+                        });
                         self.interaction.collapse();
                     }
                 }
@@ -872,7 +918,7 @@ impl Windows {
             .suppress_tray(self.locked || tray_fullscreen);
     }
     fn ensure(
-        &self,
+        &mut self,
         app: &AppHandle,
         label: &str,
         size: (f64, f64),
@@ -891,35 +937,68 @@ impl Windows {
             return Ok(Some(window));
         }
         let standard = label == "main";
-        let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
-            .title("Codex Usage Widget")
-            .visible(false)
-            .focused(false)
-            .focusable(label != "preview")
-            .always_on_top(topmost)
-            .decorations(standard)
-            .skip_taskbar(!standard)
-            .resizable(standard)
-            .shadow(standard)
-            .on_page_load(|window, payload| {
-                #[cfg(debug_assertions)]
-                if crate::native_check::requested() {
-                    println!(
-                        "native-check page label={} event={:?}",
-                        window.label(),
-                        payload.event()
-                    );
-                }
-                #[cfg(not(debug_assertions))]
-                let _ = (window, payload);
-            })
-            .inner_size(size.0, size.1)
-            .min_inner_size(
-                if standard { 380.0 } else { 16.0 },
-                if standard { 420.0 } else { 16.0 },
-            )
-            .build()
-            .map_err(|_| "native-window-create")?;
+        #[cfg(debug_assertions)]
+        let diagnostic_script = if crate::native_check::presentation_requested() {
+            r#"window.addEventListener('error',e=>window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:String(e.message)}}));window.addEventListener('unhandledrejection',e=>window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:String(e.reason)}}));"#
+        } else {
+            ""
+        };
+        #[cfg(not(debug_assertions))]
+        let diagnostic_script = "";
+        let create = |transparent| {
+            WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+                .title("Codex Usage Widget")
+                .initialization_script(diagnostic_script)
+                .visible(false)
+                .focused(false)
+                .focusable(label != "preview")
+                .always_on_top(topmost)
+                .decorations(standard)
+                .skip_taskbar(!standard)
+                .resizable(standard)
+                .shadow(standard)
+                .transparent(transparent)
+                .no_redirection_bitmap(transparent)
+                .on_page_load(|window, payload| {
+                    if window.label() == "main"
+                        && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+                    {
+                        if let Some(service) = window.try_state::<Service>() {
+                            service.dispatch_reliable(Action::EndPreview {
+                                session: None,
+                                reply: None,
+                            });
+                        }
+                    }
+                    #[cfg(debug_assertions)]
+                    if crate::native_check::requested() {
+                        println!(
+                            "native-check page label={} event={:?}",
+                            window.label(),
+                            payload.event()
+                        );
+                    }
+                    #[cfg(not(debug_assertions))]
+                    let _ = (window, payload);
+                })
+                .inner_size(size.0, size.1)
+                .min_inner_size(
+                    if standard { 380.0 } else { 16.0 },
+                    if standard { 420.0 } else { 16.0 },
+                )
+                .build()
+        };
+        let window = match create(
+            label == "shell" && native::composition_available() && !self.composition_failed,
+        ) {
+            Ok(window) => window,
+            Err(_) if label == "shell" => {
+                self.composition_failed = true;
+                self.diagnostic = Some("native-composition-failed".into());
+                create(false).map_err(|_| "native-window-create")?
+            }
+            Err(_) => return Err("native-window-create"),
+        };
         let copy = window.clone();
         let tx = service.clone();
         let surface = if label == "main" {
@@ -990,7 +1069,7 @@ impl Windows {
         self.interaction.dragging(true);
         Some(window)
     }
-    fn edge_drop(
+    fn release_drop(
         &self,
         app: &AppHandle,
         settings: &Settings,
@@ -1030,20 +1109,79 @@ impl Windows {
         bounds.x = center - width / 2.0;
         bounds.width = width;
         bounds.height = height;
-        let (rect, right) = geometry::dock_edge(
+        let edge = settings.mode == DisplayMode::ScreenEdge;
+        let previous_right = settings.windows.edge_side == EdgeSide::Right;
+        let delta = bounds.x + bounds.width / 2.0 - work.x - work.width / 2.0;
+        let right = if delta == 0.0 {
+            previous_right
+        } else {
+            delta > 0.0
+        };
+        let (safety, uncertain) = native::taskbar_safety(Rect {
+            x: monitor.position().x as f64,
+            y: monitor.position().y as f64,
+            width: monitor.size().width as f64,
+            height: monitor.size().height as f64,
+        });
+        let constraints = geometry::gap_constraints(
+            work,
+            (bounds.width, bounds.height),
+            scale,
+            settings.windows.snap_gap_logical_px,
+            safety,
+            uncertain,
+        );
+        let free = geometry::gap_constraints(
+            work,
+            (bounds.width, bounds.height),
+            scale,
+            0,
+            safety,
+            uncertain,
+        );
+        let anchors = geometry::release_anchors(
             bounds,
             work,
+            constraints.margins,
             scale,
-            settings.windows.edge_side == EdgeSide::Right,
+            self.anchors(settings),
+            edge,
+        );
+        let rect = geometry::resolve_anchors(
+            bounds,
+            work,
+            anchors,
+            constraints.margins,
+            free.margins,
+            edge.then_some(right),
         );
         Some(PlacementUpdate {
             placement: Placement::from_physical(rect, work, scale, monitor.name().cloned()),
-            edge_side: Some(if right {
+            edge_side: edge.then_some(if right {
                 EdgeSide::Right
             } else {
                 EdgeSide::Left
             }),
+            anchors: Some(anchors),
         })
+    }
+    pub fn anchors(&self, settings: &Settings) -> geometry::SnapAnchors {
+        settings
+            .windows
+            .snap_anchors
+            .get(settings.mode.key())
+            .or_else(|| self.inferred_anchors.get(settings.mode.key()))
+            .copied()
+            .unwrap_or_default()
+    }
+    pub fn merge_inferred(&self, settings: &mut Settings) {
+        for (mode, anchors) in &self.inferred_anchors {
+            settings
+                .windows
+                .snap_anchors
+                .entry(mode.clone())
+                .or_insert(*anchors);
+        }
     }
     pub fn current_placement(&self, app: &AppHandle) -> Option<Placement> {
         let window = app.get_webview_window("shell")?;
@@ -1061,32 +1199,25 @@ impl Windows {
             width: work.size.width as f64,
             height: work.size.height as f64,
         };
-        let mut rect = Rect {
+        let rect = Rect {
             x: position.x as f64,
             y: position.y as f64,
             width: size.width as f64,
             height: size.height as f64,
         }
         .clamp(work);
-        let snap = 12.0 * monitor.scale_factor();
-        if (rect.x - work.x).abs() < snap {
-            rect.x = work.x;
-        }
-        if (rect.y - work.y).abs() < snap {
-            rect.y = work.y;
-        }
-        if (rect.right() - work.right()).abs() < snap {
-            rect.x = work.right() - rect.width;
-        }
-        if (rect.bottom() - work.bottom()).abs() < snap {
-            rect.y = work.bottom() - rect.height;
-        }
         Some(Placement::from_physical(
             rect,
             work,
             monitor.scale_factor(),
             monitor.name().cloned(),
         ))
+    }
+    pub fn set_preview_freeze(&mut self, freeze: bool) {
+        if self.preview_freeze && !freeze {
+            self.layout_dirty = true;
+        }
+        self.preview_freeze = freeze;
     }
     pub fn synchronize(
         &mut self,
@@ -1096,6 +1227,9 @@ impl Windows {
         focus: Option<Surface>,
         shadow: bool,
     ) -> Result<(), &'static str> {
+        if settings.mode == DisplayMode::SystemTray {
+            self.gap_constraints = geometry::GapConstraints::default();
+        }
         if focus.is_some() {
             self.pending_focus = focus;
         }
@@ -1123,7 +1257,7 @@ impl Windows {
         }
         let raise_shell = self.ready_shell == Some(self.interaction.state.generation)
             && self.take_raise(settings.mode);
-        let state = &self.interaction.state;
+        let state = self.interaction.state.clone();
         let mut activation_denied = false;
         let mut trigger = if settings.mode == DisplayMode::SystemTray {
             self.tray
@@ -1155,21 +1289,73 @@ impl Windows {
                     .get(settings.mode.key())
                     .cloned()
                     .unwrap_or_default();
-                let mut rect = placement.physical(work, scale, outer_size);
-                if settings.mode == DisplayMode::ScreenEdge {
-                    rect.x = if settings.windows.edge_side == EdgeSide::Right {
-                        work.right() - rect.width - 8.0 * scale
-                    } else {
-                        work.x + 8.0 * scale
+                let monitor_rect = Rect {
+                    x: monitor.position().x as f64,
+                    y: monitor.position().y as f64,
+                    width: monitor.size().width as f64,
+                    height: monitor.size().height as f64,
+                };
+                let (safety, uncertain) = native::taskbar_safety(monitor_rect);
+                self.gap_constraints = geometry::gap_constraints(
+                    work,
+                    outer_size,
+                    scale,
+                    settings.windows.snap_gap_logical_px,
+                    safety,
+                    uncertain,
+                );
+                let free = geometry::gap_constraints(work, outer_size, scale, 0, safety, uncertain);
+                if !settings
+                    .windows
+                    .snap_anchors
+                    .contains_key(settings.mode.key())
+                    && !self.inferred_anchors.contains_key(settings.mode.key())
+                    && self.ready_shell == Some(state.generation)
+                {
+                    let raw = Rect {
+                        x: work.x + placement.x * scale,
+                        y: work.y + placement.y * scale,
+                        width: outer_size.0,
+                        height: outer_size.1,
                     };
-                    let inset = 8.0 * scale;
-                    rect = rect.clamp(Rect {
-                        x: work.x + inset,
-                        y: work.y + inset,
-                        width: (work.width - 2.0 * inset).max(1.0),
-                        height: (work.height - 2.0 * inset).max(1.0),
-                    });
+                    let known = placement
+                        .monitor
+                        .as_ref()
+                        .is_some_and(|name| monitor.name() == Some(name));
+                    let anchors = if known {
+                        geometry::infer_legacy(
+                            raw,
+                            work,
+                            scale,
+                            settings.mode == DisplayMode::ScreenEdge,
+                        )
+                    } else {
+                        geometry::SnapAnchors::default()
+                    };
+                    self.inferred_anchors
+                        .insert(settings.mode.key().into(), anchors);
                 }
+                let anchors = settings
+                    .windows
+                    .snap_anchors
+                    .get(settings.mode.key())
+                    .or_else(|| self.inferred_anchors.get(settings.mode.key()))
+                    .copied()
+                    .unwrap_or_default();
+                let mut rect = geometry::resolve_anchors(
+                    Rect {
+                        x: work.x + placement.x * scale,
+                        y: work.y + placement.y * scale,
+                        width: outer_size.0,
+                        height: outer_size.1,
+                    },
+                    work,
+                    anchors,
+                    self.gap_constraints.margins,
+                    free.margins,
+                    (settings.mode == DisplayMode::ScreenEdge)
+                        .then_some(settings.windows.edge_side == EdgeSide::Right),
+                );
                 if !state.dragging {
                     frame(&shell, rect)?;
                 } else if let (Ok(p), Ok(s)) = (shell.outer_position(), shell.outer_size()) {
@@ -1326,8 +1512,11 @@ impl Windows {
                         standard: Some(standard),
                     },
                 )?;
-                if self.last_detail != state.detail
-                    || (self.layout_dirty && (!standard || !self.main_user_sized))
+                if (self.last_detail != state.detail
+                    || (self.layout_dirty && (!standard || !self.main_user_sized)))
+                    && !(self.preview_freeze
+                        && !standard
+                        && self.main_page == DashboardPage::Settings)
                 {
                     let preferred_width = if standard { 620.0 } else { 480.0 };
                     if self.last_detail != state.detail {

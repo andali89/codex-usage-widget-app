@@ -1,0 +1,105 @@
+{
+  "original": {
+    "light": {},
+    "dark": {}
+  },
+  "ocean": {
+    "light": {
+      "background": "#E8F4FF",
+      "contentSurface": "#F8FAFC",
+      "fiveHour": "#005FCC",
+      "weekly": "#0F766E",
+      "track": "#DBEAFE"
+    },
+    "dark": {
+      "background": "#071C2D",
+      "contentSurface": "#10213A",
+      "fiveHour": "#60A5FA",
+      "weekly": "#22D3EE",
+      "track": "#253B57"
+    }
+  },
+  "forest": {
+    "light": {
+      "background": "#EAF4EC",
+      "contentSurface": "#F8FAFC",
+      "fiveHour": "#047857",
+      "weekly": "#005FCC",
+      "track": "#DDE9E3",
+      "text": "#132C21",
+      "secondaryText": "#405548"
+    },
+    "dark": {
+      "background": "#0C201B",
+      "contentSurface": "#112A23",
+      "fiveHour": "#34D399",
+      "weekly": "#60A5FA",
+      "track": "#223B32",
+      "text": "#EFFAF4",
+      "secondaryText": "#B9CFC3",
+      "border": "#91AB9D"
+    }
+  },
+  "plum": {
+    "light": {
+      "background": "#F2EDFA",
+      "fiveHour": "#6D28D9",
+      "weekly": "#9D174D",
+      "track": "#E9E0EE",
+      "text": "#2B173A",
+      "secondaryText": "#5B465B",
+      "border": "#796782"
+    },
+    "dark": {
+      "background": "#1B142A",
+      "contentSurface": "#251D35",
+      "fiveHour": "#A78BFA",
+      "weekly": "#F472B6",
+      "track": "#3B2C4C",
+      "text": "#F8F1FC",
+      "secondaryText": "#D1BFD9",
+      "border": "#AE99BB"
+    }
+  },
+  "slate": {
+    "light": {
+      "background": "#EEF1F5",
+      "contentSurface": "#F8FAFC",
+      "fiveHour": "#334155",
+      "weekly": "#6D28D9",
+      "track": "#E2E5E9",
+      "text": "#0F172A"
+    },
+    "dark": {
+      "background": "#151B24",
+      "contentSurface": "#1C2633",
+      "fiveHour": "#CBD5E1",
+      "weekly": "#60A5FA",
+      "track": "#334155",
+      "text": "#F1F5F9",
+      "secondaryText": "#CBD5E1"
+    }
+  },
+  "amber": {
+    "light": {
+      "background": "#FFF1DF",
+      "contentSurface": "#FFFBF5",
+      "fiveHour": "#92400E",
+      "weekly": "#005FCC",
+      "track": "#F0E4CE",
+      "text": "#342312",
+      "secondaryText": "#66513D",
+      "border": "#8A725B"
+    },
+    "dark": {
+      "background": "#241A0D",
+      "contentSurface": "#2B2116",
+      "fiveHour": "#FBBF24",
+      "weekly": "#60A5FA",
+      "track": "#443526",
+      "text": "#FFF5E6",
+      "secondaryText": "#DCC8AB",
+      "border": "#BFA580"
+    }
+  }
+}

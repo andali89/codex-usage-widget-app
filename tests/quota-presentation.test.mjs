@@ -4,7 +4,7 @@ import { createServer } from "vite";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-let server, QuotaCard, ResetCreditsCard, UsagePage, CompactQuotaReadings, PeriodSettings, StorageSettings;
+let server, QuotaCard, ResetCreditsCard, UsagePage, CompactQuotaReadings, PeriodSettings, StorageSettings, WidgetAppearanceSettings;
 before(async () => {
   server = await createServer({server:{middlewareMode:true,hmr:false},appType:"custom"});
   QuotaCard = (await server.ssrLoadModule("/src/QuotaCard.tsx")).default;
@@ -13,10 +13,30 @@ before(async () => {
   CompactQuotaReadings = (await server.ssrLoadModule("/src/CompactQuotaReadings.tsx")).default;
   PeriodSettings = (await server.ssrLoadModule("/src/PeriodSettings.tsx")).default;
   StorageSettings = (await server.ssrLoadModule("/src/StorageSettings.tsx")).default;
+  WidgetAppearanceSettings = (await server.ssrLoadModule("/src/WidgetAppearanceSettings.tsx")).default;
 });
 after(async () => { await server?.close(); });
 const quota = {label:"5-hour",durationMinutes:300,remainingPercent:68,usedPercent:32,resetsAtMs:3600000,lastKnown:false};
 const card = props => renderToStaticMarkup(createElement(QuotaCard,{quota,stale:false,now:0,...props}));
+
+test("appearance controls show only active-theme custom quotas and no embedded previews",async()=>{
+  const {defaultWidgetAppearance,resolveWidgetAppearance}=await import("../src/widgetAppearance.ts");
+  const appearance=defaultWidgetAppearance();appearance.backgroundTransparencyPercent=80;
+  const draft={mode:"system-tray",widgetAppearance:appearance,windows:{snapGapLogicalPx:8,resetCountdowns:{},visiblePeriods:{},quotaLabelStyle:"words",lockPosition:false}};
+  const state={settings:draft,appearance:{resolvedTheme:"light",highContrast:false,transparencyAllowed:false,widget:resolveWidgetAppearance(appearance,"light",false,false),placementConstraints:{}},usage:{windows:[{...quota,label:"PRIVATE_REAL_VALUE"}],freshness:"stale"},presentation:{previewSource:"shell"},trayAvailable:true};
+  const before=structuredClone(state);
+  const html=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{throw new Error("Rendering must not save");}}));
+  assert.match(html,/Background transparency/);assert.match(html,/Editing Light colors for Original/);assert.match(html,/Use custom quota colors/);
+  assert.doesNotMatch(html,/Requested style|Effective style|PRIVATE_REAL_VALUE|radiogroup|Load preset colors|type="color"/);
+  draft.widgetAppearance.quotaCustomizations={original:{light:{enabled:true},dark:{enabled:false}}};
+  const enabled=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{}}));
+  assert.match(enabled,/Load preset colors/);assert.match(enabled,/5-hour quota/);assert.match(enabled,/Weekly quota/);assert.equal((enabled.match(/role="radiogroup"/g)??[]).length,2);
+  state.appearance.resolvedTheme="dark";
+  const dark=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{}}));
+  assert.match(dark,/Editing Dark colors/);assert.doesNotMatch(dark,/Load preset colors|radiogroup/);
+  assert.deepEqual(before.usage,state.usage);
+
+});
 
 test("HUD and Edge hide the whole unselected period including an enabled countdown", () => {
   const windows=[{...quota,key:"five",durationMinutes:300},{...quota,key:"week",label:"Weekly",durationMinutes:10080,remainingPercent:42,resetsAtMs:86400000}];
