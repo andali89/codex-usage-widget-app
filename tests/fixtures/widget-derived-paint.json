@@ -8,10 +8,6 @@
     "quotaText": {
       "fiveHour": "#005FCC",
       "weekly": "#6D28D9"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -27,10 +23,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9E810D",
-      "weekly": "#D66313"
     }
   },
   {
@@ -42,10 +34,6 @@
     "quotaText": {
       "fiveHour": "#60A5FA",
       "weekly": "#A78BFA"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -61,10 +49,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -76,10 +60,6 @@
     "quotaText": {
       "fiveHour": "#376D9C",
       "weekly": "#A63E19"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -95,10 +75,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9B7E0D",
-      "weekly": "#D16112"
     }
   },
   {
@@ -110,10 +86,6 @@
     "quotaText": {
       "fiveHour": "#70B8F5",
       "weekly": "#FFB05C"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -129,10 +101,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -144,10 +112,6 @@
     "quotaText": {
       "fiveHour": "#006BC0",
       "weekly": "#6D28D9"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -163,10 +127,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9E810D",
-      "weekly": "#D66313"
     }
   },
   {
@@ -178,10 +138,6 @@
     "quotaText": {
       "fiveHour": "#57D7FF",
       "weekly": "#C18BFF"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -197,10 +153,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -212,10 +164,6 @@
     "quotaText": {
       "fiveHour": "#237332",
       "weekly": "#8F6100"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -231,10 +179,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9E810D",
-      "weekly": "#D46213"
     }
   },
   {
@@ -246,10 +190,6 @@
     "quotaText": {
       "fiveHour": "#A0E183",
       "weekly": "#F1D35C"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -265,10 +205,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -280,10 +216,6 @@
     "quotaText": {
       "fiveHour": "#A51F45",
       "weekly": "#752BC5"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -299,10 +231,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#997C0D",
-      "weekly": "#CF5F12"
     }
   },
   {
@@ -314,10 +242,6 @@
     "quotaText": {
       "fiveHour": "#FF8FAB",
       "weekly": "#CFACFF"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -333,10 +257,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -348,10 +268,6 @@
     "quotaText": {
       "fiveHour": "#B04400",
       "weekly": "#007680"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -367,10 +283,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#997C0D",
-      "weekly": "#CF5F12"
     }
   },
   {
@@ -382,10 +294,6 @@
     "quotaText": {
       "fiveHour": "#FFB459",
       "weekly": "#63E2E2"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -401,10 +309,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -416,10 +320,6 @@
     "quotaText": {
       "fiveHour": "#064DC5",
       "weekly": "#6423D5"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -435,10 +335,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9B7E0D",
-      "weekly": "#D16112"
     }
   },
   {
@@ -450,10 +346,6 @@
     "quotaText": {
       "fiveHour": "#70B8FF",
       "weekly": "#CB9BFF"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -469,10 +361,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -484,10 +372,6 @@
     "quotaText": {
       "fiveHour": "#AC4C00",
       "weekly": "#B11B55"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -503,10 +387,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9B7E0D",
-      "weekly": "#CF5F12"
     }
   },
   {
@@ -518,10 +398,6 @@
     "quotaText": {
       "fiveHour": "#FFBA66",
       "weekly": "#FF88B5"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -537,10 +413,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -552,10 +424,6 @@
     "quotaText": {
       "fiveHour": "#00766D",
       "weekly": "#00728E"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -571,10 +439,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9E810D",
-      "weekly": "#D46213"
     }
   },
   {
@@ -586,10 +450,6 @@
     "quotaText": {
       "fiveHour": "#78F2CC",
       "weekly": "#55E5FA"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -605,10 +465,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -620,10 +476,6 @@
     "quotaText": {
       "fiveHour": "#7134B5",
       "weekly": "#A2259D"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -639,10 +491,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9B7E0D",
-      "weekly": "#D16112"
     }
   },
   {
@@ -654,10 +502,6 @@
     "quotaText": {
       "fiveHour": "#CFACFF",
       "weekly": "#F98EEB"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -673,10 +517,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -688,10 +528,6 @@
     "quotaText": {
       "fiveHour": "#34516D",
       "weekly": "#195CC4"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -707,10 +543,6 @@
     "quotaText": {
       "fiveHour": "#826A0B",
       "weekly": "#AE510F"
-    },
-    "quotaBoundary": {
-      "fiveHour": "#9B7E0D",
-      "weekly": "#D16112"
     }
   },
   {
@@ -722,10 +554,6 @@
     "quotaText": {
       "fiveHour": "#A0DBFF",
       "weekly": "#80BBFF"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   },
   {
@@ -741,10 +569,6 @@
     "quotaText": {
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
-    },
-    "quotaBoundary": {
-      "fiveHour": null,
-      "weekly": null
     }
   }
 ]

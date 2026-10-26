@@ -71,7 +71,6 @@ export function applyAppearance(state: AppState) {
   root.style.setProperty("--quota-weekly", state.appearance.highContrast ? "LinkText" : state.appearance.widget.palette.weekly);
   for(const [role,token] of [["fiveHour","five-hour"],["weekly","weekly"]] as const) {
     root.style.setProperty(`--quota-${token}-text`,state.appearance.highContrast?"LinkText":state.appearance.widget.quotaText[role]);
-    root.style.setProperty(`--quota-${token}-boundary`,state.appearance.highContrast?"transparent":state.appearance.widget.quotaBoundary[role]??"transparent");
   }
   root.dataset.highContrast = String(state.appearance.highContrast);
   root.dataset.reducedMotion = String(state.appearance.reducedMotion);

@@ -61,7 +61,6 @@ for(const id of presetIds)for(const theme of ["light","dark"])test(id+" "+theme+
     for(const color of choices) {const customized={...settings,quotaCustomizations:{[id]:{[theme]:{enabled:true,[role]:color}}}};assert.deepEqual(appearanceIssues(customized),[]);
       const effective=resolveWidgetAppearance(customized,theme);
       for(const background of [effective.palette.contentSurface,...(theme==="dark"?["#081426","#10213A","#193452","#10233E"]:["#F3F6FB","#FFFFFF","#E8EFF8","#F6FAFF"])]) assert.ok(contrast(effective.quotaText[role],background)>=4.5);
-      for(const background of [effective.palette.track,effective.palette.contentSurface]) assert.ok(contrast(effective.quotaBoundary[role]??color,background)>=3);
     }
   }
 });
@@ -97,13 +96,11 @@ for(const f of paintFixtures) test(`derived paint contract: ${f.id} ${f.theme} $
   const value={...defaultWidgetAppearance(),presetId:f.id,quotaCustomizations:f.colors?{[f.id]:{[f.theme]:{enabled:true,...f.colors}}}:{}};
   const effective=resolveWidgetAppearance(value,f.theme);
   assert.equal(effective.frameBorder,f.frameBorder);assert.equal(effective.divider,f.divider);
-  assert.deepEqual(effective.quotaText,f.quotaText);assert.deepEqual(effective.quotaBoundary,f.quotaBoundary);
+  assert.deepEqual(effective.quotaText,f.quotaText);
   const surfaces=[effective.palette.contentSurface,...(f.theme==="dark"?["#081426","#10213A","#193452","#10233E"]:["#F3F6FB","#FFFFFF","#E8EFF8","#F6FAFF"])];
   for(const role of ["fiveHour","weekly"]) {
     if(f.colors)assert.equal(effective.palette[role],f.colors[role]);
     for(const bg of surfaces)assert.ok(contrast(effective.quotaText[role],bg)>=4.5);
-    const boundary=effective.quotaBoundary[role]??effective.palette[role];
-    for(const bg of [...surfaces,effective.palette.track])assert.ok(contrast(boundary,bg)>=3);
   }
   if(f.id==="original"&&f.theme==="dark")assert.equal(effective.frameBorder,"#334B6B");
 });

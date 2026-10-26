@@ -123,7 +123,7 @@ The 80% upper limit retains some visible surface and avoids a completely invisib
 
 The user-selected policy is uniform surface transparency: flatten opaque background shapes into one SVG paint layer and apply the selected alpha once. Text, icons and quota graphics are outside that layer. No opaque content backing is added, so arbitrary desktop content affects perceived contrast. At 0%, the existing opaque rendering is retained.
 
-For quota colors, keep exact selected indicator fills and derive a related percentage-text shade meeting 4.5:1 on known opaque widget/dashboard surfaces. When needed, use a thin related boundary meeting 3:1 around filled graphics. Legacy structural palettes retain their stricter validation. Windows accessibility/native-availability overrides below still take precedence.
+For quota colors, keep exact selected indicator fills and derive a related percentage-text shade meeting 4.5:1 on known opaque widget/dashboard surfaces. Draw rings, bars and reset segments without added color-contrast outlines, including bright yellow/orange fills. Legacy structural palettes retain their stricter validation. Windows accessibility/native-availability overrides below still take precedence.
 
 Appearance precedence is:
 

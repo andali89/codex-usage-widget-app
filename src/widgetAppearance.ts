@@ -28,7 +28,7 @@ export function groupAppearanceIssues(issues:AppearanceIssue[]):AppearanceIssueG
 }
 export const summarizeAppearanceIssues=(issues:AppearanceIssue[])=>groupAppearanceIssues(issues).map(group=>`${group.label}: ${group.message}`).join(" ");
 
-export interface EffectiveWidgetAppearance { originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; quotaBoundary:Record<"fiveHour"|"weekly",string|null>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
+export interface EffectiveWidgetAppearance { originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
 export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
 export const themePalette = (theme:PaletteTheme):Palette => ({...defaults[theme]});
 export const validHex = (value:string) => /^#[0-9a-f]{6}$/i.test(value);
@@ -58,13 +58,11 @@ export function quotaPaint(palette:Palette,theme:PaletteTheme) {
     for(let step=0;step<=100;step++) {const shade=mixColor(color,target,step/100);if(backgrounds.every(bg=>contrast(shade,bg)+1e-8>=minimum))return shade;}
     return target;
   };
-  const text={} as Record<"fiveHour"|"weekly",string>,boundary={} as Record<"fiveHour"|"weekly",string|null>;
+  const text={} as Record<"fiveHour"|"weekly",string>;
   for(const role of ["fiveHour","weekly"] as const) {
     text[role]=readable(palette[role],surfaces,4.5);
-    const backgrounds=[palette.track,themePalette(theme).track,...surfaces];
-    boundary[role]=backgrounds.every(bg=>contrast(palette[role],bg)+1e-8>=3)?null:readable(palette[role],backgrounds,3);
   }
-  return {text,boundary};
+  return {text};
 }
 function legacyIssues(settings:WidgetAppearanceSettings):AppearanceIssue[] {
   const issues:AppearanceIssue[]=[];
@@ -121,7 +119,7 @@ export function resolveWidgetAppearance(settings:WidgetAppearanceSettings, theme
   const frameBase=originalStructure?divider:palette.border;
   const frameBorder=theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
   const quota=quotaPaint(palette,theme);
-  return {frameBorder,quotaText:quota.text,quotaBoundary:quota.boundary,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
+  return {frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
 }
 export function widgetStyle(effective:EffectiveWidgetAppearance, _shell=true):CSSProperties {
   const p=effective.palette;
@@ -135,7 +133,6 @@ export function widgetStyle(effective:EffectiveWidgetAppearance, _shell=true):CS
     "--widget-reading-paint":effective.originalStructure?(dark?"#10213A":"#FFFFFF"):p.contentSurface,
     "--quota-five-hour":p.fiveHour,"--quota-weekly":p.weekly,
     "--quota-five-hour-text":effective.quotaText.fiveHour,"--quota-weekly-text":effective.quotaText.weekly,
-    "--quota-five-hour-boundary":effective.quotaBoundary.fiveHour??"transparent","--quota-weekly-boundary":effective.quotaBoundary.weekly??"transparent",
   } as CSSProperties;
 }
 export const quotaColorName=(color:string)=>[...swatches.light,...swatches.dark].find(([,hex])=>hex===color)?.[0]??"Theme color";

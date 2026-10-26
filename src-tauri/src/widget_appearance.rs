@@ -227,7 +227,7 @@ mod tests {
             assert!(appearance.issues().is_empty());
             let resolved =
                 serde_json::to_value(appearance.resolve(dark, false, true, true)).unwrap();
-            for key in ["frameBorder", "divider", "quotaText", "quotaBoundary"] {
+            for key in ["frameBorder", "divider", "quotaText"] {
                 assert_eq!(resolved[key], f[key], "{f} {key}");
             }
         }
@@ -264,7 +264,6 @@ pub struct EffectiveAppearance {
     pub divider: String,
     pub frame_border: String,
     pub quota_text: Palette,
-    pub quota_boundary: BTreeMap<String, Option<String>>,
     pub background_alpha: f64,
     pub backing_alpha: f64,
     pub reason: Option<&'static str>,
@@ -322,7 +321,7 @@ fn mix_color(a: &str, b: &str, amount: f64) -> String {
     });
     format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
 }
-fn quota_paint(palette: &Palette, dark: bool) -> (Palette, BTreeMap<String, Option<String>>) {
+fn quota_paint(palette: &Palette, dark: bool) -> Palette {
     let mut surfaces = vec![palette["contentSurface"].as_str()];
     surfaces.extend(if dark {
         ["#081426", "#10213A", "#193452", "#10233E"]
@@ -341,25 +340,10 @@ fn quota_paint(palette: &Palette, dark: bool) -> (Palette, BTreeMap<String, Opti
             .unwrap_or(target.into())
     };
     let mut text = Palette::new();
-    let mut boundary = BTreeMap::new();
-    let base = defaults(dark);
-    let mut backgrounds = surfaces.clone();
-    backgrounds.extend([palette["track"].as_str(), base["track"].as_str()]);
     for role in ["fiveHour", "weekly"] {
         text.insert(role.into(), readable(&palette[role], &surfaces, 4.5));
-        boundary.insert(
-            role.into(),
-            if backgrounds
-                .iter()
-                .all(|bg| contrast(&palette[role], bg) + 1e-8 >= 3.0)
-            {
-                None
-            } else {
-                Some(readable(&palette[role], &backgrounds, 3.0))
-            },
-        );
     }
-    (text, boundary)
+    text
 }
 /// All RGB backgrounds produce a continuous luminance interval. A foreground
 /// inside that interval has a worst-case ratio of 1, even if endpoints pass.
@@ -618,11 +602,10 @@ impl WidgetAppearance {
             } else {
                 mix_color(frame_base, &palette["background"], 0.35)
             };
-        let (quota_text, quota_boundary) = quota_paint(&palette, dark);
+        let quota_text = quota_paint(&palette, dark);
         EffectiveAppearance {
             frame_border,
             quota_text,
-            quota_boundary,
             original_structure: self.preset_id == Some(PresetId::Original)
                 || (self.preset_id.is_none()
                     && matches!(self.color_mode, ColorMode::ThemeDefaults)),

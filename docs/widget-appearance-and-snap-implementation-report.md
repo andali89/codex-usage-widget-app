@@ -1,5 +1,17 @@
 # Widget appearance and snapping — implementation evidence
 
+## Quota outline removal — 26 October 2026
+
+Removed the extra contrast stroke beneath rings and the inset outlines on progress bars, HUD bars and reset segments. All selected colors now use the same indicator treatment. Percentage text retains its readable related shade; stale/unavailable/focus markings, tracks, dimensions, frames, transparency and saved choices remain unchanged.
+
+Removed unused derived `quotaBoundary` snapshot fields and CSS variables from Rust/TypeScript, and updated the existing fixtures. Settings remain schema 9; no migration is required. The earlier outline behavior and extensive validation below describe the preceding artifact.
+
+Validation was deliberately limited at the user's request: `npm.cmd run build`, `npm.cmd run rust:check`, and the embedded Cargo release build all passed. One focused SSR check confirmed yellow/orange 5H/weekly rings in Light/Dark render only the normal track and value strokes, preserve selected fills, and contain no contrast-outline styling. Full frontend/Rust suites, broad native checks, and desktop visual review were not run.
+
+Rebuilt `src-tauri/target/release/codex-usage-widget.exe`: version **0.1.2**, **13,617,152 bytes**, SHA-256 `BE31B43C435AEDCE78E445C9E53DCF79FC09DDBA07D6AED7F2D3CAC0D79B8F08`.
+
+---
+
 ## Content fitting and uniform surface transparency — 26 October 2026 follow-up
 
 This section supersedes the initial 26 October sizing/backing policy below. Application version remains **0.1.2**; settings schema advances to **9**. No dependencies, permissions, Codex reads, scheduling, or reminder policies change.
