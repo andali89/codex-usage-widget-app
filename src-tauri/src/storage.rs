@@ -84,7 +84,7 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
         .get("schemaVersion")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    if version > 8 {
+    if version > 9 {
         return Err("storage-future-version");
     }
     if version < 6 {
@@ -177,6 +177,12 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
                 }
             }
         }
+    }
+    if version < 9 {
+        value
+            .as_object_mut()
+            .ok_or("storage-corrupt")?
+            .insert("schemaVersion".into(), 9.into());
     }
     let settings: Settings = serde_json::from_value(value).map_err(|_| "storage-corrupt")?;
     settings.validate()?;
@@ -393,6 +399,23 @@ mod tests {
     use super::*;
     use crate::model::ThemePreference;
     #[test]
+    fn schema_eight_migration_changes_only_version_and_keeps_saved_maps() {
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value["schemaVersion"] = 8.into();
+        value["revision"] = 37.into();
+        value["widgetAppearance"]["backgroundTransparencyPercent"] = 50.into();
+        value["widgetAppearance"]["quotaCustomizations"] = serde_json::json!({"original":{"light":{"enabled":true,"fiveHour":"#047857"},"dark":{"enabled":false,"weekly":"#34D399"}}});
+        let bytes = serde_json::to_vec(&Envelope {
+            format: 1,
+            checksum: format!("{:x}", Sha256::digest(serde_json::to_vec(&value).unwrap())),
+            settings: value.clone(),
+        })
+        .unwrap();
+        let loaded = decode(&bytes).unwrap();
+        value["schemaVersion"] = 9.into();
+        assert_eq!(serde_json::to_value(loaded.settings).unwrap(), value);
+    }
+    #[test]
     fn schema_seven_remaps_themes_and_retains_inactive_quota_choices() {
         for (old, new) in [
             ("original", "original"),
@@ -421,7 +444,7 @@ mod tests {
             })
             .unwrap();
             let loaded = decode(&bytes).unwrap();
-            assert_eq!(loaded.settings.schema_version, 8);
+            assert_eq!(loaded.settings.schema_version, 9);
             assert_eq!(loaded.settings.revision, 42);
             assert_eq!(loaded.settings.theme_preference, ThemePreference::Dark);
             assert_eq!(loaded.settings.windows.snap_gap_logical_px, 24);
@@ -513,7 +536,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 8);
+        assert_eq!(migrated.settings.schema_version, 9);
         assert_eq!(migrated.settings.revision, 42);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert_eq!(
@@ -562,7 +585,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 8);
+        assert_eq!(migrated.settings.schema_version, 9);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(migrated.settings.proxy_url.is_none());
         assert_eq!(
@@ -640,7 +663,7 @@ mod tests {
         for (version, theme, expected) in [
             (0, "dark", Some(ThemePreference::Dark)),
             (0, "unknown", Some(ThemePreference::System)),
-            (9, "light", None),
+            (10, "light", None),
         ] {
             let settings = serde_json::json!({"schemaVersion":version,"themePreference":theme});
             let body = serde_json::to_vec(&settings).unwrap();
@@ -671,7 +694,7 @@ mod tests {
             serde_json::json!({"schemaVersion":3,"themePreference":"dark"}),
         ))
         .unwrap();
-        assert_eq!(migrated.settings.schema_version, 8);
+        assert_eq!(migrated.settings.schema_version, 9);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(!migrated.settings.autostart.requested);
         assert!(!migrated.settings.autostart.pending);

@@ -40,7 +40,7 @@ GitHub's **Source code** ZIP/TAR archives are for building the project, not runn
 - View remaining quota, expected resets, data freshness, and reset-credit information when provided by Codex.
 - Choose 5-hour, weekly, or both periods independently for Edge and HUD, with optional countdowns and word or badge labels.
 - Select Light, Dark, or Follow Windows appearance; configure position lock, always on top, and launch at sign-in.
-- Choose Original or ten showcase-inspired paired Light/Dark themes, optionally customize quota colors from 16 named swatches plus the selected theme’s colors, and set one snap gap for Floating, Edge, and HUD (0–48 logical px; default 8). Appearance and gap edits temporarily update the active widget; Save keeps them and Cancel restores saved settings. Background transparency (0–80%) is enabled for supported desktop shells, with readable foreground backing and opaque Windows accessibility fallbacks. Desktop pixel blending remains manually unverified in the current capture environment. See the [appearance and snapping report](docs/widget-appearance-and-snap-implementation-report.md).
+- Choose Original or ten showcase-inspired paired Light/Dark themes, optionally customize quota colors from 24 or more named swatches plus the selected theme’s colors, and set one snap gap for Floating, Edge, and HUD (0–48 logical px; default 8). Appearance and gap edits temporarily update the active widget; Save keeps them and Cancel restores saved settings. Background transparency (0–80%) is enabled for supported desktop shells, with uniform outer/inner surface alpha, opaque text and indicators, and opaque Windows accessibility fallbacks. Release pixel checks verify outer and inner quota/credit blending over controlled black/white backdrops. See the [appearance and snapping report](docs/widget-appearance-and-snap-implementation-report.md).
 - Configure an HTTP/HTTPS proxy without credentials for the widget's Codex process and choose EXE-adjacent, AppData, or custom configuration storage.
 
 ## Using the widget
@@ -49,6 +49,7 @@ GitHub's **Source code** ZIP/TAR archives are for building the project, not runn
 - **Single-click** a widget or tray icon for Overview; **double-click** opens the standard dashboard window.
 - **Right-click** for the shared menu, including Settings, Hide/show, Reset position, and Quit.
 - **Drag** Floating or HUD to move them. Drag Edge and release to dock it. Enable Lock position to prevent movement.
+- Overview fits its content up to 85% of the monitor work-area height. Settings keeps those dimensions and scrolls. Manually resizing the standard dashboard preserves its session size; the single-click popup remains independent.
 - Closing the dashboard keeps monitoring active. Floating's × switches to System Tray mode; **Quit** exits the application.
 
 Missing or stale data is labeled explicitly. A countdown reaching zero does not confirm quota recovery; fresh usage data is required.

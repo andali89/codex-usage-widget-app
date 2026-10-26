@@ -12,8 +12,21 @@ use crate::{
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
+static PAINT_POINT: std::sync::Mutex<Option<[f64; 2]>> = std::sync::Mutex::new(None);
 static FRONTEND_ASSERT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 pub fn record_frontend_assertion(message: &str) {
+    if let Some(point) = message
+        .strip_prefix("paint-point:")
+        .and_then(|s| serde_json::from_str::<[f64; 2]>(s).ok())
+        .filter(|p| {
+            p.iter()
+                .all(|v| v.is_finite() && (0.0..=10000.0).contains(v))
+        })
+    {
+        if let Ok(mut target) = PAINT_POINT.lock() {
+            *target = Some(point);
+        }
+    }
     if message == "assert-native:pass" {
         FRONTEND_ASSERT.store(1, std::sync::atomic::Ordering::SeqCst);
     } else if message == "assert-native:fail" {
@@ -225,6 +238,18 @@ pub fn start(app: AppHandle, service: Service) {
             appearance_check(&app, &service).await
         } else if topmost_requested() {
             reveal_check(&app, &service).await
+        } else if sizing_requested()
+            && std::env::args().any(|arg| arg == "--probe-native-activation")
+        {
+            service.dispatch(Action::Window(Input::Close));
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            async {
+                dashboard_navigation_check(&app, &service).await?;
+                settings_preview_check(&app, &service).await?;
+                floating_close_to_tray(&app, &service).await?;
+                activation_fallback(&app, &service).await
+            }
+            .await
         } else if sizing_requested() {
             compact_sizing(&app, &service).await
         } else {
@@ -602,7 +627,7 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                 "transparent-shell-retains-rounded-region",
             )?;
         }
-        for percent in [0, 20, 80] {
+        for percent in [0, 20, 50, 80] {
             let mut settings = service.snapshot().await?.settings;
             settings.widget_appearance.background_transparency_percent = percent;
             save_settings(service, settings).await?;
@@ -619,7 +644,7 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                 "native-composition-and-windows-transparency-available",
             )?;
             let alpha = snapshot.appearance.widget.background_alpha;
-            let expression=format!("(()=>{{const s=document.querySelector('.shell');return s&&getComputedStyle(s).opacity==='1'&&Math.abs(parseFloat(s.style.getPropertyValue('--widget-base-paint').split(',').pop())-{alpha})<.001;}})()");
+            let expression=format!("(()=>{{const s=document.querySelector('.shell');if(!s||getComputedStyle(s).opacity!=='1')return false;const svg=s.querySelector('.surface-background'),g=svg?.querySelector('g');if({alpha}===1)return !g;if(!svg)return false;const b=s.getBoundingClientRect(),v=svg.getBoundingClientRect(),c=getComputedStyle(s);if(Math.abs(v.left-b.left-parseFloat(c.borderLeftWidth))>.1||Math.abs(v.top-b.top-parseFloat(c.borderTopWidth))>.1)return false;return g&&Math.abs(Number(g.getAttribute('opacity'))-{alpha})<.001&&s.hasAttribute('data-surface-paint')&&[...s.querySelectorAll('.quota-card,.widget-credits,.period-badge,.edge-values,.hud-values')].every(e=>e.hasAttribute('data-surface-paint')&&getComputedStyle(e).backgroundColor==='rgba(0, 0, 0, 0)')&&[...s.querySelectorAll('.quota-reading strong,.ring-reading strong,.hud-quota>strong,.ring-value,.progress>span,.hud-track>i,.reset-segments i')].every(e=>getComputedStyle(e).opacity==='1'&&!e.hasAttribute('data-surface-paint'));}})()");
             frontend_assert(
                 app,
                 "shell",
@@ -628,13 +653,13 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
             )
             .await?;
             if mode == DisplayMode::Floating && percent > 0 {
-                frontend_assert(app,"shell","(()=>{const s=document.querySelector('.shell'),c=s?.querySelector('.widget-credits'),probe=document.createElement('span');if(!s||!c)return false;probe.style.backgroundColor=s.style.getPropertyValue('--widget-wash-paint');return getComputedStyle(c).backgroundColor===probe.style.backgroundColor;})()","translucent-original-credits-retain-wash-color").await?;
+                frontend_assert(app,"shell","(()=>{const s=document.querySelector('.shell'),r=s?.querySelector('[data-paint-source=widget-credits]');if(!s||!r)return false;const probe=document.createElement('span');probe.style.backgroundColor=s.style.getPropertyValue('--widget-wash-paint');return r.getAttribute('fill')===probe.style.backgroundColor;})()","translucent-original-credits-retain-wash-color").await?;
             }
             if !composition_probe_requested() {
                 continue;
             }
-            let black = composition_probe(app, &shell, false).await?;
-            let white = composition_probe(app, &shell, true).await?;
+            let black = composition_probe(app, &shell, false, None).await?;
+            let white = composition_probe(app, &shell, true, None).await?;
             if percent == 0 {
                 let background = &snapshot.appearance.widget.palette["background"];
                 require(
@@ -660,6 +685,34 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                 }),
                 "background-only-native-composition",
             )?;
+            if mode == DisplayMode::Floating {
+                for selector in [".quota-card", ".widget-credits"] {
+                    *PAINT_POINT.lock().map_err(|_| "paint-point-lock")? = None;
+                    let expression=format!("(()=>{{const e=document.querySelector('.shell {selector}');if(!e)return false;const r=e.getBoundingClientRect();window.__TAURI_INTERNALS__.invoke('surface_action',{{request:{{type:'inspect-frontend',message:'paint-point:'+JSON.stringify([r.left+4,r.top+r.height/2])}}}});return true;}})()");
+                    frontend_assert(app, "shell", &expression, "inner-surface-paint-point").await?;
+                    let mut sample = None;
+                    for _ in 0..50 {
+                        sample = *PAINT_POINT.lock().map_err(|_| "paint-point-lock")?;
+                        if sample.is_some() {
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                    let sample = sample.ok_or("paint-point-unavailable")?;
+                    let black = composition_probe(app, &shell, false, Some(sample)).await?;
+                    let white = composition_probe(app, &shell, true, Some(sample)).await?;
+                    let delta = (0..3)
+                        .map(|i| i16::from(white[i]) - i16::from(black[i]))
+                        .collect::<Vec<_>>();
+                    record(format!("native-check inner-composition surface={selector} requested={percent} delta={delta:?}"));
+                    require(
+                        (0..3).all(|i| {
+                            (f64::from(white[i]) - f64::from(black[i]) - expected).abs() <= 10.0
+                        }),
+                        "inner-surface-native-composition",
+                    )?;
+                }
+            }
         }
     }
     require(
@@ -726,12 +779,49 @@ async fn showcase_style_check(app: &AppHandle, service: &Service) -> Result<(), 
                     _ => (".hud-quota:not(.weekly)>strong", ".hud-quota.weekly>strong"),
                 };
                 let theme = if dark { "dark" } else { "light" };
-                let expression=format!("(()=>{{if(document.documentElement.dataset.theme!=='{theme}')return false;const s=document.querySelector('.shell'),p={palette},rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';if(!s)return false;const f=s.querySelector('{five}'),w=s.querySelector('{weekly}');return f&&w&&getComputedStyle(f).color===rgb(p.fiveHour)&&getComputedStyle(w).color===rgb(p.weekly)&&getComputedStyle(s).backgroundImage.includes(rgb(p.background));}})()");
+                let expression=format!("(()=>{{if(document.documentElement.dataset.theme!=='{theme}')return false;const s=document.querySelector('.shell'),p={palette},rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';if(!s)return false;const f=s.querySelector('{five}'),w=s.querySelector('{weekly}');return f&&w&&getComputedStyle(f).color===rgb(p.fiveHour)&&getComputedStyle(w).color===rgb(p.weekly)&&getComputedStyle(s).backgroundImage.includes(rgb(p.background))&&getComputedStyle(s).borderTopColor===rgb(s.style.getPropertyValue('--widget-frame'))&&[...s.querySelectorAll('.edge-value+.edge-value,.hud-quota+.hud-quota')].every(e=>{{const c=getComputedStyle(e);return (s.classList.contains('mode-screen-edge')?c.borderTopColor:c.borderLeftColor)===rgb(s.style.getPropertyValue('--widget-divider'));}});}})()");
                 frontend_assert(
                     app,
                     "shell",
                     &expression,
                     &format!("showcase-{id}-{theme}-{mode:?}"),
+                )
+                .await?;
+            }
+            for mode in [
+                DisplayMode::Floating,
+                DisplayMode::ScreenEdge,
+                DisplayMode::CompactHud,
+            ] {
+                let mut settings = service.snapshot().await?.settings;
+                settings.mode = mode;
+                let pair = settings
+                    .widget_appearance
+                    .quota_customizations
+                    .entry(preset)
+                    .or_default();
+                let c = if dark {
+                    &mut pair.dark
+                } else {
+                    &mut pair.light
+                };
+                c.enabled = true;
+                c.five_hour = Some("#FACC15".into());
+                c.weekly = Some("#F97316".into());
+                let expected = serde_json::to_string(
+                    &settings.widget_appearance.resolve(dark, false, true, true),
+                )
+                .unwrap();
+                save_settings(service, settings).await?;
+                let expression=format!("(()=>{{const s=document.querySelector('.shell'),p={expected},rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';if(!s)return false;for(const [period,role]of [['five-hour','fiveHour'],['weekly','weekly']]){{const reading=s.querySelector('.period-'+period+' .quota-reading strong')??s.querySelector(role==='weekly'?'.weekly .ring-reading strong,.hud-quota.weekly>strong':'.edge-value:not(.weekly) .ring-reading strong,.hud-quota:not(.weekly)>strong');const fill=s.querySelector('.period-'+period+' .progress>span')??s.querySelector(role==='weekly'?'.weekly .ring-value,.weekly .hud-track>i':'.edge-value:not(.weekly) .ring-value,.hud-quota:not(.weekly) .hud-track>i');if(!reading||!fill||getComputedStyle(reading).color!==rgb(p.quotaText[role])||(fill.classList.contains('ring-value')?getComputedStyle(fill).stroke:getComputedStyle(fill).backgroundColor)!==rgb(p.palette[role]))return false;}}return true;}})()");
+                frontend_assert(
+                    app,
+                    "shell",
+                    &expression,
+                    &format!(
+                        "bright-quota-{id}-{}-{mode:?}",
+                        if dark { "dark" } else { "light" }
+                    ),
                 )
                 .await?;
             }
@@ -786,11 +876,68 @@ async fn showcase_style_check(app: &AppHandle, service: &Service) -> Result<(), 
     Ok(())
 }
 
+async fn dashboard_content_fit(
+    app: &AppHandle,
+    main: &tauri::WebviewWindow,
+    cap: f64,
+    name: &str,
+) -> Result<(), String> {
+    let outer = main.outer_size().map_err(|_| "fit-outer")?;
+    let inner = main.inner_size().map_err(|_| "fit-inner")?;
+    let scale = main.scale_factor().map_err(|_| "fit-scale")?;
+    let limit = (cap - f64::from(outer.height.saturating_sub(inner.height))) / scale;
+    let expression=format!("(()=>{{const body=document.querySelector('.content-body'),viewport=document.querySelector('.content'),frame=document.querySelector('.app-frame');if(!body||!viewport||!frame)return false;const s=getComputedStyle(viewport),chrome=[...frame.children].filter(e=>e.matches('.app-header,.tabs,.app-footer')).reduce((v,e)=>v+e.getBoundingClientRect().height,0),natural=Math.ceil(body.getBoundingClientRect().height+parseFloat(s.paddingTop)+parseFloat(s.paddingBottom)+chrome);window.__styleFailure='fit actual='+innerHeight+' natural='+natural+' limit='+{limit};return Math.abs(innerHeight-Math.min(natural,{limit}))<=1;}})()");
+    frontend_assert(app, "main", &expression, name).await
+}
+
 async fn dashboard_navigation_check(app: &AppHandle, service: &Service) -> Result<(), String> {
     service.dispatch(Action::Window(Input::Close));
     service.dispatch(Action::Window(Input::InspectPopup));
     dashboard_settled(app, service).await?;
     let main = app.get_webview_window("main").ok_or("sizing-main")?;
+    let popup_size = main.outer_size().map_err(|_| "sizing-popup")?;
+    let monitor = main
+        .current_monitor()
+        .map_err(|_| "sizing-monitor")?
+        .ok_or("sizing-monitor")?;
+    let cap = (f64::from(monitor.work_area().size.height) * 0.85).floor();
+    require(
+        f64::from(popup_size.height) <= cap,
+        "popup-natural-height-capped",
+    )?;
+    for height in [300.0, 20000.0, 400.0] {
+        service.dispatch(Action::Window(Input::DashboardLayout {
+            generation: service.snapshot().await?.presentation.generation,
+            page: crate::model::DashboardPage::Overview,
+            width: 480.0,
+            height,
+            fit: true,
+        }));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let size = main.outer_size().map_err(|_| "sizing-content")?;
+        let natural = crate::native_windows::content_outer_size(
+            &main,
+            (480.0, height),
+            monitor.scale_factor(),
+        )?;
+        record(format!("native-check popup-height logical={height} scale={} inner={:?} outer={size:?} expected={} cap={cap}",monitor.scale_factor(),main.inner_size(),natural.1.min(cap)));
+        require(
+            (f64::from(size.height) - natural.1.min(cap)).abs() <= 1.0,
+            "popup-content-height-fits-up-to-cap",
+        )?;
+    }
+    // Restore React's real natural measurement before checking navigation.
+    main.eval(
+        "document.querySelector('nav[aria-label=Dashboard] button[aria-label=Settings]').click()",
+    )
+    .map_err(|_| "sizing-settings")?;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    main.eval(
+        "document.querySelector('nav[aria-label=Dashboard] button[aria-label=Overview]').click()",
+    )
+    .map_err(|_| "sizing-overview")?;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    dashboard_content_fit(app, &main, cap, "popup-natural-overview-content-fits").await?;
     let popup_size = main.outer_size().map_err(|_| "sizing-popup")?;
     for section in [
         "Display",
@@ -824,6 +971,36 @@ async fn dashboard_navigation_check(app: &AppHandle, service: &Service) -> Resul
         Request::Promote,
     )));
     dashboard_settled(app, service).await?;
+    let before_move = main.outer_position().map_err(|_| "sizing-move")?;
+    main.set_position(tauri::PhysicalPosition::new(
+        before_move.x + 10,
+        before_move.y + 10,
+    ))
+    .map_err(|_| "sizing-move")?;
+    service.dispatch(Action::Window(Input::Layout));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    for height in [300.0, 20000.0, 400.0] {
+        service.dispatch(Action::Window(Input::DashboardLayout {
+            generation: service.snapshot().await?.presentation.generation,
+            page: crate::model::DashboardPage::Overview,
+            width: 620.0,
+            height,
+            fit: true,
+        }));
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let natural = crate::native_windows::content_outer_size(
+            &main,
+            (620.0, height),
+            monitor.scale_factor(),
+        )?;
+        require(
+            (f64::from(main.outer_size().map_err(|_| "sizing-content")?.height)
+                - natural.1.min(cap))
+            .abs()
+                <= 1.0,
+            "standard-content-adapts-after-move-up-to-cap",
+        )?;
+    }
     main.set_size(tauri::LogicalSize::new(700.0, 520.0))
         .map_err(|_| "sizing-manual")?;
     service.dispatch(Action::Window(Input::MainUserSizing));
@@ -841,9 +1018,30 @@ async fn dashboard_navigation_check(app: &AppHandle, service: &Service) -> Resul
     service.dispatch(Action::Window(Input::Close));
     service.dispatch(Action::Window(Input::InspectPopup));
     dashboard_settled(app, service).await?;
+    record(format!(
+        "native-check popup-reopen expected={popup_size:?} actual={:?} client={:?}",
+        main.outer_size(),
+        main.inner_size()
+    ));
     require(
-        main.outer_size().map_err(|_| "sizing-reopen")? == popup_size,
-        "popup-reopen-keeps-independent-bounds",
+        main.outer_size().map_err(|_| "sizing-reopen")?.width == popup_size.width,
+        "popup-reopen-keeps-independent-width",
+    )?;
+    dashboard_content_fit(
+        app,
+        &main,
+        cap,
+        "popup-reopen-fits-own-content-independently-of-manual-standard-height",
+    )
+    .await?;
+    service.dispatch(Action::Window(Input::Request(
+        Surface::Main,
+        Request::Promote,
+    )));
+    dashboard_settled(app, service).await?;
+    require(
+        main.outer_size().map_err(|_| "sizing-reopen")? == window_size,
+        "manual-standard-height-survives-popup-and-reopen",
     )?;
     service.dispatch(Action::Window(Input::Close));
     Ok(())
@@ -877,7 +1075,7 @@ async fn original_style_check(app: &AppHandle, service: &Service) -> Result<(), 
             wait(app, service, "original-shell", |_| visible(app, "shell")).await?;
             let theme = if dark { "dark" } else { "light" };
             let expected = serde_json::to_string(&reference[theme]).unwrap();
-            let script=format!("(()=>{{const root=getComputedStyle(document.documentElement),s=document.querySelector('.shell');if(!s||s.classList.contains('widget-palette')||document.documentElement.dataset.theme!=='{theme}')return false;const ref={expected};const rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';const style=getComputedStyle(s);if(Math.abs(parseFloat(style.borderTopWidth)-Math.max(1,Math.floor(devicePixelRatio))/devicePixelRatio)>.02||style.borderTopColor!==rgb(ref['--divider'])){{window.__styleFailure='border='+style.borderTopWidth+' '+style.borderTopColor;return false;}}if(!Object.entries(ref).every(([k,v])=>{{let c=root.getPropertyValue(k).trim().toUpperCase();if(c.length===4)c='#'+[...c.slice(1)].map(x=>x+x).join('');return c===v;}}))return false;const start=s.classList.contains('mode-floating')?'--wash':'--raised';if(!style.backgroundImage.includes(rgb(ref[start]))||!style.backgroundImage.includes(rgb(ref['--shell'])))return false;for(const [q,token]of [['.widget-credits','--wash'],['.compact-card','--raised'],['.period-badge','--wash']]){{for(const el of s.querySelectorAll(q))if(getComputedStyle(el).backgroundColor!==rgb(ref[token]))return false;}}return true;}})()");
+            let script=format!("(()=>{{const root=getComputedStyle(document.documentElement),s=document.querySelector('.shell');if(!s||s.classList.contains('widget-palette')||document.documentElement.dataset.theme!=='{theme}')return false;const ref={expected};const rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';const style=getComputedStyle(s);if(Math.abs(parseFloat(style.borderTopWidth)-Math.max(1,Math.floor(devicePixelRatio))/devicePixelRatio)>.02||style.borderTopColor!==rgb(s.style.getPropertyValue('--widget-frame'))){{window.__styleFailure='border='+style.borderTopWidth+' '+style.borderTopColor;return false;}}if(!Object.entries(ref).every(([k,v])=>{{let c=root.getPropertyValue(k).trim().toUpperCase();if(c.length===4)c='#'+[...c.slice(1)].map(x=>x+x).join('');return c===v;}}))return false;const start=s.classList.contains('mode-floating')?'--wash':'--raised';if(!style.backgroundImage.includes(rgb(ref[start]))||!style.backgroundImage.includes(rgb(ref['--shell'])))return false;for(const [q,token]of [['.widget-credits','--wash'],['.compact-card','--raised'],['.period-badge','--wash']]){{for(const el of s.querySelectorAll(q))if(getComputedStyle(el).backgroundColor!==rgb(ref[token]))return false;}}return true;}})()");
             frontend_assert(
                 app,
                 "shell",
@@ -887,7 +1085,7 @@ async fn original_style_check(app: &AppHandle, service: &Service) -> Result<(), 
             .await?;
             if mode != DisplayMode::Floating {
                 open_hover(app, service, Surface::Shell).await?;
-                let expression=format!("(()=>{{const s=document.querySelector('.native-surface.preview');if(!s||s.classList.contains('widget-palette')||document.documentElement.dataset.theme!=='{theme}')return false;const c=getComputedStyle(s),ref={expected};const rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';return c.borderTopColor===rgb(ref['--divider'])&&c.backgroundImage.includes(rgb(ref['--wash']))&&c.backgroundImage.includes(rgb(ref['--shell']));}})()");
+                let expression=format!("(()=>{{const s=document.querySelector('.native-surface.preview');if(!s||s.classList.contains('widget-palette')||document.documentElement.dataset.theme!=='{theme}')return false;const c=getComputedStyle(s),ref={expected};const rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';return c.borderTopColor===rgb(s.style.getPropertyValue('--widget-frame'))&&c.backgroundImage.includes(rgb(ref['--wash']))&&c.backgroundImage.includes(rgb(ref['--shell']));}})()");
                 frontend_assert(
                     app,
                     "preview",
@@ -1019,6 +1217,24 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
         s.appearance.widget.palette["fiveHour"] == "#34D399"
     })
     .await?;
+    main.eval("document.querySelectorAll('.quota-swatches')[0].querySelector('[data-color=\"#FACC15\"]').click()").map_err(|_|"preview-warm-colors")?;
+    wait(app, service, "preview-yellow-color", |s| {
+        s.appearance.widget.palette["fiveHour"] == "#FACC15"
+    })
+    .await?;
+    main.eval("document.querySelectorAll('.quota-swatches')[1].querySelector('[data-color=\"#FB923C\"]').click()").map_err(|_|"preview-warm-colors")?;
+    wait(app, service, "preview-independent-warm-colors", |s| {
+        s.appearance.widget.palette["fiveHour"] == "#FACC15"
+            && s.appearance.widget.palette["weekly"] == "#FB923C"
+    })
+    .await?;
+    main.eval("document.querySelectorAll('.quota-swatches')[0].querySelector('[aria-checked=true]').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}))").map_err(|_|"preview-color-keyboard")?;
+    wait(app, service, "preview-keyboard-next-color", |s| {
+        s.appearance.widget.palette["fiveHour"] == "#FEF08A"
+            && s.appearance.widget.palette["weekly"] == "#FB923C"
+    })
+    .await?;
+    frontend_assert(app,"main","document.querySelectorAll('.quota-swatches')[0].querySelector('[aria-checked=true]')?.getAttribute('data-color')==='#FEF08A'&&document.querySelectorAll('.quota-swatches')[0].querySelector('[aria-checked=true]')?.tabIndex===0&&document.querySelectorAll('.quota-swatches button[aria-checked=true]').length===2","bright-colors-keyboard-tab-stop-and-independent-selection").await?;
     let position = main.outer_position().map_err(|_| "preview-position")?;
     main.eval("(()=>{const range=document.querySelector('.snap-gap input[type=range]');range.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerId:1}));const input=document.querySelector('#snap-gap');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'48');input.dispatchEvent(new Event('input',{bubbles:true}));})()").map_err(|_|"preview-gap")?;
     wait(app, service, "preview-gap-moves-widget", |s| {
@@ -1066,6 +1282,25 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
         s.appearance.widget.palette["background"] == "#F0F6E4"
     })
     .await?;
+    main.eval("[...document.querySelectorAll('label')].find(el=>el.textContent==='Use custom quota colors').querySelector('input').click()").map_err(|_|"save-custom-opt-in")?;
+    frontend_assert(
+        app,
+        "main",
+        "document.querySelectorAll('.quota-swatches').length===2",
+        "save-custom-controls-visible",
+    )
+    .await?;
+    main.eval("document.querySelectorAll('.quota-swatches')[0].querySelector('[data-color=\"#FACC15\"]').click()").map_err(|_|"save-warm-colors")?;
+    wait(app, service, "save-yellow-draft", |s| {
+        s.appearance.widget.palette["fiveHour"] == "#FACC15"
+    })
+    .await?;
+    main.eval("document.querySelectorAll('.quota-swatches')[1].querySelector('[data-color=\"#F97316\"]').click()").map_err(|_|"save-warm-colors")?;
+    wait(app, service, "save-warm-draft", |s| {
+        s.appearance.widget.palette["fiveHour"] == "#FACC15"
+            && s.appearance.widget.palette["weekly"] == "#F97316"
+    })
+    .await?;
     main.eval("document.querySelector('.save-bar button[type=submit]').click()")
         .map_err(|_| "preview-save")?;
     wait(app, service, "preview-save-once", |s| {
@@ -1073,6 +1308,20 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
             && s.settings.widget_appearance.preset_id == Some(PresetId::Matcha)
     })
     .await?;
+    let saved_colors = service
+        .snapshot()
+        .await?
+        .settings
+        .widget_appearance
+        .quota_customizations[&PresetId::Matcha]
+        .light
+        .clone();
+    require(
+        saved_colors.enabled
+            && saved_colors.five_hour.as_deref() == Some("#FACC15")
+            && saved_colors.weekly.as_deref() == Some("#F97316"),
+        "save-persists-bright-5h-and-weekly-colors",
+    )?;
     service.dispatch(Action::Window(Input::Close));
     wait(app, service, "preview-close-retires-session", |s| {
         s.appearance.preview_session.is_none() && !visible(app, "main")
@@ -1197,11 +1446,15 @@ async fn composition_probe(
     app: &AppHandle,
     shell: &tauri::WebviewWindow,
     white: bool,
+    sample: Option<[f64; 2]>,
 ) -> Result<[u8; 3], String> {
     use windows_sys::Win32::{Graphics::Gdi::*, UI::WindowsAndMessaging::*};
     let position = shell.outer_position().map_err(|_| "paint-position")?;
     let size = shell.outer_size().map_err(|_| "paint-size")?;
     let scale = shell.scale_factor().map_err(|_| "paint-scale")?;
+    let client_position = shell
+        .inner_position()
+        .map_err(|_| "paint-client-position")?;
     let shell_handle = shell.hwnd().map_err(|_| "paint-handle")?.0 as usize;
     let (send, receive) = tokio::sync::oneshot::channel();
     app.run_on_main_thread(move || {
@@ -1270,8 +1523,8 @@ async fn composition_probe(
     app.run_on_main_thread(move || {
         let color = unsafe {
             let point = windows_sys::Win32::Foundation::POINT {
-                x: position.x + (3.0 * scale).round() as i32,
-                y: position.y + (size.height / 2) as i32,
+                x: sample.map_or(position.x+(3.0*scale).round() as i32,|p|client_position.x+(p[0]*scale).round() as i32),
+                y: sample.map_or(position.y+(size.height/2) as i32,|p|client_position.y+(p[1]*scale).round() as i32),
             };
             let hit = WindowFromPoint(point);
             if GetAncestor(hit, GA_ROOT) != shell_handle as _ {
@@ -2039,7 +2292,18 @@ async fn activation_fallback(app: &AppHandle, service: &Service) -> Result<(), S
     };
     service.dispatch(Action::Window(Input::InspectPopup));
     dashboard_settled(app, service).await?;
+    let main_window = app.get_webview_window("main").ok_or("activation-main")?;
+    let main = main_window.hwnd().map_err(|_| "activation-hwnd")?.0 as usize;
+    // A real denial cannot occur while this HWND is already foreground:
+    // show_activated returns Activated in that case. Earlier keyboard tests may
+    // have focused it. Release our own focus, then restore the inactive popup.
+    crate::native_windows::hide(&main_window);
+    crate::native_windows::show_without_activation(&main_window)?;
     let foreground = unsafe { GetForegroundWindow() } as usize;
+    require(
+        foreground != 0 && foreground != main,
+        "activation-denial-precondition-inactive-popup",
+    )?;
     // Inject the native outcome, never bypass Windows foreground restrictions.
     service.dispatch(Action::Window(Input::InspectActivationDenied));
     let recovered = dashboard_settled(app, service).await?;
@@ -2052,8 +2316,10 @@ async fn activation_fallback(app: &AppHandle, service: &Service) -> Result<(), S
             }),
         "injected-activation-denial-recovers-to-standard-window",
     )?;
+    let after = unsafe { GetForegroundWindow() } as usize;
+    record(format!("native-check fallback-foreground before-main={} after-main={} before-valid={} after-valid={}",foreground==main,after==main,foreground!=0,after!=0));
     require(
-        unsafe { GetForegroundWindow() } as usize == foreground,
+        after == foreground,
         "activation-fallback-preserves-foreground",
     )?;
     service.dispatch(Action::Window(Input::Close));

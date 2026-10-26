@@ -25,8 +25,8 @@ test("requested preferences survive all effective overrides and regain transpare
     }
     const restored=resolveWidgetAppearance(value,theme);
     assert.equal(restored.backgroundAlpha,1-transparency/100);assert.equal(restored.reason,null);
-    assert.equal(restored.backingAlpha,1);assert.deepEqual(value,original);
-    for(const role of ["text","secondaryText","fiveHour","weekly"]) assert.ok(worstContrast(restored.palette[role],restored.palette.contentSurface,restored.backingAlpha)>=4.5);
+    assert.equal(restored.backingAlpha,restored.backgroundAlpha);assert.deepEqual(value,original);
+    assert.equal(restored.protectContent,false);
   }
 });
 test("custom period colors are scoped separately from interface accent and unknown data",()=>{
@@ -40,14 +40,14 @@ test("custom period colors are scoped separately from interface accent and unkno
 test("transparency rejects fractional, empty/non-finite, and out of range drafts",()=>{
   for(const value of [-1,81,1.5,NaN,Infinity]) { const draft=defaultWidgetAppearance();draft.backgroundTransparencyPercent=value;assert.ok(appearanceIssues(draft).some(issue=>issue.field.endsWith("backgroundTransparencyPercent"))); }
 });
-test("requested transparency reaches nested decorative paint while content remains protected",()=>{
+test("surface paints are opaque inputs to a single composited background layer",()=>{
   const value=defaultWidgetAppearance();value.backgroundTransparencyPercent=80;
   const resolved=resolveWidgetAppearance(value,"light");
   const style=widgetStyle(resolved);
   const decorativeAlpha=Number(style["--widget-decorative-raised-paint"].match(/,([\d.]+)\)$/)?.[1]);
-  assert.ok(Math.abs(decorativeAlpha-0.2)<1e-6);
+  assert.equal(decorativeAlpha,1);
   assert.equal(style["--widget-surface-paint"],"rgba(255,255,255,1)");
-  assert.equal(style["--widget-group-paint"],"rgba(255,255,255,1)");
+  assert.equal(style["--widget-group-paint"],"transparent");
   assert.equal(style.opacity,undefined);
   const previewStyle=widgetStyle(resolved,false);
   assert.equal(previewStyle["--widget-decorative-raised-paint"],"rgba(255,255,255,1)");
@@ -57,8 +57,12 @@ for(const id of presetIds)for(const theme of ["light","dark"])test(id+" "+theme+
   const settings={...defaultWidgetAppearance(),presetId:id};
   assert.deepEqual(appearanceIssues(settings),[]);
   for(const role of ["fiveHour","weekly"]) {
-    const choices=quotaSwatches(settings,theme,role);assert.ok(choices.includes(presetPalette(id,theme)[role]));assert.ok(choices.length>=12);
-    for(const color of choices) {const customized={...settings,quotaCustomizations:{[id]:{[theme]:{enabled:true,[role]:color}}}};assert.deepEqual(appearanceIssues(customized),[]);}
+    const choices=quotaSwatches(settings,theme,role);assert.ok(choices.includes(presetPalette(id,theme)[role]));assert.ok(choices.length>=24);
+    for(const color of choices) {const customized={...settings,quotaCustomizations:{[id]:{[theme]:{enabled:true,[role]:color}}}};assert.deepEqual(appearanceIssues(customized),[]);
+      const effective=resolveWidgetAppearance(customized,theme);
+      for(const background of [effective.palette.contentSurface,...(theme==="dark"?["#081426","#10213A","#193452","#10233E"]:["#F3F6FB","#FFFFFF","#E8EFF8","#F6FAFF"])]) assert.ok(contrast(effective.quotaText[role],background)>=4.5);
+      for(const background of [effective.palette.track,effective.palette.contentSurface]) assert.ok(contrast(effective.quotaBoundary[role]??color,background)>=3);
+    }
   }
 });
 
@@ -84,6 +88,22 @@ test("each preset and theme retains independent opt-in quota choices",()=>{
   value.quotaCustomizations.original.light.enabled=true;assert.equal(resolveWidgetAppearance(value,"light").originalStructure,true);
 });
 test("invalid dormant colors are rejected against their own preset and theme",()=>{
-  const value=defaultWidgetAppearance();value.quotaCustomizations={matcha:{light:{enabled:false,fiveHour:"#FFFFFF"}}};
+  const value=defaultWidgetAppearance();value.quotaCustomizations={matcha:{light:{enabled:false,fiveHour:"#FFF"}}};
   assert.ok(appearanceIssues(value).some(i=>i.field.includes("quotaCustomizations.matcha.light.fiveHour")));
+});
+
+const paintFixtures=JSON.parse(readFileSync(new URL("./fixtures/widget-derived-paint.json",import.meta.url),"utf8"));
+for(const f of paintFixtures) test(`derived paint contract: ${f.id} ${f.theme} ${f.name}`,()=>{
+  const value={...defaultWidgetAppearance(),presetId:f.id,quotaCustomizations:f.colors?{[f.id]:{[f.theme]:{enabled:true,...f.colors}}}:{}};
+  const effective=resolveWidgetAppearance(value,f.theme);
+  assert.equal(effective.frameBorder,f.frameBorder);assert.equal(effective.divider,f.divider);
+  assert.deepEqual(effective.quotaText,f.quotaText);assert.deepEqual(effective.quotaBoundary,f.quotaBoundary);
+  const surfaces=[effective.palette.contentSurface,...(f.theme==="dark"?["#081426","#10213A","#193452","#10233E"]:["#F3F6FB","#FFFFFF","#E8EFF8","#F6FAFF"])];
+  for(const role of ["fiveHour","weekly"]) {
+    if(f.colors)assert.equal(effective.palette[role],f.colors[role]);
+    for(const bg of surfaces)assert.ok(contrast(effective.quotaText[role],bg)>=4.5);
+    const boundary=effective.quotaBoundary[role]??effective.palette[role];
+    for(const bg of [...surfaces,effective.palette.track])assert.ok(contrast(boundary,bg)>=3);
+  }
+  if(f.id==="original"&&f.theme==="dark")assert.equal(effective.frameBorder,"#334B6B");
 });

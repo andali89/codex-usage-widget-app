@@ -1,4 +1,4 @@
-//! Validated paint roles and conservative contrast over arbitrary desktop content.
+//! Validated palettes and derived readable quota paint on known app surfaces.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -164,7 +164,7 @@ mod tests {
         }
         let normal = appearance.resolve(false, false, true, true);
         assert!((normal.background_alpha - 0.2).abs() < 1e-6);
-        assert_eq!(normal.backing_alpha, 1.0);
+        assert!((normal.backing_alpha - 0.2).abs() < 1e-6);
         assert_eq!(appearance.background_transparency_percent, 80);
     }
     #[test]
@@ -188,7 +188,7 @@ mod tests {
             };
             assert!(settings.issues().is_empty(), "{id:?}");
             let mut custom = QuotaThemes::default();
-            custom.light.five_hour = Some("#FFFFFF".into());
+            custom.light.five_hour = Some("#FFF".into());
             settings.quota_customizations.insert(id, custom);
             assert!(!settings.issues().is_empty());
         }
@@ -198,6 +198,38 @@ mod tests {
             serde_json::json!({"quotaCustomizations":{"original":{"light":{"other":true}}}}),
         ] {
             assert!(serde_json::from_value::<WidgetAppearance>(json).is_err());
+        }
+    }
+    #[test]
+    fn shared_derived_paint_contract() {
+        let fixtures: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/widget-derived-paint.json"
+        ))
+        .unwrap();
+        for f in fixtures.as_array().unwrap() {
+            let id: PresetId = serde_json::from_value(f["id"].clone()).unwrap();
+            let dark = f["theme"] == "dark";
+            let mut appearance = WidgetAppearance {
+                preset_id: Some(id),
+                ..Default::default()
+            };
+            if let Some(colors) = f["colors"].as_object() {
+                let pair = appearance.quota_customizations.entry(id).or_default();
+                let c = if dark {
+                    &mut pair.dark
+                } else {
+                    &mut pair.light
+                };
+                c.enabled = true;
+                c.five_hour = Some(colors["fiveHour"].as_str().unwrap().into());
+                c.weekly = Some(colors["weekly"].as_str().unwrap().into());
+            }
+            assert!(appearance.issues().is_empty());
+            let resolved =
+                serde_json::to_value(appearance.resolve(dark, false, true, true)).unwrap();
+            for key in ["frameBorder", "divider", "quotaText", "quotaBoundary"] {
+                assert_eq!(resolved[key], f[key], "{f} {key}");
+            }
         }
     }
     #[test]
@@ -230,6 +262,9 @@ pub struct EffectiveAppearance {
     pub original_structure: bool,
     pub palette: Palette,
     pub divider: String,
+    pub frame_border: String,
+    pub quota_text: Palette,
+    pub quota_boundary: BTreeMap<String, Option<String>>,
     pub background_alpha: f64,
     pub backing_alpha: f64,
     pub reason: Option<&'static str>,
@@ -279,8 +314,56 @@ fn ratio(a: f64, b: f64) -> f64 {
 pub fn contrast(a: &str, b: &str) -> f64 {
     ratio(luminance(rgb(a).unwrap()), luminance(rgb(b).unwrap()))
 }
+fn mix_color(a: &str, b: &str, amount: f64) -> String {
+    let aa = rgb(a).unwrap();
+    let bb = rgb(b).unwrap();
+    let c = std::array::from_fn::<_, 3, _>(|i| {
+        (255.0 * (aa[i] * (1.0 - amount) + bb[i] * amount)).round() as u8
+    });
+    format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
+}
+fn quota_paint(palette: &Palette, dark: bool) -> (Palette, BTreeMap<String, Option<String>>) {
+    let mut surfaces = vec![palette["contentSurface"].as_str()];
+    surfaces.extend(if dark {
+        ["#081426", "#10213A", "#193452", "#10233E"]
+    } else {
+        ["#F3F6FB", "#FFFFFF", "#E8EFF8", "#F6FAFF"]
+    });
+    let readable = |color: &str, backgrounds: &[&str], minimum: f64| {
+        let target = if dark { "#FFFFFF" } else { "#000000" };
+        (0..=100)
+            .map(|step| mix_color(color, target, f64::from(step) / 100.0))
+            .find(|shade| {
+                backgrounds
+                    .iter()
+                    .all(|bg| contrast(shade, bg) + 1e-8 >= minimum)
+            })
+            .unwrap_or(target.into())
+    };
+    let mut text = Palette::new();
+    let mut boundary = BTreeMap::new();
+    let base = defaults(dark);
+    let mut backgrounds = surfaces.clone();
+    backgrounds.extend([palette["track"].as_str(), base["track"].as_str()]);
+    for role in ["fiveHour", "weekly"] {
+        text.insert(role.into(), readable(&palette[role], &surfaces, 4.5));
+        boundary.insert(
+            role.into(),
+            if backgrounds
+                .iter()
+                .all(|bg| contrast(&palette[role], bg) + 1e-8 >= 3.0)
+            {
+                None
+            } else {
+                Some(readable(&palette[role], &backgrounds, 3.0))
+            },
+        );
+    }
+    (text, boundary)
+}
 /// All RGB backgrounds produce a continuous luminance interval. A foreground
 /// inside that interval has a worst-case ratio of 1, even if endpoints pass.
+#[cfg(test)]
 pub fn worst_contrast(foreground: &str, backing: &str, alpha: f64) -> f64 {
     let color = rgb(backing).unwrap();
     let low = luminance(color.map(|c| c * alpha));
@@ -447,22 +530,17 @@ impl WidgetAppearance {
                     }
                 }
                 let theme = if dark { "dark" } else { "light" };
-                let mut check = Self {
-                    background_transparency_percent: self.background_transparency_percent,
-                    ..Self::default()
-                };
-                if dark {
-                    check.palettes.dark = palette;
-                } else {
-                    check.palettes.light = palette;
+                for role in ["fiveHour", "weekly"] {
+                    if rgb(&palette[role]).is_none() {
+                        issues.push(Issue {
+                            field: format!(
+                                "widgetAppearance.quotaCustomizations.{}.{theme}.{role}",
+                                id.key()
+                            ),
+                            message: "Choose a #RRGGBB color without alpha.".into(),
+                        });
+                    }
                 }
-                issues.extend(check.legacy_issues().into_iter().map(|mut issue| {
-                    issue.field = issue.field.replace(
-                        &format!("palettes.{theme}"),
-                        &format!("quotaCustomizations.{}.{theme}", id.key()),
-                    );
-                    issue
-                }));
             }
         }
         issues
@@ -513,29 +591,6 @@ impl WidgetAppearance {
         } else {
             1.0 - f64::from(self.background_transparency_percent) / 100.0
         };
-        let low = luminance(rgb(&palette["background"]).unwrap())
-            .min(luminance(rgb(&palette["contentSurface"]).unwrap()));
-        let high = luminance(rgb(&palette["background"]).unwrap())
-            .max(luminance(rgb(&palette["contentSurface"]).unwrap()));
-        let mut foregrounds = ["text", "secondaryText", "fiveHour", "weekly"]
-            .into_iter()
-            .map(|role| palette[role].as_str())
-            .collect::<Vec<_>>();
-        foregrounds.extend(if dark {
-            ["#FBBF24", "#FCA5A5", "#34D399", "#60A5FA"]
-        } else {
-            ["#92400E", "#B91C1C", "#047857", "#005FCC"]
-        });
-        let protect_content = background_alpha < 1.0
-            || foregrounds.into_iter().any(|fg| {
-                let value = luminance(rgb(fg).unwrap());
-                worst_contrast(fg, &palette["background"], background_alpha) < 4.5
-                    || value >= low && value <= high
-            })
-            || contrast(&palette["border"], &palette["background"]) < 3.0;
-        // Opaque content backing is the conservative fallback for semantic labels,
-        // focus and gradients; decorative areas retain the requested alpha.
-        let backing_alpha = 1.0;
         let overrides = if dark {
             &self.palettes.dark
         } else {
@@ -552,17 +607,32 @@ impl WidgetAppearance {
         } else {
             if dark { "#334B6B" } else { "#CBD5E1" }.into()
         };
+        let frame_base = if original_structure {
+            &divider
+        } else {
+            &palette["border"]
+        };
+        let frame_border =
+            if dark && (self.preset_id.is_none() || self.preset_id == Some(PresetId::Original)) {
+                frame_base.clone()
+            } else {
+                mix_color(frame_base, &palette["background"], 0.35)
+            };
+        let (quota_text, quota_boundary) = quota_paint(&palette, dark);
         EffectiveAppearance {
+            frame_border,
+            quota_text,
+            quota_boundary,
             original_structure: self.preset_id == Some(PresetId::Original)
                 || (self.preset_id.is_none()
                     && matches!(self.color_mode, ColorMode::ThemeDefaults)),
             palette,
             divider,
             background_alpha,
-            backing_alpha,
+            backing_alpha: background_alpha,
             reason,
             composition_available,
-            protect_content,
+            protect_content: false,
         }
     }
 }

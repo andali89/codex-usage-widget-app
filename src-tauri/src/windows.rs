@@ -159,6 +159,8 @@ pub struct Windows {
     fit_after_transition: bool,
     main_user_sized: bool,
     main_sizes: [Option<(f64, f64)>; 2],
+    main_reclamp: bool,
+    overview_heights: [Option<f64>; 2],
 }
 
 impl Windows {
@@ -239,6 +241,8 @@ impl Windows {
             fit_after_transition: false,
             main_user_sized: false,
             main_sizes: [None, None],
+            main_reclamp: false,
+            overview_heights: [None, None],
         }
     }
     pub fn next_deadline(&self) -> Option<u64> {
@@ -256,9 +260,10 @@ impl Windows {
         page: DashboardPage,
         width: f64,
         height: f64,
-        _fit: bool,
+        fit: bool,
     ) {
-        if generation != self.interaction.state.generation
+        if self.interaction.state.detail == DetailState::Closed
+            || generation != self.interaction.state.generation
             || !width.is_finite()
             || !height.is_finite()
             || !(280.0..=2000.0).contains(&width)
@@ -271,33 +276,35 @@ impl Windows {
         } else {
             480.0
         };
-        let at_preferred_width = (width - preferred).abs() <= 2.0;
-        if self.interaction.state.detail == DetailState::Window
-            && !self.fit_after_transition
-            && self
-                .main_content
-                .is_some_and(|(previous, _)| (previous - width).abs() > 2.0)
-        {
-            self.main_user_sized = true;
-        }
-        // Content reports acknowledge hydration; they do not grant permission to
-        // resize an established presentation. Longer pages scroll in React.
         let index = usize::from(self.interaction.state.detail == DetailState::Window);
-        if self.main_sizes[index].is_none() && at_preferred_width {
-            let initial_height = if page == DashboardPage::Overview {
-                height.max(if index == 1 { 420.0 } else { 300.0 })
-            } else if index == 1 {
-                640.0
-            } else {
-                600.0
-            };
-            self.main_sizes[index] = Some((preferred, initial_height));
-            self.layout_dirty = true;
+        let initial = self.main_sizes[index].is_none();
+        let correct_width =
+            (width - self.main_sizes[index].map_or(preferred, |s| s.0)).abs() <= 2.0;
+        if correct_width && !(index == 1 && self.main_user_sized) {
+            let width_changed = self
+                .main_content
+                .is_some_and(|(previous, _)| (previous - width).abs() > 1.0);
+            if page == DashboardPage::Overview
+                && (fit || initial || self.fit_after_transition || width_changed)
+            {
+                let changed =
+                    self.overview_heights[index].is_none_or(|old| (old - height).abs() >= 1.0);
+                self.overview_heights[index] = Some(height);
+                if changed || initial || self.fit_after_transition || self.main_page != page {
+                    self.main_sizes[index] = Some((width, height));
+                    self.layout_dirty = true;
+                }
+            } else if initial {
+                self.main_sizes[index] = Some((preferred, if index == 1 { 640.0 } else { 600.0 }));
+                self.layout_dirty = true;
+            }
             self.fit_after_transition = false;
         }
         self.main_content = Some((width, height));
         self.main_page = page;
-        self.ready_main = true;
+        // A cached size can switch presentations before React acknowledges the
+        // new width. Do not reveal/settle on the old presentation's measurement.
+        self.ready_main = correct_width;
     }
     pub fn tick(&mut self, app: &AppHandle, now: u64) -> bool {
         self.now = now;
@@ -620,14 +627,14 @@ impl Windows {
                 );
                 self.pending_focus = None;
                 self.attention_pending = false;
-                self.main_user_sized = false;
             }
             Input::InspectActivationDenied => self.activation_denied(),
             Input::Close => {
+                self.pending_focus = None;
+                self.focus_due = None;
                 self.interaction.close_detail();
                 self.main_content = None;
                 self.attention_pending = false;
-                self.main_user_sized = false;
             }
             Input::Outside => {
                 self.interaction.outside();
@@ -644,7 +651,8 @@ impl Windows {
                 self.environment(app, settings);
             }
             Input::Layout => {
-                self.last_detail = DetailState::Closed;
+                self.main_reclamp = true;
+                self.layout_dirty = true;
                 if !self.interaction.state.dragging {
                     self.environment(app, settings);
                 }
@@ -968,10 +976,7 @@ impl Windows {
                     }
                 })
                 .inner_size(size.0, size.1)
-                .min_inner_size(
-                    if standard { 380.0 } else { 16.0 },
-                    if standard { 420.0 } else { 16.0 },
-                )
+                .min_inner_size(if standard { 380.0 } else { 16.0 }, 16.0)
                 .build()
         };
         let window = match create(
@@ -1508,6 +1513,7 @@ impl Windows {
                     },
                 )?;
                 if (self.last_detail != state.detail
+                    || self.main_reclamp
                     || (self.layout_dirty && (!standard || !self.main_user_sized)))
                     && !(self.preview_freeze
                         && !standard
@@ -1521,34 +1527,55 @@ impl Windows {
                             (480.0, 600.0)
                         });
                     if self.last_detail != state.detail {
-                        self.main_user_sized = false;
                         self.fit_after_transition = self.main_sizes[index].is_none();
                     }
-                    let size = native::content_outer_size(
+                    let monitor = main
+                        .current_monitor()
+                        .ok()
+                        .flatten()
+                        .unwrap_or(anchor_monitor.clone());
+                    let main_scale = monitor.scale_factor();
+                    let area = monitor.work_area();
+                    let main_work = Rect {
+                        x: area.position.x as f64,
+                        y: area.position.y as f64,
+                        width: area.size.width as f64,
+                        height: area.size.height as f64,
+                    };
+                    let content_height = if self.main_page == DashboardPage::Overview
+                        && !(standard && self.main_user_sized)
+                    {
+                        self.overview_heights[index].unwrap_or(content_height)
+                    } else {
+                        content_height
+                    };
+                    let natural_size = native::content_outer_size(
                         &main,
-                        (
-                            preferred_width,
-                            content_height.max(if standard { 420.0 } else { 300.0 }),
-                        ),
-                        scale,
+                        (preferred_width, content_height),
+                        main_scale,
                     )?;
+                    let size = geometry::dashboard_size(
+                        natural_size,
+                        main_work,
+                        self.main_user_sized && standard,
+                    );
                     let rect = if standard {
                         let position = (self.last_detail == state.detail)
                             .then(|| main.outer_position().ok())
                             .flatten();
                         Rect {
-                            x: position
-                                .map_or(work.x + (work.width - size.0).max(0.0) / 2.0, |p| {
-                                    p.x as f64
-                                }),
-                            y: position
-                                .map_or(work.y + (work.height - size.1).max(0.0) / 2.0, |p| {
-                                    p.y as f64
-                                }),
+                            x: position.map_or(
+                                main_work.x + (main_work.width - size.0).max(0.0) / 2.0,
+                                |p| p.x as f64,
+                            ),
+                            y: position.map_or(
+                                main_work.y + (main_work.height - size.1).max(0.0) / 2.0,
+                                |p| p.y as f64,
+                            ),
                             width: size.0,
                             height: size.1,
                         }
-                        .clamp(work)
+                        .clamp(main_work)
                     } else {
                         let detail_trigger = if self.detail_anchor == Surface::Tray {
                             self.tray
@@ -1582,6 +1609,15 @@ impl Windows {
                                 geometry::anchored(trigger, width, height, gap, work, edge)
                             }
                         };
+                        let popup_size = geometry::dashboard_size(
+                            native::content_outer_size(
+                                &main,
+                                (preferred_width, content_height),
+                                detail_scale,
+                            )?,
+                            detail_work,
+                            false,
+                        );
                         place(
                             detail_trigger.unwrap_or(Rect {
                                 x: work.right() - 24.0 * scale,
@@ -1589,18 +1625,8 @@ impl Windows {
                                 width: 24.0 * scale,
                                 height: 24.0 * scale,
                             }),
-                            native::content_outer_size(
-                                &main,
-                                (preferred_width, content_height.max(300.0)),
-                                detail_scale,
-                            )?
-                            .0,
-                            native::content_outer_size(
-                                &main,
-                                (preferred_width, content_height.max(300.0)),
-                                detail_scale,
-                            )?
-                            .1,
+                            popup_size.0,
+                            popup_size.1,
                             if edge.is_some() {
                                 0.0
                             } else {
@@ -1610,6 +1636,13 @@ impl Windows {
                         )
                     };
                     frame(&main, rect)?;
+                    if let (Ok(actual), Ok(dpi)) = (main.inner_size(), main.scale_factor()) {
+                        self.main_sizes[index] = Some((
+                            f64::from(actual.width) / dpi,
+                            f64::from(actual.height) / dpi,
+                        ));
+                    }
+                    self.main_reclamp = false;
                     self.layout_dirty = false;
                 }
                 if standard && self.main_user_sized {
@@ -1762,7 +1795,7 @@ mod tests {
         }
     }
     #[test]
-    fn dashboard_measurements_fit_once_reject_stale_and_preserve_manual_size() {
+    fn dashboard_measurements_adapt_until_actual_manual_resize() {
         let mut windows = Windows::new(&Settings::default(), true);
         let generation = windows.interaction.state.generation;
         windows.dashboard_layout(generation + 1, DashboardPage::Overview, 620.0, 510.0, true);
@@ -1781,10 +1814,11 @@ mod tests {
         );
         windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 530.0, true);
         assert!(
-            !windows.layout_dirty,
-            "new usage content scrolls after the initial fit"
+            windows.layout_dirty,
+            "new Overview content refits after loading"
         );
         windows.layout_dirty = false;
+        windows.main_user_sized = true;
         windows.dashboard_layout(generation, DashboardPage::Overview, 700.0, 540.0, true);
         assert!(
             !windows.layout_dirty,
@@ -1810,8 +1844,84 @@ mod tests {
         assert_eq!(windows.main_sizes[1], Some((620.0, 640.0)));
         windows.layout_dirty = false;
         windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 300.0, true);
+        assert!(windows.layout_dirty);
+        assert_eq!(windows.main_sizes[1], Some((620.0, 300.0)));
+        windows.layout_dirty = false;
+        windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 300.0, true);
+        assert!(
+            !windows.layout_dirty,
+            "unchanged acknowledgement must not refit"
+        );
+        // A work-area change while Settings is open may have clamped cached bounds.
+        windows.main_sizes[1] = Some((620.0, 200.0));
+        windows.dashboard_layout(generation, DashboardPage::Settings, 620.0, 1200.0, true);
         assert!(!windows.layout_dirty);
-        assert_eq!(windows.main_sizes[1], Some((620.0, 640.0)));
+        windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 300.0, true);
+        assert!(windows.layout_dirty);
+        assert_eq!(windows.main_sizes[1], Some((620.0, 300.0)));
+    }
+    #[test]
+    fn closed_dashboard_measurements_do_not_overwrite_popup_content_or_size() {
+        let mut windows = Windows::new(&Settings::default(), false);
+        windows.interaction.open_detail(false);
+        windows.dashboard_layout(
+            windows.interaction.state.generation,
+            DashboardPage::Overview,
+            480.0,
+            581.0,
+            true,
+        );
+        windows.interaction.close_detail();
+        windows.layout_dirty = false;
+        windows.dashboard_layout(
+            windows.interaction.state.generation,
+            DashboardPage::Overview,
+            480.0,
+            643.0,
+            true,
+        );
+        assert_eq!(windows.main_sizes[0], Some((480.0, 581.0)));
+        assert_eq!(windows.overview_heights[0], Some(581.0));
+        assert!(!windows.layout_dirty);
+    }
+    #[test]
+    fn dashboard_readiness_requires_the_actual_target_width_even_with_cached_sizes() {
+        let mut windows = Windows::new(&Settings::default(), false);
+        windows.interaction.open_detail(false);
+        let generation = windows.interaction.state.generation;
+        windows.main_sizes[0] = Some((480.0, 500.0));
+        windows.dashboard_layout(generation, DashboardPage::Overview, 700.0, 300.0, true);
+        assert!(
+            !windows.ready_main,
+            "old standard width must not acknowledge popup readiness"
+        );
+        windows.dashboard_layout(generation, DashboardPage::Overview, 480.0, 600.0, false);
+        assert!(windows.ready_main);
+        assert_eq!(windows.overview_heights[0], Some(600.0));
+        windows.fit_after_transition = true;
+        windows.main_sizes[0] = Some((320.0, 400.0));
+        windows.dashboard_layout(generation, DashboardPage::Overview, 320.0, 700.0, false);
+        assert!(windows.ready_main && !windows.fit_after_transition);
+        assert_eq!(windows.overview_heights[0], Some(700.0));
+    }
+    #[test]
+    fn automatic_width_clamp_refits_wrapped_overview_without_becoming_manual() {
+        let mut windows = Windows::new(&Settings::default(), true);
+        let generation = windows.interaction.state.generation;
+        windows.dashboard_layout(generation, DashboardPage::Overview, 620.0, 510.0, true);
+        // A narrow/high-DPI work area clamps client width before React acknowledges it.
+        windows.main_sizes[1] = Some((500.0, 510.0));
+        windows.layout_dirty = false;
+        windows.dashboard_layout(generation, DashboardPage::Overview, 500.0, 650.0, false);
+        assert!(windows.layout_dirty);
+        assert!(!windows.main_user_sized);
+        assert_eq!(windows.overview_heights[1], Some(650.0));
+        windows.layout_dirty = false;
+        windows.dashboard_layout(generation, DashboardPage::Overview, 500.0, 651.0, false);
+        assert!(
+            !windows.layout_dirty,
+            "height-only countdown measurements remain ignored"
+        );
     }
     #[test]
     fn popup_navigation_and_reopening_keep_a_separate_size() {
@@ -1822,11 +1932,7 @@ mod tests {
         assert_eq!(windows.main_sizes[0], Some((480.0, 510.0)));
         assert_eq!(windows.main_sizes[1], None);
         windows.layout_dirty = false;
-        for page in [
-            DashboardPage::Settings,
-            DashboardPage::Overview,
-            DashboardPage::Settings,
-        ] {
+        for page in [DashboardPage::Settings, DashboardPage::Settings] {
             windows.dashboard_layout(generation, page, 480.0, 2400.0, true);
             assert!(!windows.layout_dirty);
             assert_eq!(windows.main_sizes[0], Some((480.0, 510.0)));
@@ -1840,7 +1946,20 @@ mod tests {
             600.0,
             true,
         );
-        assert_eq!(windows.main_sizes[0], Some((480.0, 510.0)));
+        assert_eq!(windows.main_sizes[0], Some((480.0, 600.0)));
+        windows.main_user_sized = true;
+        windows.dashboard_layout(
+            windows.interaction.state.generation,
+            DashboardPage::Overview,
+            480.0,
+            700.0,
+            true,
+        );
+        assert_eq!(
+            windows.main_sizes[0],
+            Some((480.0, 700.0)),
+            "manual standard sizing never controls popup"
+        );
     }
     #[test]
     fn activation_denial_promotes_once_without_replaying_focus_or_changing_page() {

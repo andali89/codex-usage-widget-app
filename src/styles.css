@@ -63,8 +63,8 @@ p { line-height:1.5; }
 .quota-title { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:.35rem .75rem; }
 .quota-title h2 { font-weight:600; }
 .quota-reading { display:inline-flex; align-items:baseline; gap:.25rem; font-size:.75rem; white-space:nowrap; color:var(--secondary); }
-.quota-reading strong { color:var(--quota-five-hour,var(--accent)); font-size:1.55rem; line-height:1.15; font-weight:650; letter-spacing:-.04em; }
-.period-weekly .quota-reading strong,.period-1 .quota-reading strong { color:var(--quota-weekly,var(--weekly)); }
+.quota-reading strong { color:var(--quota-five-hour-text,var(--accent)); font-size:1.55rem; line-height:1.15; font-weight:650; letter-spacing:-.04em; }
+.period-weekly .quota-reading strong,.period-1 .quota-reading strong { color:var(--quota-weekly-text,var(--weekly)); }
 .quota-quality { font-size:.72rem; color:var(--warning); margin-top:.45rem; }
 .quota-quality:empty { display:none; }
 .progress { height:7px; margin-top:.85rem; background:var(--track); border-radius:6px; overflow:hidden; }
@@ -248,8 +248,8 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .ring-value { stroke:var(--quota-five-hour,var(--accent)); stroke-linecap:round; }
 .weekly .ring-value { stroke:var(--quota-weekly,var(--weekly)); }
 .ring-reading { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
-.ring-reading>strong { color:var(--quota-five-hour,var(--accent)); font-size:.65rem; font-weight:650; letter-spacing:-.04em; line-height:1; }
-.weekly .ring-reading>strong { color:var(--quota-weekly,var(--weekly)); }
+.ring-reading>strong { color:var(--quota-five-hour-text,var(--accent)); font-size:.65rem; font-weight:650; letter-spacing:-.04em; line-height:1; }
+.weekly .ring-reading>strong { color:var(--quota-weekly-text,var(--weekly)); }
 .quota-ring.unknown .ring-reading>strong { color:var(--secondary); }
 .period-badge { display:inline-grid; place-items:center; width:.875rem; height:.875rem; border:1px solid var(--divider); border-radius:50%; background:var(--wash); color:var(--secondary); font-size:.625rem; line-height:1; font-weight:650; flex:none; }
 .quota-ring.has-badge .period-badge { width:.75rem; height:.75rem; font-size:.5625rem; transform:translateY(-.25rem); }
@@ -270,8 +270,8 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .hud-quota>strong { grid-column:2; grid-row:1; text-align:right; }
 .hud-quota>.reset-indicator { grid-column:3; grid-row:1 / 3; margin-left:4px; }
 .hud-quota+.hud-quota { padding-left:6px; border-left:1px solid var(--divider); }
-.hud-quota>strong { color:var(--quota-five-hour,var(--accent)); }
-.hud-quota.weekly>strong { color:var(--quota-weekly); }
+.hud-quota>strong { color:var(--quota-five-hour-text,var(--accent)); }
+.hud-quota.weekly>strong { color:var(--quota-weekly-text); }
 .hud-track { grid-column:1 / 3; grid-row:2; min-width:4rem; width:100%; height:5px; display:block; background:var(--track); border-radius:5px; overflow:hidden; }
 .hud-track>i { display:block; height:100%; background:var(--quota-five-hour,var(--accent)); border-radius:inherit; }
 .weekly .hud-track>i { background:var(--quota-weekly,var(--weekly)); }
@@ -393,3 +393,18 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 @media (max-width:600px) { .color-field { grid-template-columns:minmax(6rem,1fr) 2.5rem minmax(6rem,1fr); } .color-field button { grid-column:1/-1; justify-self:start; } .appearance-number { grid-template-columns:1fr; } }
 
 .preset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr));gap:.5rem}.preset-grid button{display:flex;align-items:center;gap:.55rem;padding:.6rem}.preset-grid button[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}.preset-colors{display:flex;overflow:hidden;border:1px solid var(--divider);border-radius:.3rem}.preset-colors i{width:.7rem;height:1.4rem}.quota-custom-editor{margin-top:.75rem;padding:.8rem;background:var(--wash);border:1px solid var(--divider);border-radius:.65rem}.quota-swatch-field{display:grid;gap:.45rem;margin-bottom:.9rem}.quota-swatches{display:flex;flex-wrap:wrap;gap:.45rem}.quota-swatches button{width:2.4rem;height:2.4rem;padding:0;border:2px solid transparent;color:white;font-size:1.2rem;box-shadow:0 0 0 1px var(--border)}.quota-swatches button[aria-checked="true"]{outline:2px solid var(--text);outline-offset:3px}.appearance-advanced{margin-top:1rem}.snap-gap{margin:.8rem 0}.snap-gap-heading{display:flex;align-items:center;justify-content:space-between;gap:.7rem}.snap-gap-heading small{font-weight:400;color:var(--secondary)}.snap-gap-controls{display:flex;align-items:center;gap:1rem;margin-top:.5rem}.snap-gap-controls input[type="range"]{flex:1;min-width:0;accent-color:var(--accent)}.snap-gap-controls input[type="number"]{width:5rem}.snap-gap .help{margin-bottom:0}
+
+/* Frame color is independent of period separators and unavailable-data outlines. */
+:root:not([data-high-contrast=true]) .native-surface { border-color:var(--widget-frame,var(--divider)); }
+.progress>span,.hud-track>i,.reset-segments .filled { box-shadow:inset 0 0 0 1px var(--quota-five-hour-boundary,transparent); }
+.period-weekly .progress>span,.period-1 .progress>span,.weekly .hud-track>i,.weekly .reset-segments .filled { box-shadow:inset 0 0 0 1px var(--quota-weekly-boundary,transparent); }
+.ring-boundary { stroke:var(--quota-five-hour-boundary,transparent); stroke-width:5; stroke-linecap:round; }
+.weekly .ring-boundary { stroke:var(--quota-weekly-boundary,transparent); }
+.quota-ring.unknown .ring-boundary { display:none; }
+/* Backgrounds flatten into one translucent layer; foreground paint stays opaque. */
+.native-surface.surface-composition { position:relative; isolation:isolate; }
+.surface-background { position:absolute; left:0; top:0; pointer-events:none; z-index:-1; overflow:hidden; border-radius:inherit; }
+.surface-composition,.surface-composition .icon-button { transition-property:border-color; }
+[data-surface-paint] { background:none!important; }
+:root[data-high-contrast=true] .ring-boundary { display:none; }
+@media (forced-colors:active) { .ring-boundary { display:none; } }

@@ -1038,3 +1038,41 @@ mod tests {
         }
     }
 }
+
+/// Dimensions are physical pixels, including native window frame.
+pub fn dashboard_size(natural: (f64, f64), work: Rect, manual: bool) -> (f64, f64) {
+    (
+        natural.0.min(work.width),
+        natural
+            .1
+            .min((work.height * if manual { 1.0 } else { 0.85 }).floor()),
+    )
+}
+
+#[cfg(test)]
+mod dashboard_tests {
+    use super::*;
+    #[test]
+    fn natural_height_is_capped_in_physical_pixels_including_native_frame() {
+        for scale in [1.0, 1.5, 2.5] {
+            let work = Rect {
+                x: 0.0,
+                y: 40.0,
+                width: 1920.0 * scale,
+                height: 1000.0 * scale,
+            };
+            for height in [100.0, 849.0, 850.0, 851.0, 2400.0] {
+                let size = dashboard_size((620.0 * scale, height * scale), work, false);
+                assert_eq!(size.1, (height * scale).min((850.0 * scale).floor()));
+            }
+        }
+        let small = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 640.0,
+            height: 320.0,
+        };
+        assert_eq!(dashboard_size((620.0, 640.0), small, false), (620.0, 272.0));
+        assert_eq!(dashboard_size((700.0, 640.0), small, true), (640.0, 320.0));
+    }
+}

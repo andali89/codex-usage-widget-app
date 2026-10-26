@@ -1,7 +1,7 @@
 # Widget appearance and consistent snapping — design report
 
 **Date:** 25 October 2026\
-**Status:** Design specification. Implementation status, passed checks, and the disabled native-transparency gate are recorded in the [implementation report](widget-appearance-and-snap-implementation-report.md). The acceptance matrix below defines requirements, not a claim that every scenario has passed.\
+**Status:** Design specification. Implementation status, passed checks, and native transparency availability are recorded in the [implementation report](widget-appearance-and-snap-implementation-report.md). The acceptance matrix below defines requirements, not a claim that every scenario has passed.\
 **Baseline:** Source version 0.1.1, reviewed at `f18449e`.\
 **Relationship:** Focused follow-up to the [canonical UI/UX design](codex-widget-design-report.md). This report specifies the next increment without replacing that report or its implementation evidence.
 
@@ -121,9 +121,9 @@ The 80% upper limit retains some visible surface and avoids a completely invisib
 
 ### Readability and effective appearance
 
-Opaque text can still become unreadable over arbitrary desktop content. Put readable backing surfaces behind text/control/indicator groups when the requested transparency would fail the canonical contrast targets: **4.5:1 for normal text** and **3:1 for essential graphics, controls, and focus**.
+The user-selected policy is uniform surface transparency: flatten opaque background shapes into one SVG paint layer and apply the selected alpha once. Text, icons and quota graphics are outside that layer. No opaque content backing is added, so arbitrary desktop content affects perceived contrast. At 0%, the existing opaque rendering is retained.
 
-Resolve each backing surface to at least the opacity needed by its foreground roles. Evaluate the possible composited-background luminance range, including black, white, and intermediate backgrounds; checking only two endpoint ratios is insufficient when a foreground luminance lies between them. An opaque backing is the safe fallback. This computation needs no wallpaper capture. Keep the user's chosen transparency on decorative background areas and disclose **Content backing is more opaque for readability** in the preview when protection is active.
+For quota colors, keep exact selected indicator fills and derive a related percentage-text shade meeting 4.5:1 on known opaque widget/dashboard surfaces. When needed, use a thin related boundary meeting 3:1 around filled graphics. Legacy structural palettes retain their stricter validation. Windows accessibility/native-availability overrides below still take precedence.
 
 Appearance precedence is:
 

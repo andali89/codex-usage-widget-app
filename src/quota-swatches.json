@@ -63,6 +63,46 @@
     [
       "Umber",
       "#713F12"
+    ],
+    [
+      "Yellow",
+      "#FACC15"
+    ],
+    [
+      "Lemon",
+      "#FDE047"
+    ],
+    [
+      "Orange",
+      "#F97316"
+    ],
+    [
+      "Tangerine",
+      "#FB923C"
+    ],
+    [
+      "Gold",
+      "#EAB308"
+    ],
+    [
+      "Coral",
+      "#FB7185"
+    ],
+    [
+      "Red",
+      "#EF4444"
+    ],
+    [
+      "Sky",
+      "#38BDF8"
+    ],
+    [
+      "Lime",
+      "#A3E635"
+    ],
+    [
+      "Mint",
+      "#2DD4BF"
     ]
   ],
   "dark": [
@@ -129,6 +169,38 @@
     [
       "Gold",
       "#FDE68A"
+    ],
+    [
+      "Yellow",
+      "#FACC15"
+    ],
+    [
+      "Lemon",
+      "#FEF08A"
+    ],
+    [
+      "Tangerine",
+      "#FB923C"
+    ],
+    [
+      "Red",
+      "#F87171"
+    ],
+    [
+      "Teal",
+      "#2DD4BF"
+    ],
+    [
+      "Azure",
+      "#38BDF8"
+    ],
+    [
+      "Lilac",
+      "#C4B5FD"
+    ],
+    [
+      "Peach",
+      "#FED7AA"
     ]
   ]
 }

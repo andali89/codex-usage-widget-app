@@ -91,6 +91,7 @@ export default function App() {
   const contentLayoutChanged = useCallback(() => setContentLayoutRevision(value => value + 1), []);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("display");
   const dashboardRequest=useRef<number|null>(null);
+  const focusedDashboardRequest=useRef<number|null>(null);
   const hydrationPage = useRef<"usage" | "settings" | null>(null);
   const main = useRef<HTMLElement>(null);
   const draft = useRef<DraftController | null>(null);
@@ -108,14 +109,28 @@ export default function App() {
       hydrationPage.current = nextPage;
       if(nextPage === "settings") setSettingsVisited(true);
       if(nextPage !== page) setPage(nextPage);
-      requestAnimationFrame(() => main.current?.querySelector<HTMLElement>(nextPage === "settings" ? "[data-settings] h1" : "[data-overview-heading]")?.focus({ preventScroll: true }));
       if(nextPage !== page) return;
     }
     if (hydrationPage.current === page) hydrationPage.current = null;
   }, [state,page,settingsVisited]);
+  useLayoutEffect(() => {
+    const request=state?.dashboardRequest;
+    if(!request||!state.dashboardVisible||state.presentation.detail==="closed"||page!==(request.page==="settings"?"settings":"usage"))return;
+    let frame=0;
+    const focusHeading=()=>{
+      if(!document.hasFocus()||focusedDashboardRequest.current===request.sequence)return;
+      const heading=main.current?.querySelector<HTMLElement>(page==="settings"?"[data-settings] h1":"[data-overview-heading]");
+      if(heading){heading.focus({preventScroll:true});focusedDashboardRequest.current=request.sequence;}
+    };
+    const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(focusHeading);};
+    // Native coordination owns window activation. Focus the heading only after
+    // Windows has actually focused this document, including a later user click.
+    schedule();window.addEventListener("focus",schedule);
+    return ()=>{cancelAnimationFrame(frame);window.removeEventListener("focus",schedule);};
+  },[state?.dashboardRequest?.sequence,state?.dashboardVisible,state?.presentation.detail,page]);
   useLayoutEffect(() => { main.current?.scrollTo({ top: 0 }); }, [page, state?.dashboardRequest?.sequence]);
   useLayoutEffect(() => {
-    if (!state || !main.current || (hydrationPage.current !== null && hydrationPage.current !== page)) return;
+    if (!state || state.presentation.detail === "closed" || !main.current || (hydrationPage.current !== null && hydrationPage.current !== page)) return;
     const content = main.current.querySelector<HTMLElement>(".content-body");
     const frame = main.current.closest<HTMLElement>(".app-frame");
     if (!content || !frame) return;
@@ -132,9 +147,10 @@ export default function App() {
       void command("view_ready", { generation: state.presentation.generation, page: page === "usage" ? "overview" : "settings", width, height, fit }).catch(() => { ready.current = ""; });
     };
     measure(true);
-    const observer = new ResizeObserver(() => measure());
+    let pendingFrame = 0;
+    const observer = new ResizeObserver(() => { cancelAnimationFrame(pendingFrame); pendingFrame = requestAnimationFrame(() => measure()); });
     observer.observe(content); observer.observe(frame);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); cancelAnimationFrame(pendingFrame); };
   }, [state?.presentation.generation, page, contentLayoutRevision, state?.dashboardRequest?.sequence, state?.usage.accountContextKey, state?.appearance.textScale, state?.presentation.detail,
     state?.usage.lastSuccessAtMs, state?.usage.connection, state?.usage.freshness, state?.usage.refreshInFlight,
     state?.usage.errorCode, state?.usage.codexCliVersion, state?.usage.resetCreditsAvailable, state?.usage.resetCredits?.length,
@@ -173,7 +189,7 @@ export default function App() {
   const navigate = (next: "usage" | "settings", section?: SettingsSection) => {
     if (section) setSettingsSection(section);
     if (next === "usage") requestAction("usage");
-    else { setSettingsVisited(true); setPage(next); requestAnimationFrame(() => main.current?.querySelector<HTMLElement>("[data-settings] h1")?.focus({ preventScroll: true })); }
+    else { setSettingsVisited(true); setPage(next); requestAnimationFrame(() => { if(document.hasFocus()) main.current?.querySelector<HTMLElement>("[data-settings] h1")?.focus({ preventScroll: true }); }); }
   };
   const act = async (name: string) => { try { await command(name); setActionError(""); } catch { setActionError("The native service did not respond. Reopen from the tray and try again."); } };
   if (!native) return <main className="browser-message"><BrandMark /><h1>Codex Usage Widget</h1><p>This browser page has no connection to local usage.</p><p>Run the desktop application to monitor Codex. No sample quota values are substituted.</p></main>;

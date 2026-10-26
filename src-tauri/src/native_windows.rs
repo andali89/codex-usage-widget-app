@@ -163,7 +163,7 @@ pub fn configure(window: &WebviewWindow, policy: WindowPolicy) -> Result<(), &'s
                     window
                         .set_min_size(Some(tauri::LogicalSize::new(
                             if standard { 380.0 } else { 280.0 },
-                            if standard { 420.0 } else { 300.0 },
+                            16.0,
                         )))
                         .map_err(|_| "native-minimum-size")?;
                 }
@@ -368,7 +368,8 @@ unsafe extern "system" fn subclass(
 ) -> LRESULT {
     let context = &*(data as *const WindowData);
     let event = match message {
-        WM_ENTERSIZEMOVE if context.surface == Surface::Main => Some(Input::MainUserSizing),
+        WM_SIZING if context.surface == Surface::Main => Some(Input::MainUserSizing),
+        WM_EXITSIZEMOVE if context.surface == Surface::Main => Some(Input::Layout),
         WM_SYSCOMMAND
             if context.surface == Surface::Main
                 && matches!(wparam as u32 & 0xfff0, SC_MAXIMIZE | SC_SIZE) =>

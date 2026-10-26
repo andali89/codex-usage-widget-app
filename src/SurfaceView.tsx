@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties, type MouseEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { applyAppearance, command, useSharedState, useVisibleClock } from "./state";
+import WidgetBackground from "./WidgetBackground";
 import WidgetContents from "./WidgetContents";
 import { widgetStyle } from "./widgetAppearance";
 import { showsPeriod, effectiveResets } from "./periods";
@@ -68,11 +69,13 @@ export default function SurfaceView({ surface }: { surface: "shell" | "preview" 
     if (delta && !state.settings.windows.lockPosition) { event.preventDefault(); void surfaceAction({ type: "nudge", dx: delta[0], dy: delta[1] }); }
   };
   const palettePaint=!state.appearance.highContrast && (!state.appearance.widget.originalStructure || surface==="shell" && state.appearance.widget.backgroundAlpha<1);
-  return <div ref={root} style={{...layoutStyle,...(!state.appearance.highContrast ? widgetStyle(state.appearance.widget,surface==="shell") : {})}} data-label-style={labelStyle} className={`native-surface ${palettePaint ? "widget-palette" : ""} ${palettePaint && state.appearance.widget.originalStructure ? "widget-original" : ""} ${surface} mode-${mode}${layout ? " stable-compact" : ""}${trayPreview ? " tray-summary" : ""}${state.settings.windows.lockPosition ? " position-locked" : ""}`} onContextMenu={contextMenu} onKeyDown={keyDown}
+  const compose=surface==="shell"&&!state.appearance.highContrast&&state.appearance.widget.backgroundAlpha<1;
+  return <div ref={root} style={{...layoutStyle,...(!state.appearance.highContrast ? widgetStyle(state.appearance.widget,surface==="shell") : {})}} data-label-style={labelStyle} className={`native-surface ${compose?"surface-composition":""} ${palettePaint ? "widget-palette" : ""} ${palettePaint && state.appearance.widget.originalStructure ? "widget-original" : ""} ${surface} mode-${mode}${layout ? " stable-compact" : ""}${trayPreview ? " tray-summary" : ""}${state.settings.windows.lockPosition ? " position-locked" : ""}`} onContextMenu={contextMenu} onKeyDown={keyDown}
     onPointerDown={pointerDown} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}
     onPointerMove={event => { const origin = dragOrigin.current; if (origin && origin.pointerId === event.pointerId && shouldStartWidgetDrag(origin, { x: event.clientX, y: event.clientY }, state.settings.windows.lockPosition, dragging.current)) { dragging.current = true; suppressClick.current = true; void surfaceAction({ type: "drag" }); } }}
     onClick={event => { if (surface !== "shell" || isControl(event.target)) return; if (!shouldActivateWidgetClick(event.detail, suppressClick.current)) { event.preventDefault(); return; } void surfaceAction({ type: event.detail === 0 ? "details" : "activate" }); }}
     onDoubleClick={event => { if (surface === "shell" && !isControl(event.target) && !suppressClick.current) { event.preventDefault(); void surfaceAction({ type: "open-window" }); } }}>
+    {compose&&<WidgetBackground root={root} alpha={state.appearance.widget.backgroundAlpha}/>}
     <WidgetContents state={state} surface={surface} now={now} onAction={request=>void surfaceAction(request)} />
   </div>;
 }
