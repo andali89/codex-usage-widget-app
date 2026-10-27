@@ -193,7 +193,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            schema_version: 9,
+            schema_version: 10,
             revision: 0,
             theme_preference: ThemePreference::System,
             mode: DisplayMode::SystemTray,
@@ -216,7 +216,7 @@ impl Default for Settings {
 
 impl Settings {
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.schema_version != 9 {
+        if self.schema_version != 10 {
             return Err("settings-version");
         }
         self.storage_location.validate()?;
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn quota_label_style_defaults_and_round_trips_in_current_schema() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":9,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":10,"windows":{}})).unwrap();
         assert_eq!(old.windows.quota_label_style, QuotaLabelStyle::Words);
         for style in [QuotaLabelStyle::Words, QuotaLabelStyle::Badges] {
             let mut settings = old.clone();
@@ -646,7 +646,7 @@ mod tests {
     #[test]
     fn countdown_options_default_for_old_settings_and_round_trip_per_mode() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":9,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":10,"windows":{}})).unwrap();
         assert!(old.windows.reset_countdowns.is_empty());
         let mut next = old;
         next.windows.reset_countdowns.insert(

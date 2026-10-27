@@ -1,5 +1,34 @@
 # Widget appearance and snapping — implementation evidence
 
+## Optional outer border and opaque backgrounds — 27 October 2026
+
+Implemented in source at application version **0.1.2**, settings schema **10**. This section supersedes the earlier borderless-Light and transparency policies; dated entries below retain their historical evidence.
+
+- **Show widget border** appears in Settings → Display with the widget appearance controls. It defaults to On for new and migrated settings and applies across all paired themes, Floating, Screen Edge, HUD, desktop previews, and tray summaries. On restores the theme-specific frame colors from before the two border-removal commits; Off paints only the outer frame transparent, retaining its 1 px layout space. Internal dividers, quota graphics, rounded corners, and widget dimensions remain unchanged. Windows high contrast and forced colors retain a visible system border.
+- Border edits use the existing native display-preview session: the active widget updates temporarily, Save persists the choice, and Cancel restores the saved value. Changing preset or Light/Dark theme retains the shared border choice.
+- Transparency controls are removed from Settings. Both Rust and TypeScript resolution force background/backing alpha to 1, even when saved settings or preview commands request 20/50/80% transparency. Existing percentages and their validation are retained for compatibility, but inactive. The ordinary effective reason is transparency-disabled; existing accessibility/platform reasons keep precedence. Native corner cutouts and rounded regions remain supported.
+- Schema-9 migration adds the default border preference while preserving the complete format-4 settings/reminder document, revision, profile metadata, theme/custom colors, positions, and saved transparency. Newer schemas remain protected from overwrite. No dependencies, permissions, application version, usage reads, scheduler, or reminder policy changed.
+
+### Validation
+
+| Check | Actual result |
+| --- | --- |
+| `npm.cmd test`, `npm.cmd run build` | 143 tests passed; production build and TypeScript check passed. Tests cover historical frame colors and Off for all 22 preset/theme combinations, unchanged non-frame paint, high-contrast precedence, opacity, and absent transparency controls. |
+| `npm.cmd run rust:test` | 157 application tests and 3 maintained dependency tests passed; 1 explicit live probe ignored. Process-local TEMP/TMP were set to src-tauri/target/validation/border-opacity-test-temp. Tests include schema-9 full-document preservation, native storage reopen with border Off, strict IPC field types, shared paint fixtures, and display-only draft isolation. |
+| `npm.cmd run rust:fmt`, `rust:check`, `rust:clippy` | Passed. Cache hard-link fallback warnings are environmental. |
+| `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` | Passed. The existing `npm.cmd run tauri -- --version` probe fails with `ERR_DLOPEN_FAILED` (invalid Win32 native binding); used the established direct Cargo release build without installing or changing tools. |
+| Release EXE `--check-native-appearance` | **Passed**, explicit `native-check result=pass`. 132 shell border checks (11 presets × 2 themes × 3 modes × On/Off), 88 desktop-preview border checks, 44 tray-summary border checks, 132 stable-dimension checks, 3 synthetic high-contrast checks, inactive saved 0/20/50/80% transparency, Settings live preview/Cancel/Save, hidden controls, and disk reopen with border Off. Includes existing quota/sizing/navigation checks. |
+| Release EXE `--check-native-appearance --probe-native-composition` | **Unverified pixels:** restricted and normal-access runs both failed with `native-capture-unavailable` (screen DC clip was 0×0; no pixel copied). No new pixel-opacity pass is claimed. Runtime state/CSS opacity checks passed in the complete run above. |
+| Documentation/diff/process cleanup | Five maintained Markdown files have valid local links; `git diff --check` passed. All 9 observed processes from the final validation instance were no longer running after cleanup. |
+
+Initial Rust tests used the default Windows temp location and failed filesystem commit/locator cases; rerunning with the project-owned temp directory passed. An initial new migration assertion compared internal snake-case metadata names to the storage envelope's camel-case names; it was corrected to compare the actual storage contract. No storage behavior was changed as a workaround.
+
+Final executable: `src-tauri/target/release/codex-usage-widget.exe`, **13,681,664 bytes**, version **0.1.2**, SHA-256 `13FE97E329508ECA4A704C391C40E3DF74CBF476F465CA8A22BF29416BA4986D`.
+
+Validation artifacts/logs are ignored under `src-tauri/target/validation/border-opacity-*`; the final explicit native result is in `src-tauri/target/validation/native-appearance/result.log`. The restricted runner also lacked CIM process-tree access; the final appearance run used approved normal Windows access. Existing tray-removal/WebView2 class-unregistration shutdown diagnostics remain visible. Windows 10, real pointer/focus interactions, mixed-DPI transitions, and actual Windows high-contrast/text-scale transitions remain manual checks. No live Codex probe, inference, credential access, notification submission, installer, publication, or push is part of this change.
+
+---
+
 ## Borderless new Light themes — 26 October 2026
 
 Extended the Sunrise preview treatment to all ten new Light presets: their outer widget/preview frames are transparent, with the existing 1 px layout space retained. Original Light, all Dark themes, high-contrast borders, internal borders and the 5H/weekly middle divider are unchanged. Shared Rust/TypeScript resolution and the existing fixtures were updated; settings remain schema 9.

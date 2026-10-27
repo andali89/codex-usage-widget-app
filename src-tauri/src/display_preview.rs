@@ -89,7 +89,11 @@ mod tests {
     fn patch() -> Patch {
         Patch {
             theme_preference: ThemePreference::Dark,
-            widget_appearance: WidgetAppearance::default(),
+            widget_appearance: WidgetAppearance {
+                show_border: false,
+                background_transparency_percent: 80,
+                ..Default::default()
+            },
             snap_gap_logical_px: 24,
             freeze_popup: true,
         }
@@ -117,6 +121,15 @@ mod tests {
         assert_eq!(effective.codex_path, saved.codex_path);
         assert_eq!(effective.windows.snap_gap_logical_px, 24);
         assert_eq!(saved.windows.snap_gap_logical_px, 8);
+        assert!(!effective.widget_appearance.show_border);
+        assert!(saved.widget_appearance.show_border);
+        assert_eq!(
+            effective
+                .widget_appearance
+                .resolve(true, false, true, true)
+                .background_alpha,
+            1.0
+        );
         assert!(s.update(OWNER, 2, None, saved.revision + 1, 2).is_err());
         assert!(s.update(OWNER, 2, None, saved.revision, 10001).is_err());
     }

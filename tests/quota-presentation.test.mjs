@@ -26,7 +26,7 @@ test("appearance controls show only active-theme custom quotas and no embedded p
   const state={settings:draft,appearance:{resolvedTheme:"light",highContrast:false,transparencyAllowed:false,widget:resolveWidgetAppearance(appearance,"light",false,false),placementConstraints:{}},usage:{windows:[{...quota,label:"PRIVATE_REAL_VALUE"}],freshness:"stale"},presentation:{previewSource:"shell"},trayAvailable:true};
   const before=structuredClone(state);
   const html=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{throw new Error("Rendering must not save");}}));
-  assert.match(html,/Background transparency/);assert.match(html,/Currently opaque because Windows transparency is off or unavailable/);assert.match(html,/Editing Light colors for Original/);assert.match(html,/Use custom quota colors/);
+  assert.doesNotMatch(html,/transparency|Transparency/);assert.match(html,/<input id="show-widget-border" type="checkbox" checked=""/);assert.match(html,/Show widget border/);assert.match(html,/Editing Light colors for Original/);assert.match(html,/Use custom quota colors/);
   assert.doesNotMatch(html,/Requested style|Effective style|PRIVATE_REAL_VALUE|radiogroup|Load preset colors|type="color"/);
   draft.widgetAppearance.quotaCustomizations={original:{light:{enabled:true},dark:{enabled:false}}};
   const enabled=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{}}));
@@ -34,6 +34,10 @@ test("appearance controls show only active-theme custom quotas and no embedded p
   state.appearance.resolvedTheme="dark";
   const dark=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{}}));
   assert.match(dark,/Editing Dark colors/);assert.doesNotMatch(dark,/Load preset colors|radiogroup/);
+  draft.widgetAppearance.showBorder=false;
+  const borderless=renderToStaticMarkup(createElement(WidgetAppearanceSettings,{state,draft,onChange:()=>{}}));
+  assert.ok(borderless.includes('<input id="show-widget-border" type="checkbox"/>'));
+  assert.doesNotMatch(borderless,/transparency|Transparency/);
   assert.deepEqual(before.usage,state.usage);
 
 });

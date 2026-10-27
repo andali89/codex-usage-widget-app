@@ -639,22 +639,22 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
             );
             shell.eval("window.__TAURI_INTERNALS__.invoke('surface_action',{request:{type:'inspect-frontend',message:'paint='+getComputedStyle(document.querySelector('.shell')).backgroundImage}})").map_err(|_|"paint-style")?;
             require(
-                snapshot.appearance.widget.composition_available
-                    && snapshot.appearance.transparency_allowed,
-                "native-composition-and-windows-transparency-available",
+                snapshot.appearance.widget.background_alpha == 1.0
+                    && snapshot.appearance.widget.backing_alpha == 1.0
+                    && snapshot
+                        .settings
+                        .widget_appearance
+                        .background_transparency_percent
+                        == percent,
+                "saved-transparency-is-inactive",
             )?;
-            let alpha = snapshot.appearance.widget.background_alpha;
-            let expression=format!("(()=>{{const s=document.querySelector('.shell');if(!s||getComputedStyle(s).opacity!=='1')return false;const svg=s.querySelector('.surface-background'),g=svg?.querySelector('g');if({alpha}===1)return !g;if(!svg)return false;const b=s.getBoundingClientRect(),v=svg.getBoundingClientRect(),c=getComputedStyle(s);if(Math.abs(v.left-b.left-parseFloat(c.borderLeftWidth))>.1||Math.abs(v.top-b.top-parseFloat(c.borderTopWidth))>.1)return false;return g&&Math.abs(Number(g.getAttribute('opacity'))-{alpha})<.001&&s.hasAttribute('data-surface-paint')&&[...s.querySelectorAll('.quota-card,.widget-credits,.period-badge,.edge-values,.hud-values')].every(e=>e.hasAttribute('data-surface-paint')&&getComputedStyle(e).backgroundColor==='rgba(0, 0, 0, 0)')&&[...s.querySelectorAll('.quota-reading strong,.ring-reading strong,.hud-quota>strong,.ring-value,.progress>span,.hud-track>i,.reset-segments i')].every(e=>getComputedStyle(e).opacity==='1'&&!e.hasAttribute('data-surface-paint'));}})()");
             frontend_assert(
                 app,
                 "shell",
-                &expression,
-                "requested-background-alpha-with-opaque-foreground",
+                "(()=>{const s=document.querySelector('.shell');return s&&getComputedStyle(s).opacity==='1'&&!s.querySelector('.surface-background')&&!s.hasAttribute('data-surface-paint')&&[...s.querySelectorAll('.quota-reading strong,.ring-reading strong,.hud-quota>strong,.ring-value,.progress>span,.hud-track>i,.reset-segments i')].every(e=>getComputedStyle(e).opacity==='1');})()",
+                "opaque-background-with-opaque-foreground",
             )
             .await?;
-            if mode == DisplayMode::Floating && percent > 0 {
-                frontend_assert(app,"shell","(()=>{const s=document.querySelector('.shell'),r=s?.querySelector('[data-paint-source=widget-credits]');if(!s||!r)return false;const probe=document.createElement('span');probe.style.backgroundColor=s.style.getPropertyValue('--widget-wash-paint');return r.getAttribute('fill')===probe.style.backgroundColor;})()","translucent-original-credits-retain-wash-color").await?;
-            }
             if !composition_probe_requested() {
                 continue;
             }
@@ -672,7 +672,7 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                     "opaque-capture-calibrates-to-rendered-theme",
                 )?;
             }
-            let expected = 255.0 * f64::from(percent) / 100.0;
+            let expected = 0.0;
             record(format!(
                 "native-check composition requested={percent} delta={:?}",
                 (0..3)
@@ -787,6 +787,46 @@ async fn showcase_style_check(app: &AppHandle, service: &Service) -> Result<(), 
                     &format!("showcase-{id}-{theme}-{mode:?}"),
                 )
                 .await?;
+                let shell = app.get_webview_window("shell").ok_or("border-shell")?;
+                let size = shell.inner_size().map_err(|_| "border-size")?;
+                for show in [false, true] {
+                    let mut settings = service.snapshot().await?.settings;
+                    settings.widget_appearance.show_border = show;
+                    save_settings(service, settings).await?;
+                    let frame = serde_json::to_string(
+                        &service.snapshot().await?.appearance.widget.frame_border,
+                    )
+                    .unwrap();
+                    let expression = format!("(()=>{{const s=document.querySelector('.native-surface'),expected={frame},rgb=h=>'rgb('+[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';return s&&getComputedStyle(s).borderTopWidth==='1px'&&getComputedStyle(s).borderTopColor===(expected==='transparent'?'rgba(0, 0, 0, 0)':rgb(expected));}})()");
+                    frontend_assert(
+                        app,
+                        "shell",
+                        &expression,
+                        &format!("border-{id}-{theme}-{mode:?}-{show}"),
+                    )
+                    .await?;
+                    require(
+                        shell.inner_size().map_err(|_| "border-size")? == size,
+                        "border-keeps-widget-dimensions",
+                    )?;
+                    if !show && id == "original" && !dark {
+                        frontend_assert(app, "shell", "(()=>{const r=document.documentElement,s=document.querySelector('.shell'),previous=r.dataset.highContrast;try{r.dataset.highContrast='true';return s&&getComputedStyle(s).borderTopColor!=='rgba(0, 0, 0, 0)'&&getComputedStyle(s).borderTopWidth==='1px';}finally{r.dataset.highContrast=previous;}})()", "synthetic-high-contrast-retains-border").await?;
+                    }
+                    if mode != DisplayMode::Floating {
+                        open_hover(app, service, Surface::Shell).await?;
+                        frontend_assert(
+                            app,
+                            "preview",
+                            &expression,
+                            "desktop-preview-shares-border-preference",
+                        )
+                        .await?;
+                        service.dispatch(Action::Window(Input::Request(
+                            Surface::Preview,
+                            Request::Collapse,
+                        )));
+                    }
+                }
             }
             for mode in [
                 DisplayMode::Floating,
@@ -867,6 +907,20 @@ async fn showcase_style_check(app: &AppHandle, service: &Service) -> Result<(), 
                 ),
             )
             .await?;
+            for show in [false, true] {
+                let mut settings = service.snapshot().await?.settings;
+                settings.widget_appearance.show_border = show;
+                save_settings(service, settings).await?;
+                open_hover(app, service, Surface::Tray).await?;
+                let expression = format!("(()=>{{const s=document.querySelector('.tray-summary');return s&&(getComputedStyle(s).borderTopColor==='rgba(0, 0, 0, 0)')===!{show}&&getComputedStyle(s).borderTopWidth==='1px';}})()");
+                frontend_assert(
+                    app,
+                    "preview",
+                    &expression,
+                    "tray-preview-shares-border-preference",
+                )
+                .await?;
+            }
             service.dispatch(Action::Window(Input::Request(
                 Surface::Preview,
                 Request::Collapse,
@@ -1181,6 +1235,15 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
     .await?;
     let saved = service.snapshot().await?.settings;
     let main = app.get_webview_window("main").ok_or("preview-main")?;
+    frontend_assert(app, "main", "document.querySelector('#show-widget-border')?.checked===true&&![...document.querySelectorAll('.settings-form label,.settings-form summary')].some(e=>/transparency/i.test(e.textContent))", "border-control-visible-transparency-controls-absent").await?;
+    main.eval("document.querySelector('#show-widget-border').click()")
+        .map_err(|_| "preview-border")?;
+    wait(app, service, "preview-border-off-without-save", |s| {
+        s.appearance.widget.frame_border == "transparent"
+            && s.settings.widget_appearance.show_border
+            && s.settings.revision == saved.revision
+    })
+    .await?;
     main.eval("document.querySelector('[data-preset=glacier]').click()")
         .map_err(|_| "preview-click")?;
     wait(app, service, "preview-preset", |s| {
@@ -1196,6 +1259,7 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
     wait(app, service, "preview-dark", |s| {
         s.appearance.resolved_theme == "dark"
             && s.appearance.widget.palette["background"] == "#09283B"
+            && s.appearance.widget.frame_border == "transparent"
     })
     .await?;
     frontend_assert(app,"main","document.querySelector('.preset-grid').parentElement.textContent.includes('Editing Dark colors for Glacier')&&!document.querySelector('.appearance-preview')","active-theme-editor-no-embedded-preview").await?;
@@ -1270,12 +1334,26 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
         s.appearance.resolved_theme == "light"
             && s.appearance.widget.palette["background"] == "#EAF2FF"
             && s.appearance.placement_constraints.margins[0] < 48.0
+            && s.appearance.widget.frame_border != "transparent"
     })
     .await?;
     require(
         service.snapshot().await?.settings.revision == saved.revision,
         "cancel-keeps-saved-revision",
     )?;
+    frontend_assert(
+        app,
+        "main",
+        "document.querySelector('#show-widget-border')?.checked===true",
+        "cancel-restores-border-control",
+    )
+    .await?;
+    main.eval("document.querySelector('#show-widget-border').click()")
+        .map_err(|_| "save-border-off")?;
+    wait(app, service, "save-border-draft", |s| {
+        s.appearance.widget.frame_border == "transparent"
+    })
+    .await?;
     main.eval("document.querySelector('[data-preset=matcha]').click()")
         .map_err(|_| "preview-matcha")?;
     wait(app, service, "preview-matcha", |s| {
@@ -1321,6 +1399,14 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
             && saved_colors.five_hour.as_deref() == Some("#FACC15")
             && saved_colors.weekly.as_deref() == Some("#F97316"),
         "save-persists-bright-5h-and-weekly-colors",
+    )?;
+    let snapshot = service.snapshot().await?;
+    let (_, reopened) =
+        crate::storage::Store::open(std::path::Path::new(&snapshot.storage.active_directory));
+    require(
+        !snapshot.settings.widget_appearance.show_border
+            && !reopened.settings.widget_appearance.show_border,
+        "save-persists-border-off-on-storage-reopen",
     )?;
     service.dispatch(Action::Window(Input::Close));
     wait(app, service, "preview-close-retires-session", |s| {

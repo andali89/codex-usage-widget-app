@@ -396,6 +396,8 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 
 /* Frame color is independent of period separators and unavailable-data outlines. */
 :root:not([data-high-contrast=true]) .native-surface { border-color:var(--widget-frame,var(--divider)); }
+:root[data-high-contrast=true] .native-surface { border-color:CanvasText; }
+@media (forced-colors:active) { :root:not([data-high-contrast=true]) .native-surface { border-color:CanvasText; } }
 /* Backgrounds flatten into one translucent layer; foreground paint stays opaque. */
 .native-surface.surface-composition { position:relative; isolation:isolate; }
 .surface-background { position:absolute; left:0; top:0; pointer-events:none; z-index:-1; overflow:hidden; border-radius:inherit; }

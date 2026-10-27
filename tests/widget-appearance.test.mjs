@@ -15,8 +15,8 @@ test("worst-case contrast includes intermediate desktop backgrounds",()=>{
   assert.ok(contrast("#757575","#FFFFFF")>=4.5);
   for(const fixture of fixtures.composition) assert.ok(Math.abs(worstContrast(fixture.foreground,fixture.backing,fixture.alpha)-fixture.worst)<1e-6);
 });
-test("requested preferences survive all effective overrides and regain transparency",()=>{
-  for(const theme of ["light","dark"]) for(const transparency of [0,20,80]) {
+test("saved transparency preferences remain inactive under all effective overrides",()=>{
+  for(const theme of ["light","dark"]) for(const transparency of [0,20,50,80]) {
     const value=defaultWidgetAppearance();value.backgroundTransparencyPercent=transparency;
     const original=structuredClone(value);
     for(const [contrast,allowed,composition,reason] of [[true,true,true,"high-contrast"],[false,false,true,"windows-transparency-off-or-unknown"],[false,true,false,"native-composition-unverified"]]) {
@@ -24,7 +24,7 @@ test("requested preferences survive all effective overrides and regain transpare
       assert.equal(result.backgroundAlpha,1);assert.equal(result.reason,reason);
     }
     const restored=resolveWidgetAppearance(value,theme);
-    assert.equal(restored.backgroundAlpha,1-transparency/100);assert.equal(restored.reason,null);
+    assert.equal(restored.backgroundAlpha,1);assert.equal(restored.reason,"transparency-disabled");
     assert.equal(restored.backingAlpha,restored.backgroundAlpha);assert.deepEqual(value,original);
     assert.equal(restored.protectContent,false);
   }
@@ -93,7 +93,7 @@ test("invalid dormant colors are rejected against their own preset and theme",()
 
 const paintFixtures=JSON.parse(readFileSync(new URL("./fixtures/widget-derived-paint.json",import.meta.url),"utf8"));
 for(const f of paintFixtures) test(`derived paint contract: ${f.id} ${f.theme} ${f.name}`,()=>{
-  const value={...defaultWidgetAppearance(),presetId:f.id,quotaCustomizations:f.colors?{[f.id]:{[f.theme]:{enabled:true,...f.colors}}}:{}};
+  const value={...defaultWidgetAppearance(),presetId:f.id,showBorder:f.showBorder??true,quotaCustomizations:f.colors?{[f.id]:{[f.theme]:{enabled:true,...f.colors}}}:{}};
   const effective=resolveWidgetAppearance(value,f.theme);
   assert.equal(effective.frameBorder,f.frameBorder);assert.equal(effective.divider,f.divider);
   assert.deepEqual(effective.quotaText,f.quotaText);
@@ -102,5 +102,20 @@ for(const f of paintFixtures) test(`derived paint contract: ${f.id} ${f.theme} $
     if(f.colors)assert.equal(effective.palette[role],f.colors[role]);
     for(const bg of surfaces)assert.ok(contrast(effective.quotaText[role],bg)>=4.5);
   }
-  if(f.id==="original"&&f.theme==="dark")assert.equal(effective.frameBorder,"#334B6B");
+  if(f.id==="original"&&f.theme==="dark"&&f.showBorder!==false)assert.equal(effective.frameBorder,"#334B6B");
+});
+
+test("border preference defaults on and high contrast overrides off",()=>{
+  assert.equal(defaultWidgetAppearance().showBorder,true);
+  for(const id of presetIds) for(const theme of ["light","dark"]) {
+    const value={...defaultWidgetAppearance(),presetId:id};
+    const on=resolveWidgetAppearance(value,theme);
+    assert.notEqual(on.frameBorder,"transparent");
+    const off=resolveWidgetAppearance({...value,showBorder:false},theme);
+    assert.equal(off.frameBorder,"transparent");
+    assert.deepEqual({...off,frameBorder:on.frameBorder},on,"only the frame paint changes");
+    const hc=resolveWidgetAppearance({...value,showBorder:false},theme,true);
+    assert.notEqual(hc.frameBorder,"transparent");
+    assert.equal(hc.backgroundAlpha,1);
+  }
 });

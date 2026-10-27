@@ -10,7 +10,7 @@ export type PaletteTheme = "light" | "dark";
 export type PresetId = keyof typeof presets;
 export const presetIds = Object.keys(presets) as PresetId[];
 export interface QuotaCustomization { enabled:boolean; fiveHour?:string; weekly?:string }
-export interface WidgetAppearanceSettings { presetId?:PresetId|null; quotaCustomizations?:Partial<Record<PresetId,Partial<Record<PaletteTheme,QuotaCustomization>>>>; backgroundTransparencyPercent:number; colorMode:"theme-defaults"|"custom"; palettes:Record<PaletteTheme,Partial<Palette>> }
+export interface WidgetAppearanceSettings { showBorder:boolean; presetId?:PresetId|null; quotaCustomizations?:Partial<Record<PresetId,Partial<Record<PaletteTheme,QuotaCustomization>>>>; backgroundTransparencyPercent:number; colorMode:"theme-defaults"|"custom"; palettes:Record<PaletteTheme,Partial<Palette>> }
 export interface AppearanceIssue { field:string; message:string }
 export const colorRoleLabels:Record<ColorRole,string>={background:"Widget background",contentSurface:"Content surface",text:"Main text",secondaryText:"Secondary text",fiveHour:"5-hour quota",weekly:"Weekly quota",track:"Track",border:"Border and divider"};
 export interface AppearanceIssueGroup { field:string; label:string; message:string; details:string[] }
@@ -29,7 +29,7 @@ export function groupAppearanceIssues(issues:AppearanceIssue[]):AppearanceIssueG
 export const summarizeAppearanceIssues=(issues:AppearanceIssue[])=>groupAppearanceIssues(issues).map(group=>`${group.label}: ${group.message}`).join(" ");
 
 export interface EffectiveWidgetAppearance { originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
-export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
+export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({showBorder:true,presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
 export const themePalette = (theme:PaletteTheme):Palette => ({...defaults[theme]});
 export const validHex = (value:string) => /^#[0-9a-f]{6}$/i.test(value);
 export function paletteFor(settings:WidgetAppearanceSettings, theme:PaletteTheme):Palette {
@@ -112,12 +112,13 @@ export function quotaSwatches(settings:WidgetAppearanceSettings,theme:PaletteThe
 }
 export function resolveWidgetAppearance(settings:WidgetAppearanceSettings, theme:PaletteTheme, highContrast=false, transparencyAllowed=true, compositionAvailable=true):EffectiveWidgetAppearance {
   const palette=highContrast?themePalette(theme):paletteFor(settings,theme);
-  const reason=highContrast?"high-contrast":!transparencyAllowed?"windows-transparency-off-or-unknown":!compositionAvailable?"native-composition-unverified":null;
-  const backgroundAlpha=reason?1:1-Math.min(80,Math.max(0,settings.backgroundTransparencyPercent||0))/100;
+  const reason=highContrast?"high-contrast":!transparencyAllowed?"windows-transparency-off-or-unknown":!compositionAvailable?"native-composition-unverified":"transparency-disabled";
+  // Keep the saved percentage for compatibility while transparency is unavailable.
+  const backgroundAlpha=1;
   const originalStructure=settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults");
   const divider=!originalStructure || (!highContrast && settings.colorMode==="custom" && settings.palettes[theme].border) ? palette.border : theme==="dark"?"#334B6B":"#CBD5E1";
   const frameBase=originalStructure?divider:palette.border;
-  const frameBorder=theme==="light"&&!highContrast&&!!settings.presetId&&settings.presetId!=="original"?"transparent":theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
+  const frameBorder=!settings.showBorder&&!highContrast?"transparent":theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
   const quota=quotaPaint(palette,theme);
   return {frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
 }
@@ -136,4 +137,3 @@ export function widgetStyle(effective:EffectiveWidgetAppearance, _shell=true):CS
   } as CSSProperties;
 }
 export const quotaColorName=(color:string)=>[...swatches.light,...swatches.dark].find(([,hex])=>hex===color)?.[0]??"Theme color";
-export const appearanceReason=(reason:string|null)=> reason==="high-contrast"?"Currently opaque because Windows high contrast is on.":reason==="windows-transparency-off-or-unknown"?"Currently opaque because Windows transparency is off or unavailable.":reason?"Native transparency is unavailable; the widget remains opaque.":"";

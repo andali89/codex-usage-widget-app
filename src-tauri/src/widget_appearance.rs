@@ -88,15 +88,28 @@ pub fn preset_palette(id: PresetId, dark: bool) -> Palette {
     });
     palette
 }
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct WidgetAppearance {
+    pub show_border: bool,
     pub preset_id: Option<PresetId>,
     pub quota_customizations: BTreeMap<PresetId, QuotaThemes>,
     #[serde(deserialize_with = "deserialize_transparency")]
     pub background_transparency_percent: u8,
     pub color_mode: ColorMode,
     pub palettes: Palettes,
+}
+impl Default for WidgetAppearance {
+    fn default() -> Self {
+        Self {
+            show_border: true,
+            preset_id: None,
+            quota_customizations: BTreeMap::new(),
+            background_transparency_percent: 0,
+            color_mode: ColorMode::default(),
+            palettes: Palettes::default(),
+        }
+    }
 }
 fn deserialize_transparency<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
@@ -163,9 +176,37 @@ mod tests {
             assert_eq!(result.reason, Some(reason));
         }
         let normal = appearance.resolve(false, false, true, true);
-        assert!((normal.background_alpha - 0.2).abs() < 1e-6);
-        assert!((normal.backing_alpha - 0.2).abs() < 1e-6);
+        assert_eq!(normal.background_alpha, 1.0);
+        assert_eq!(normal.backing_alpha, 1.0);
+        assert_eq!(normal.reason, Some("transparency-disabled"));
         assert_eq!(appearance.background_transparency_percent, 80);
+    }
+    #[test]
+    fn border_defaults_on_and_accessibility_overrides_off() {
+        let default: WidgetAppearance = serde_json::from_str("{}").unwrap();
+        assert!(default.show_border);
+        assert!(WidgetAppearance::default().show_border);
+        for dark in [false, true] {
+            let mut appearance = default.clone();
+            let on = appearance.resolve(dark, false, true, true);
+            appearance.show_border = false;
+            let off = appearance.resolve(dark, false, true, true);
+            assert_eq!(off.frame_border, "transparent");
+            assert_eq!(off.divider, on.divider);
+            assert_eq!(off.palette, on.palette);
+            assert_eq!(off.quota_text, on.quota_text);
+            assert_ne!(
+                appearance.resolve(dark, true, true, true).frame_border,
+                "transparent"
+            );
+            for percent in [0, 20, 50, 80] {
+                appearance.background_transparency_percent = percent;
+                let result = appearance.resolve(dark, false, true, true);
+                assert_eq!(result.background_alpha, 1.0);
+                assert_eq!(result.backing_alpha, 1.0);
+                assert_eq!(appearance.background_transparency_percent, percent);
+            }
+        }
     }
     #[test]
     fn presets_and_retained_customizations_validate_both_themes() {
@@ -211,6 +252,7 @@ mod tests {
             let dark = f["theme"] == "dark";
             let mut appearance = WidgetAppearance {
                 preset_id: Some(id),
+                show_border: f["showBorder"].as_bool().unwrap_or(true),
                 ..Default::default()
             };
             if let Some(colors) = f["colors"].as_object() {
@@ -238,6 +280,9 @@ mod tests {
             serde_json::json!({"backgroundTransparencyPercent":1.5}),
             serde_json::json!({"backgroundTransparencyPercent":null}),
             serde_json::json!({"backgroundTransparencyPercent":-1}),
+            serde_json::json!({"showBorder":null}),
+            serde_json::json!({"showBorder":"false"}),
+            serde_json::json!({"showBorder":0}),
             serde_json::json!({"other":true}),
             serde_json::json!({"palettes":{"system":{}}}),
         ] {
@@ -568,13 +613,10 @@ impl WidgetAppearance {
         } else if !composition_available {
             Some("native-composition-unverified")
         } else {
-            None
+            Some("transparency-disabled")
         };
-        let background_alpha = if reason.is_some() {
-            1.0
-        } else {
-            1.0 - f64::from(self.background_transparency_percent) / 100.0
-        };
+        // Preserve the requested percentage, but keep every painted surface opaque.
+        let background_alpha = 1.0;
         let overrides = if dark {
             &self.palettes.dark
         } else {
@@ -596,10 +638,7 @@ impl WidgetAppearance {
         } else {
             &palette["border"]
         };
-        let frame_border = if !dark
-            && !high_contrast
-            && self.preset_id.is_some_and(|id| id != PresetId::Original)
-        {
+        let frame_border = if !self.show_border && !high_contrast {
             "transparent".into()
         } else if dark && (self.preset_id.is_none() || self.preset_id == Some(PresetId::Original)) {
             frame_base.clone()

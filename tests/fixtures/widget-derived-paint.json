@@ -55,7 +55,7 @@
     "id": "graphite",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#9EAAB8",
     "divider": "#718296",
     "quotaText": {
       "fiveHour": "#376D9C",
@@ -70,7 +70,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#9EAAB8",
     "divider": "#718296",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -107,7 +107,7 @@
     "id": "glacier",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#90AFBF",
     "divider": "#60889D",
     "quotaText": {
       "fiveHour": "#006BC0",
@@ -122,7 +122,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#90AFBF",
     "divider": "#60889D",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -159,7 +159,7 @@
     "id": "matcha",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#A4B091",
     "divider": "#7B8B64",
     "quotaText": {
       "fiveHour": "#237332",
@@ -174,7 +174,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#A4B091",
     "divider": "#7B8B64",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -211,7 +211,7 @@
     "id": "rosewood",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#C7A0AF",
     "divider": "#AA788C",
     "quotaText": {
       "fiveHour": "#A51F45",
@@ -226,7 +226,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#C7A0AF",
     "divider": "#AA788C",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -263,7 +263,7 @@
     "id": "terracotta",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#BFA991",
     "divider": "#9F8367",
     "quotaText": {
       "fiveHour": "#B04400",
@@ -278,7 +278,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#BFA991",
     "divider": "#9F8367",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -315,7 +315,7 @@
     "id": "sapphire",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#9BADC9",
     "divider": "#7188AC",
     "quotaText": {
       "fiveHour": "#064DC5",
@@ -330,7 +330,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#9BADC9",
     "divider": "#7188AC",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -367,7 +367,7 @@
     "id": "sunrise",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#C8AC94",
     "divider": "#AB8668",
     "quotaText": {
       "fiveHour": "#AC4C00",
@@ -382,7 +382,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#C8AC94",
     "divider": "#AB8668",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -419,7 +419,7 @@
     "id": "mint",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#96B9AE",
     "divider": "#6B9689",
     "quotaText": {
       "fiveHour": "#00766D",
@@ -434,7 +434,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#96B9AE",
     "divider": "#6B9689",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -471,7 +471,7 @@
     "id": "orchid",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#B6A3C6",
     "divider": "#947CA7",
     "quotaText": {
       "fiveHour": "#7134B5",
@@ -486,7 +486,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#B6A3C6",
     "divider": "#947CA7",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -523,7 +523,7 @@
     "id": "slate",
     "theme": "light",
     "name": "defaults",
-    "frameBorder": "transparent",
+    "frameBorder": "#A0ADBF",
     "divider": "#7688A0",
     "quotaText": {
       "fiveHour": "#34516D",
@@ -538,7 +538,7 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     },
-    "frameBorder": "transparent",
+    "frameBorder": "#A0ADBF",
     "divider": "#7688A0",
     "quotaText": {
       "fiveHour": "#826A0B",
@@ -570,5 +570,269 @@
       "fiveHour": "#FACC15",
       "weekly": "#F97316"
     }
+  },
+  {
+    "id": "original",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#CBD5E1",
+    "quotaText": {
+      "fiveHour": "#005FCC",
+      "weekly": "#6D28D9"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "original",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#334B6B",
+    "quotaText": {
+      "fiveHour": "#60A5FA",
+      "weekly": "#A78BFA"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "graphite",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#718296",
+    "quotaText": {
+      "fiveHour": "#376D9C",
+      "weekly": "#A63E19"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "graphite",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#91A7BA",
+    "quotaText": {
+      "fiveHour": "#70B8F5",
+      "weekly": "#FFB05C"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "glacier",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#60889D",
+    "quotaText": {
+      "fiveHour": "#006BC0",
+      "weekly": "#6D28D9"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "glacier",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#84ACC4",
+    "quotaText": {
+      "fiveHour": "#57D7FF",
+      "weekly": "#C18BFF"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "matcha",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#7B8B64",
+    "quotaText": {
+      "fiveHour": "#237332",
+      "weekly": "#8F6100"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "matcha",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#9CB28C",
+    "quotaText": {
+      "fiveHour": "#A0E183",
+      "weekly": "#F1D35C"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "rosewood",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#AA788C",
+    "quotaText": {
+      "fiveHour": "#A51F45",
+      "weekly": "#752BC5"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "rosewood",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#C28DA6",
+    "quotaText": {
+      "fiveHour": "#FF8FAB",
+      "weekly": "#CFACFF"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "terracotta",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#9F8367",
+    "quotaText": {
+      "fiveHour": "#B04400",
+      "weekly": "#007680"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "terracotta",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#BDA07A",
+    "quotaText": {
+      "fiveHour": "#FFB459",
+      "weekly": "#63E2E2"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "sapphire",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#7188AC",
+    "quotaText": {
+      "fiveHour": "#064DC5",
+      "weekly": "#6423D5"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "sapphire",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#88A8D3",
+    "quotaText": {
+      "fiveHour": "#70B8FF",
+      "weekly": "#CB9BFF"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "sunrise",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#AB8668",
+    "quotaText": {
+      "fiveHour": "#AC4C00",
+      "weekly": "#B11B55"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "sunrise",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#C0A17C",
+    "quotaText": {
+      "fiveHour": "#FFBA66",
+      "weekly": "#FF88B5"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "mint",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#6B9689",
+    "quotaText": {
+      "fiveHour": "#00766D",
+      "weekly": "#00728E"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "mint",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#82BDAE",
+    "quotaText": {
+      "fiveHour": "#78F2CC",
+      "weekly": "#55E5FA"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "orchid",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#947CA7",
+    "quotaText": {
+      "fiveHour": "#7134B5",
+      "weekly": "#A2259D"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "orchid",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#B19AC8",
+    "quotaText": {
+      "fiveHour": "#CFACFF",
+      "weekly": "#F98EEB"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "slate",
+    "theme": "light",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#7688A0",
+    "quotaText": {
+      "fiveHour": "#34516D",
+      "weekly": "#195CC4"
+    },
+    "showBorder": false
+  },
+  {
+    "id": "slate",
+    "theme": "dark",
+    "name": "border-off",
+    "frameBorder": "transparent",
+    "divider": "#93A9BA",
+    "quotaText": {
+      "fiveHour": "#A0DBFF",
+      "weekly": "#80BBFF"
+    },
+    "showBorder": false
   }
 ]
