@@ -283,7 +283,7 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .stable-compact .brand-mark.small { width:1.5rem; height:1.5rem; }
 .stable-compact .status-warning { flex:none; width:.95rem; height:.95rem; }
 .native-surface.shell.stable-compact.mode-screen-edge { padding-top:.375rem; padding-bottom:.75rem; }
-.native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; }
+.native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; padding-right:.625rem; }
 .stable-compact.mode-screen-edge { gap:.25rem; }
 .stable-compact .edge-values { flex:1; min-height:0; width:100%; justify-content:center; gap:.3125rem; }
 .stable-compact .edge-value { width:100%; min-width:0; gap:.1875rem; }

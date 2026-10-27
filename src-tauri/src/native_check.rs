@@ -361,7 +361,8 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                                 } else {
                                     200.0
                                 }
-                            }) + 58.0 * f64::from(count),
+                            }) + 4.0
+                                + 58.0 * f64::from(count),
                             38.0,
                         )),
                         _ => None,

@@ -1,6 +1,12 @@
 # Layout polish implementation and evidence
 
-Updated: 2026-10-24. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
+Updated: 2026-10-27. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
+
+## HUD additional right-side room — 2026-10-27
+
+Applied the selected **+4 logical px** preview to the HUD. Right padding increases from 6 to 10 logical px at default text size; every HUD client width increases by 4 logical px so the existing content area, label/quota columns, countdowns, and segmented indicators retain their positions. The extra space scales with text size. Both-period base widths are now 204 px (Words) / 168 px (Badges); single-period bases are 124 / 106 px. Countdown and warning increments stay 58 / 20 px, and height stays 38 px. Screen Edge, Floating, previews, snap gap, border preference, and saved settings are unchanged. Existing layout expectations were updated to the new width contract.
+
+Validation: `npm.cmd run build` (including TypeScript), `npm.cmd run rust:fmt`, `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol`, and `git diff --check` passed. Rebuilt `src-tauri/target/release/codex-usage-widget.exe`. The existing Tauri CLI native-binding limitation is avoided with the established Cargo build. Per user request, no test suites or native runtime/stress matrix were run; updated test expectations were not executed. Actual desktop appearance/DPI checks remain manual.
 
 ## Grouped period controls in Settings — 2026-10-24
 
