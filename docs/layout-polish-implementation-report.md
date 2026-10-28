@@ -2,6 +2,12 @@
 
 Updated: 2026-10-28. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
 
+## Edge segmented indicator width — 2026-10-28
+
+Changed the Edge reset strip from **38 px to 40 logical px** (`2.375rem` → `2.5rem`) at default text size. It remains centered; the ten segments, segment gap, ring/text sizes, spacing and outer widget dimensions are unchanged. The canonical design specification now records the 40 px width. Historical previews and captures retain their prior width.
+
+Validation: `npm.cmd run build` passed, including TypeScript and production bundling. `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` passed using the established Tauri CLI fallback and rebuilt `src-tauri/target/release/codex-usage-widget.exe`. `git diff --check` passed. Per user request, no test suites, browser validation or native runtime checks were run. The executable was not launched or installed; no installer was rebuilt.
+
 ## Confirmed Balanced Edge implementation — 2026-10-28
 
 Applied the user's confirmed Balanced profile with revised top spacing and the additional 4 px bottom gap. Edge rings are **48 px**, percentage text **12.5 px**, and countdown text **11.5 px**. The quota stack sits 2.5 logical px lower; horizontal padding is 2 px and bottom padding is 16 px. Width remains **54 px**. Every Edge layout gains 4 px height: both-period bases are 190 px Words / 150 px Badges, single-period bases 120 / 100 px, plus the existing 24 px per visible countdown and 18 px per warning. Both periods with both countdowns therefore use **54 × 238 px Words / 54 × 198 px Badges**. Sizes scale with Windows text settings. HUD, Floating, tray, saved preferences, IPC and dependencies are unchanged.
