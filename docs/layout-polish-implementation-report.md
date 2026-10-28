@@ -2,6 +2,12 @@
 
 Updated: 2026-10-28. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
 
+## Edge A · Subtle reference — 2026-10-28
+
+Applied the user's selected **A · Subtle reference** sizes: **46 logical px ring**, **11.5 px percentage text**, and **11 px remaining-time text** at default text scaling. The Edge CSS uses `2.875rem`, `.71875rem`, and `.6875rem` respectively. Existing outer dimensions (54 px width), revised spacing, 42 px reset strips, configurable bar counts and warning placement are retained. HUD is unchanged. Version remains **0.1.3**. The design specification and unreleased notes now describe Subtle as the current profile; earlier Balanced records remain historical.
+
+Validation, limited as requested: `npm.cmd run build` passed, including TypeScript checking and production bundling. `cargo build --manifest-path src-tauri/Cargo.toml --release --locked --bin Usage --features tauri/custom-protocol` passed and updated **src-tauri/target/release/Usage.exe** (13,675,008 bytes, product version 0.1.3). `git diff --check` passed. No test suites, image/browser checks, native UI checks, executable launch or installer build were run. The direct Cargo build uses the established fallback for the installed Tauri CLI binding issue recorded below.
+
 ## Independent reset-bar counts and Usage.exe — 2026-10-28
 
 Display settings now provide four independent **Remaining-time bars** selectors: Screen Edge five-hour/weekly and Compact HUD five-hour/weekly. Each accepts **2–12** whole bars and defaults to **10**, including existing configurations. Hidden periods and disabled countdowns disable the associated selector while retaining its count. Save applies edits and Cancel restores the saved choices. Bar-count drafts do not participate in temporary appearance previews.

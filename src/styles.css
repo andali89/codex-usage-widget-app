@@ -287,12 +287,12 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; padding-right:.625rem; }
 .stable-compact.mode-screen-edge { gap:.25rem; }
 .stable-compact .edge-values { flex:1; min-height:0; width:100%; justify-content:center; gap:.3125rem; }
-/* Keep the selected Balanced profile's small gap below the brand mark. */
+/* Keep the existing small gap below the brand mark. */
 .mode-screen-edge .edge-values { transform:translateY(.15625rem); }
 /* Use the lower padding to clear the last reset strip and its stale outline. */
 .mode-screen-edge .status-warning { transform:translateY(.625rem); }
-.mode-screen-edge .quota-ring { width:3rem; height:3rem; flex:none; }
-.mode-screen-edge .ring-reading>strong { font-size:.78125rem; }
+.mode-screen-edge .quota-ring { width:2.875rem; height:2.875rem; flex:none; }
+.mode-screen-edge .ring-reading>strong { font-size:.71875rem; }
 .stable-compact .edge-value { width:100%; min-width:0; gap:.1875rem; }
 .stable-compact .edge-value+.edge-value { padding-top:.3125rem; }
 .stable-compact .edge-value>.reset-indicator { margin-top:-.125rem; }
@@ -303,7 +303,7 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .stable-compact .reset-segments { height:.4375rem; gap:.125rem; }
 .stable-compact .reset-segments i { width:.1875rem; border-radius:.125rem; }
 .mode-screen-edge .reset-indicator { width:100%; }
-.mode-screen-edge .reset-countdown { width:3rem; justify-content:center; gap:0; font-size:.71875rem; line-height:1.1; letter-spacing:-.02em; }
+.mode-screen-edge .reset-countdown { width:3rem; justify-content:center; gap:0; font-size:.6875rem; line-height:1.1; letter-spacing:-.02em; }
 .mode-screen-edge .reset-countdown .icon { display:none; }
 .mode-screen-edge .reset-segments { display:grid; grid-template-columns:repeat(var(--reset-segment-count,10),minmax(0,1fr)); width:2.625rem; gap:.1rem; }
 .mode-screen-edge .reset-segments i, .mode-compact-hud .reset-segments i { width:auto; }
