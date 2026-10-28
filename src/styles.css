@@ -282,10 +282,14 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .native-surface.shell.stable-compact { width:var(--compact-width); height:var(--compact-height); padding:.25rem; gap:.25rem; flex:none; }
 .stable-compact .brand-mark.small { width:1.5rem; height:1.5rem; }
 .stable-compact .status-warning { flex:none; width:.95rem; height:.95rem; }
-.native-surface.shell.stable-compact.mode-screen-edge { padding-top:.375rem; padding-bottom:.75rem; }
+.native-surface.shell.stable-compact.mode-screen-edge { padding-inline:.125rem; padding-top:.375rem; padding-bottom:1rem; }
 .native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; padding-right:.625rem; }
 .stable-compact.mode-screen-edge { gap:.25rem; }
 .stable-compact .edge-values { flex:1; min-height:0; width:100%; justify-content:center; gap:.3125rem; }
+/* Keep the selected Balanced profile's small gap below the brand mark. */
+.mode-screen-edge .edge-values { transform:translateY(.15625rem); }
+.mode-screen-edge .quota-ring { width:3rem; height:3rem; flex:none; }
+.mode-screen-edge .ring-reading>strong { font-size:.78125rem; }
 .stable-compact .edge-value { width:100%; min-width:0; gap:.1875rem; }
 .stable-compact .edge-value+.edge-value { padding-top:.3125rem; }
 .stable-compact .edge-value>.reset-indicator { margin-top:-.125rem; }
@@ -295,8 +299,8 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .reset-time { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .stable-compact .reset-segments { height:.4375rem; gap:.125rem; }
 .stable-compact .reset-segments i { width:.1875rem; border-radius:.125rem; }
-.mode-screen-edge .reset-indicator { width:2.75rem; }
-.mode-screen-edge .reset-countdown { width:2.75rem; justify-content:center; gap:0; font-size:.625rem; }
+.mode-screen-edge .reset-indicator { width:100%; }
+.mode-screen-edge .reset-countdown { width:3rem; justify-content:center; gap:0; font-size:.71875rem; line-height:1.1; letter-spacing:-.02em; }
 .mode-screen-edge .reset-countdown .icon { display:none; }
 .mode-screen-edge .reset-segments { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); width:2.375rem; gap:.1rem; }
 .mode-screen-edge .reset-segments i { width:auto; }

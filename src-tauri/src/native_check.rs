@@ -336,15 +336,15 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                             54.0,
                             (if label_style == QuotaLabelStyle::Words {
                                 if single {
-                                    116.0
+                                    120.0
                                 } else {
-                                    186.0
+                                    190.0
                                 }
                             } else {
                                 if single {
-                                    96.0
+                                    100.0
                                 } else {
-                                    146.0
+                                    150.0
                                 }
                             }) + 24.0 * f64::from(count),
                         )),

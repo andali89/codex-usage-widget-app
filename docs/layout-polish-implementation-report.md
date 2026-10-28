@@ -1,6 +1,47 @@
 # Layout polish implementation and evidence
 
-Updated: 2026-10-27. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
+Updated: 2026-10-28. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
+
+## Confirmed Balanced Edge implementation — 2026-10-28
+
+Applied the user's confirmed Balanced profile with revised top spacing and the additional 4 px bottom gap. Edge rings are **48 px**, percentage text **12.5 px**, and countdown text **11.5 px**. The quota stack sits 2.5 logical px lower; horizontal padding is 2 px and bottom padding is 16 px. Width remains **54 px**. Every Edge layout gains 4 px height: both-period bases are 190 px Words / 150 px Badges, single-period bases 120 / 100 px, plus the existing 24 px per visible countdown and 18 px per warning. Both periods with both countdowns therefore use **54 × 238 px Words / 54 × 198 px Badges**. Sizes scale with Windows text settings. HUD, Floating, tray, saved preferences, IPC and dependencies are unchanged.
+
+Production CSS and `compactLayout` implement the profile; existing frontend layout expectations and the native sizing check's Edge constants match the new dimensions. The canonical design specification is aligned. Historical preview files below remain selection records and were not regenerated after the production change.
+
+Validation:
+
+- `npm.cmd run build`: passed, including TypeScript and production bundling. `npm.cmd test`: **143 passed**.
+- `npm.cmd run rust:fmt` and `npm.cmd run rust:check`: passed. The latter emitted only incremental-cache hard-link warnings and used file copies.
+- `npm.cmd run desktop:build`: blocked by the existing Tauri CLI native-binding load error. The established fallback, `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol`, passed and rebuilt `src-tauri/target/release/codex-usage-widget.exe` (13,681,664 bytes) with the final frontend. No tooling was reinstalled and no installer was built.
+- Browser layout checks using production `WidgetContents`, `compactLayout` and bundled CSS passed **256 presentations**: 16 effective label/period/countdown profiles × Light/Dark × 100/200% text scale × fresh/retained-long/unavailable/fractional-due readings. Dimensions, ring diameter, brand separation, root overflow, countdown clipping, and ring/reset/warning containment passed. The confirmed two-period layout matched all measured positions and sizes of 11 elements per label style in the accepted preview, within 0.05 px. [Production rendering](assets/edge-sizing-preview/implemented-edge.jpg) shows both label styles at 200% text scale with synthetic data.
+- `git diff --check`, documentation links and snapshot inline-script syntax passed. Validation HTML and its generator live under `src-tauri/target/validation/edge-balanced-validation.html` and `generate-edge-balanced-validation.mjs`; the temporary loopback server was stopped.
+
+Windows native pointer/focus, docking, mixed DPI, OS high contrast, and notification behavior were not exercised in this increment; browser text scaling is not native DPI validation. Rust behavioral tests and native stress checks were not run because native runtime logic did not change; only native validation expectations changed. The rebuilt executable was not launched or installed.
+
+## Edge ring and text sizing selection record — 2026-10-28
+
+**Historical previews; the final bottom-gap version is now implemented above.** The preview phase changed no application source, saved settings, or native executable. The [standalone comparison](edge-sizing-comparison.html) renders the then-current `CompactQuotaReadings`, branding, Original appearance, and compiled CSS with candidate-only overrides. It opens locally without a server or external resources. Controls switch Light/Dark, 1×/2× magnification, and four synthetic reading scenarios; Words and Badges appear together.
+
+Latest refinement: the comparison now shows A as a spacing reference, original B, and revised B. Revised B translates the quota stack down **2.5 logical px**, restoring the small gap below the logo without changing B's 48 px rings, 12.5 px percentages, 11.5 px countdowns, or outer dimensions. The measured logo-to-first-ring gap is 2.35 px for Badges / 22.35 px including the label for Words, within 0.06 px of A. Existing internal ring-to-countdown gaps remain intact. The [revised Dark](assets/edge-sizing-preview/balanced-spacing-dark.jpg) and [revised Light](assets/edge-sizing-preview/balanced-spacing-light.jpg) captures show the comparison at 2×.
+
+Refinement validation: generation passed with `node docs/assets/edge-sizing-preview/generate.mjs`. Browser checks passed all **32 revised-B presentations** (Words/Badges × Light/Dark × 1×/2× magnification × four reading scenarios), checking 54 px width, 234/194 px height, 48 px ring diameter, root overflow, countdown clipping, brand overlap, and ring/reset containment. No application builds or native runtime checks were run; the temporary loopback preview server was stopped. `node --check docs/assets/edge-sizing-preview/generate.mjs`, generated inline-script syntax, local documentation links, and `git diff --check` also passed.
+
+Bottom spacing follow-up: a separate [bottom-gap preview](edge-bottom-gap-preview.html), derived from the revised-B standalone HTML, adds **4 logical px** between the last segmented indicator and the outer bottom border. Its preview-only bottom padding and shell height both increase by 4 px, so the complete content retains its prior position. Width stays 54 px; Words height is 238 px and Badges height is 198 px. Existing application files and the preview generator were not edited. [Dark](assets/edge-sizing-preview/bottom-gap-dark.jpg) and [Light](assets/edge-sizing-preview/bottom-gap-light.jpg) captures compare the prior and proposed spacing at 2×.
+
+Bottom-gap validation: all **32 before/after comparisons** passed across both label styles, themes, magnifications and four reading scenarios. Each showed exactly +4 px height and bottom gap, unchanged content positions and sizes, no root overflow, and no clipped countdowns. Generated inline-script syntax, local documentation links, and `git diff --check` passed; `git diff -- src src-tauri` remained empty. No application builds or native checks were run. The temporary preview server was stopped.
+
+Initial sizing candidates (retained here as the selection record):
+
+| Candidate | Ring diameter | Percentage font | Countdown font |
+| --- | ---: | ---: | ---: |
+| Current | 44 px | 10.4 px | 10 px |
+| A — Subtle | 46 px | 11.5 px | 11 px |
+| B — Balanced | 48 px | 12.5 px | 11.5 px |
+| C — Largest | 50 px | 13.5 px | 12 px |
+
+All sizes are logical pixels at default text scale. Each preview retains the current **54 × 234 px Words / 54 × 194 px Badges** rectangle with both periods/countdowns enabled. Candidates reduce horizontal padding, center reset indicators in the available width, and use 1.1 countdown line height with −.02em letter spacing to fit `~23h59m`. C additionally uses 8 px bottom padding and 2/4 px internal gaps. Warning icons and their existing height allowance are omitted from these size comparisons; other period/countdown configurations and Windows runtime behavior remain unverified for the candidates.
+
+Generation: `node docs/assets/edge-sizing-preview/generate.mjs` passed using installed Vite/React; it compiles the production CSS and renders actual components to static markup. No dependencies were added. Browser validation passed **128 widget presentations**: Current/A/B/C × Words/Badges × Light/Dark × 1×/2× preview magnification × typical/long-retained/fractional-due/unavailable readings. All retained the expected outer dimensions, with no horizontal/vertical root overflow, clipped countdown, brand/content overlap, or ring/reset bounds outside the shell. Preview magnification is not a Windows DPI/text-scaling test. Final brand-image loading was checked after deduplicating the embedded image. The [Dark](assets/edge-sizing-preview/candidates-dark.jpg) and [Light](assets/edge-sizing-preview/candidates-light.jpg) captures show typical values at 2×. A temporary loopback server was used for browser validation and stopped afterward. Application builds, Rust checks, and native runtime checks were not needed or run for this preview-only increment.
 
 ## HUD additional right-side room — 2026-10-27
 

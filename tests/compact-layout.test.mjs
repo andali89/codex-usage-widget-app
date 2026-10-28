@@ -8,7 +8,7 @@ test("normal compact readings keep their footprint, with space added only for a 
     for (const fiveHour of [false, true]) for (const weekly of [false, true]) {
       const resets = {fiveHour, weekly}, count = Number(fiveHour) + Number(weekly);
       for (const warning of [false,true]) {
-        assert.deepEqual(compactLayout("screen-edge", style, resets,warning), {width: 54, height: (style === "badges" ? 146 : 186) + count * 24 + (warning ? 18 : 0)});
+        assert.deepEqual(compactLayout("screen-edge", style, resets,warning), {width: 54, height: (style === "badges" ? 150 : 190) + count * 24 + (warning ? 18 : 0)});
         assert.deepEqual(compactLayout("compact-hud", style, resets,warning), {width:(style === "badges" ? 168 : 204) + count * 58 + (warning ? 20 : 0), height:38});
       }
     }
