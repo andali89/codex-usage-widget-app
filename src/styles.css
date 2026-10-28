@@ -300,6 +300,9 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .stable-compact .reset-countdown { max-width:100%; gap:.25rem; }
 .stable-compact .reset-countdown .icon { flex:none; }
 .reset-time { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.native-surface.shell:is(.mode-screen-edge,.mode-compact-hud)[data-countdown-bold=true] .reset-countdown { font-weight:700; }
+.native-surface.shell:is(.mode-screen-edge,.mode-compact-hud)[data-countdown-contrast=true] .reset-countdown { color:var(--text); }
+.widget-size-option { margin-top:1rem; }
 .stable-compact .reset-segments { height:.4375rem; gap:.125rem; }
 .stable-compact .reset-segments i { width:.1875rem; border-radius:.125rem; }
 .mode-screen-edge .reset-indicator { width:100%; }

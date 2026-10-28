@@ -716,9 +716,20 @@ impl Windows {
                     if crate::native_check::presentation_requested() {
                         println!("native-check ready source={source:?} generation={generation} current={} width={width} height={height}",self.interaction.state.generation);
                     }
+                    // The widest current HUD at 225% text and 300% widget scale is <2400px.
+                    // Retain existing limits for every other surface.
+                    let max_width = if source == Surface::Shell
+                        && matches!(
+                            settings.mode,
+                            DisplayMode::ScreenEdge | DisplayMode::CompactHud
+                        ) {
+                        3000.0
+                    } else {
+                        2000.0
+                    };
                     if width.is_finite()
                         && height.is_finite()
-                        && (16.0..=2000.0).contains(&width)
+                        && (16.0..=max_width).contains(&width)
                         && (16.0..=4000.0).contains(&height)
                     {
                         match source {
@@ -1217,6 +1228,7 @@ impl Windows {
         service: &Service,
         focus: Option<Surface>,
         shadow: bool,
+        widget_scale: f64,
     ) -> Result<(), &'static str> {
         if settings.mode == DisplayMode::SystemTray {
             self.gap_constraints = geometry::GapConstraints::default();
@@ -1363,7 +1375,7 @@ impl Windows {
                         DisplayMode::ScreenEdge => 16.0,
                         DisplayMode::CompactHud => 12.0,
                         _ => 14.0,
-                    },
+                    } * widget_scale,
                 )?;
                 if self.interaction.compact_visible() && self.ready_shell.is_some() {
                     native::show_without_activation(&shell)?;

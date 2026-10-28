@@ -53,7 +53,7 @@ export interface AppState {
   dashboardRequest:{sequence:number;page:"overview"|"settings"}|null;
   firstLaunch:boolean;
   appearance: {
-    widget: EffectiveWidgetAppearance; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
+    compactMonitorBudgets?:Record<string,import("./compactSizing").MonitorBudget>; compactSizing:Partial<Record<"screen-edge"|"compact-hud",import("./compactSizing").ScaleState>>; widget: EffectiveWidgetAppearance; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
     themePreference: ThemePreference; resolvedTheme: "light" | "dark";
     highContrast: boolean; transparencyAllowed: boolean; reducedMotion: boolean; textScale: number;
   };

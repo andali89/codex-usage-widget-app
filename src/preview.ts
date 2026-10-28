@@ -1,4 +1,5 @@
 import { defaultWidgetAppearance, resolveWidgetAppearance } from "./widgetAppearance";
+import { fittingScale, scaleKey } from "./compactSizing";
 // This separate Vite development entry is never imported by the production application.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
@@ -14,8 +15,8 @@ const dark = query.get("theme") === "dark";
 const scenario = query.get("scenario") ?? "fresh";
 const state: AppState = {
   processEpoch: "synthetic-fixture", revision: 1, dashboardRequest:null, firstLaunch:query.has("welcome"),
-  settings: { schemaVersion: 11, widgetAppearance:defaultWidgetAppearance(), autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { snapGapLogicalPx:8,snapAnchors:{}, hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, resetSegmentCounts:{}, visiblePeriods:{} }, reminders:defaultReminders() },
-  appearance: { widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
+  settings: { schemaVersion: 12, widgetAppearance:defaultWidgetAppearance(), autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { snapGapLogicalPx:8,snapAnchors:{}, hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, resetSegmentCounts:{}, visiblePeriods:{} }, reminders:defaultReminders() },
+  appearance: { compactSizing:{}, widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
   usage: {
     accountContextKey: "synthetic-only", connectionGeneration: 1, selectedLimitId: "codex",
     windows: [
@@ -56,6 +57,22 @@ if (query.has("credits")) {
 if (["max-width", "long-reset"].includes(scenario)) state.usage.windows.forEach(window => { window.remainingPercent=99.9; window.usedPercent=0.1; window.resetsAtMs=at + (window.durationMinutes === 300 ? 17940000 : 602000000); window.lastKnown=true; });
 if (scenario === "long-reset") state.usage.windows[1].resetsAtMs = at + 86340000;
 mockWindows(query.get("surface") === "shell" ? "shell" : query.get("surface") === "preview" ? "preview" : "main");
+const fixtureSizing=(appearance:Settings["widgetAppearance"])=>{
+  const draft={...state.settings,widgetAppearance:appearance};
+  for(const mode of ["screen-edge","compact-hud"] as const) {
+    const requestedPercent=appearance[scaleKey(mode)],budget={requestedPercent,effectivePercent:requestedPercent,maxPercent:300,availableWidth:1920,availableHeight:1080,fallbackReason:null as string|null};
+    budget.maxPercent=fittingScale(draft,mode,budget,state.appearance.textScale);
+    if(requestedPercent>budget.maxPercent){budget.effectivePercent=Math.min(requestedPercent,100);budget.fallbackReason="screen-too-small";}
+    state.appearance.compactSizing[mode]=budget;
+  }
+};
+for(const [key,param] of [["edgeScalePercent","edgeSize"],["hudScalePercent","hudSize"]] as const) {
+  const percent=Number(query.get(param));if(Number.isInteger(percent)&&percent>=80&&percent<=300)state.settings.widgetAppearance[key]=percent;
+}
+state.settings.widgetAppearance.compactCountdownBold=query.has("boldCountdown");
+state.settings.widgetAppearance.compactCountdownHighContrast=query.has("contrastCountdown");
+state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,false);
+fixtureSizing(state.settings.widgetAppearance);
 const actionHistory: string[] = [];
 let displayPreview:{session:string;sequence:number}|null=null;
 const fixturePaint=(theme:Settings["themePreference"],appearance:Settings["widgetAppearance"],gap:number)=>{
@@ -63,6 +80,7 @@ const fixturePaint=(theme:Settings["themePreference"],appearance:Settings["widge
   state.appearance.resolvedTheme=theme==="system"?(dark?"dark":"light"):theme;
   state.appearance.widget=resolveWidgetAppearance(appearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
   state.appearance.placementConstraints.margins=[gap,gap,gap,gap];
+  fixtureSizing(appearance);
 };
 const fixturePublish=async()=>{state.revision++;await emit("widget-state",structuredClone(state));return structuredClone(state);};
 mockIPC(async (name, payload) => {
@@ -93,6 +111,7 @@ mockIPC(async (name, payload) => {
     state.appearance.themePreference = state.settings.themePreference;
     state.appearance.resolvedTheme = state.settings.themePreference === "system" ? dark ? "dark" : "light" : state.settings.themePreference;
     state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
+    fixtureSizing(state.settings.widgetAppearance);
     state.revision++;
     await emit("widget-state", structuredClone(state));
     return structuredClone(state);

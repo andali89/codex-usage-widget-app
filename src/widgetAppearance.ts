@@ -10,7 +10,7 @@ export type PaletteTheme = "light" | "dark";
 export type PresetId = keyof typeof presets;
 export const presetIds = Object.keys(presets) as PresetId[];
 export interface QuotaCustomization { enabled:boolean; fiveHour?:string; weekly?:string }
-export interface WidgetAppearanceSettings { showBorder:boolean; presetId?:PresetId|null; quotaCustomizations?:Partial<Record<PresetId,Partial<Record<PaletteTheme,QuotaCustomization>>>>; backgroundTransparencyPercent:number; colorMode:"theme-defaults"|"custom"; palettes:Record<PaletteTheme,Partial<Palette>> }
+export interface WidgetAppearanceSettings { showBorder:boolean; compactCountdownBold:boolean; compactCountdownHighContrast:boolean; edgeScalePercent:number; hudScalePercent:number; presetId?:PresetId|null; quotaCustomizations?:Partial<Record<PresetId,Partial<Record<PaletteTheme,QuotaCustomization>>>>; backgroundTransparencyPercent:number; colorMode:"theme-defaults"|"custom"; palettes:Record<PaletteTheme,Partial<Palette>> }
 export interface AppearanceIssue { field:string; message:string }
 export const colorRoleLabels:Record<ColorRole,string>={background:"Widget background",contentSurface:"Content surface",text:"Main text",secondaryText:"Secondary text",fiveHour:"5-hour quota",weekly:"Weekly quota",track:"Track",border:"Border and divider"};
 export interface AppearanceIssueGroup { field:string; label:string; message:string; details:string[] }
@@ -28,8 +28,8 @@ export function groupAppearanceIssues(issues:AppearanceIssue[]):AppearanceIssueG
 }
 export const summarizeAppearanceIssues=(issues:AppearanceIssue[])=>groupAppearanceIssues(issues).map(group=>`${group.label}: ${group.message}`).join(" ");
 
-export interface EffectiveWidgetAppearance { originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
-export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({showBorder:true,presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
+export interface EffectiveWidgetAppearance { compactCountdownBold:boolean; compactCountdownHighContrast:boolean; originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
+export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({showBorder:true,compactCountdownBold:false,compactCountdownHighContrast:false,edgeScalePercent:100,hudScalePercent:100,presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
 export const themePalette = (theme:PaletteTheme):Palette => ({...defaults[theme]});
 export const validHex = (value:string) => /^#[0-9a-f]{6}$/i.test(value);
 export function paletteFor(settings:WidgetAppearanceSettings, theme:PaletteTheme):Palette {
@@ -66,6 +66,8 @@ export function quotaPaint(palette:Palette,theme:PaletteTheme) {
 }
 function legacyIssues(settings:WidgetAppearanceSettings):AppearanceIssue[] {
   const issues:AppearanceIssue[]=[];
+  for(const key of ["compactCountdownBold","compactCountdownHighContrast"] as const) if(typeof settings[key]!=="boolean") issues.push({field:"widgetAppearance."+key,message:"Choose On or Off."});
+  for(const key of ["edgeScalePercent","hudScalePercent"] as const) if(!Number.isInteger(settings[key])||settings[key]<80||settings[key]>300) issues.push({field:"widgetAppearance."+key,message:"Use a whole percentage from 80 to 300."});
   if(!Number.isInteger(settings.backgroundTransparencyPercent)||settings.backgroundTransparencyPercent<0||settings.backgroundTransparencyPercent>80) issues.push({field:"widgetAppearance.backgroundTransparencyPercent",message:"Use a whole percentage from 0 to 80."});
   for(const theme of ["light","dark"] as const) {
     const base=themePalette(theme), overrides=settings.palettes[theme], palette={...base};
@@ -120,7 +122,7 @@ export function resolveWidgetAppearance(settings:WidgetAppearanceSettings, theme
   const frameBase=originalStructure?divider:palette.border;
   const frameBorder=!settings.showBorder&&!highContrast?"transparent":theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
   const quota=quotaPaint(palette,theme);
-  return {frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
+  return {compactCountdownBold:settings.compactCountdownBold,compactCountdownHighContrast:settings.compactCountdownHighContrast,frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
 }
 export function widgetStyle(effective:EffectiveWidgetAppearance, _shell=true):CSSProperties {
   const p=effective.palette;

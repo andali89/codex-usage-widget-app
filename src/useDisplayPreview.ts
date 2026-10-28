@@ -15,8 +15,8 @@ interface Session {
   timer:ReturnType<typeof setTimeout>|null;
   lastValid?:PreviewPatch;
 }
-function patchFor(session:Session,draft:Settings,freezePopup:boolean):PreviewPatch|undefined {
-  if(widgetDraftIssues(draft).length) {
+function patchFor(session:Session,draft:Settings,freezePopup:boolean,state:AppState):PreviewPatch|undefined {
+  if(widgetDraftIssues(draft,state).length) {
     // Release the popup even when a numeric field is temporarily incomplete.
     return session.lastValid?{...session.lastValid,freezePopup}:undefined;
   }
@@ -27,8 +27,8 @@ function patchFor(session:Session,draft:Settings,freezePopup:boolean):PreviewPat
 export function useDisplayPreview(state:AppState,draft:Settings,baseRevision:number,active:boolean,saving:boolean,freezePopup:boolean) {
   const session=useRef<Session|null>(null);
   const retiring=useRef<Promise<unknown>>(Promise.resolve());
-  const latest=useRef({draft,saving,freezePopup});
-  latest.current={draft,saving,freezePopup};
+  const latest=useRef({draft,saving,freezePopup,state});
+  latest.current={draft,saving,freezePopup,state};
   const [cycle,setCycle]=useState(0),[error,setError]=useState("");
   const end=async()=>{
     const current=session.current;
@@ -50,7 +50,7 @@ export function useDisplayPreview(state:AppState,draft:Settings,baseRevision:num
     current.queue=retiring.current.then(()=>{if(!current.stopped)return command("begin_display_preview",{session:current.owner,expectedRevision:baseRevision});});
     current.queue=current.queue.then(async()=>{
       if(current.stopped||latest.current.saving)return;
-      const patch=patchFor(current,latest.current.draft,latest.current.freezePopup);
+      const patch=patchFor(current,latest.current.draft,latest.current.freezePopup,latest.current.state);
       if(patch)await command("update_display_preview",{session:current.owner,sequence:++current.sequence,patch});
     }).catch(error=>{if(!current.stopped)setError(String(error));});
     const heartbeat=window.setInterval(()=>{
@@ -68,7 +68,7 @@ export function useDisplayPreview(state:AppState,draft:Settings,baseRevision:num
       if(session.current===current)void end().catch(()=>{});
     };
   },[active,baseRevision,state.settings.revision,cycle]);
-  const signature=JSON.stringify([draft.themePreference,draft.widgetAppearance,draft.windows.snapGapLogicalPx,freezePopup]);
+  const signature=JSON.stringify([draft.themePreference,draft.widgetAppearance,draft.windows.snapGapLogicalPx,freezePopup,state.appearance.compactSizing,state.appearance.compactMonitorBudgets]);
   useEffect(()=>{
     const current=session.current;
     if(!current)return;
@@ -83,7 +83,7 @@ export function useDisplayPreview(state:AppState,draft:Settings,baseRevision:num
       current.timer=null;
       current.queue=current.queue.catch(()=>{}).then(async()=>{
         if(current.stopped||latest.current.saving)return;
-        const patch=patchFor(current,latest.current.draft,latest.current.freezePopup);
+        const patch=patchFor(current,latest.current.draft,latest.current.freezePopup,latest.current.state);
         if(patch)await command("update_display_preview",{session:current.owner,sequence:++current.sequence,patch});
       }).catch(error=>{if(!current.stopped)setError(String(error));});
     },freezePopup?60:0);

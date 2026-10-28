@@ -90,6 +90,10 @@ mod tests {
         Patch {
             theme_preference: ThemePreference::Dark,
             widget_appearance: WidgetAppearance {
+                compact_countdown_bold: true,
+                compact_countdown_high_contrast: true,
+                edge_scale_percent: 80,
+                hud_scale_percent: 137,
                 show_border: false,
                 background_transparency_percent: 80,
                 ..Default::default()
@@ -123,6 +127,13 @@ mod tests {
         assert_eq!(saved.windows.snap_gap_logical_px, 8);
         assert!(!effective.widget_appearance.show_border);
         assert!(saved.widget_appearance.show_border);
+        assert_eq!(effective.widget_appearance.edge_scale_percent, 80);
+        assert_eq!(effective.widget_appearance.hud_scale_percent, 137);
+        assert!(effective.widget_appearance.compact_countdown_bold);
+        assert!(effective.widget_appearance.compact_countdown_high_contrast);
+        assert_eq!(saved.widget_appearance.edge_scale_percent, 100);
+        assert_eq!(saved.widget_appearance.hud_scale_percent, 100);
+        assert!(!saved.widget_appearance.compact_countdown_bold);
         assert_eq!(
             effective
                 .widget_appearance

@@ -92,6 +92,10 @@ pub fn preset_palette(id: PresetId, dark: bool) -> Palette {
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct WidgetAppearance {
     pub show_border: bool,
+    pub compact_countdown_bold: bool,
+    pub compact_countdown_high_contrast: bool,
+    pub edge_scale_percent: u16,
+    pub hud_scale_percent: u16,
     pub preset_id: Option<PresetId>,
     pub quota_customizations: BTreeMap<PresetId, QuotaThemes>,
     #[serde(deserialize_with = "deserialize_transparency")]
@@ -103,6 +107,10 @@ impl Default for WidgetAppearance {
     fn default() -> Self {
         Self {
             show_border: true,
+            compact_countdown_bold: false,
+            compact_countdown_high_contrast: false,
+            edge_scale_percent: 100,
+            hud_scale_percent: 100,
             preset_id: None,
             quota_customizations: BTreeMap::new(),
             background_transparency_percent: 0,
@@ -121,6 +129,49 @@ fn deserialize_transparency<'de, D: serde::Deserializer<'de>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn compact_options_default_and_validate_independently() {
+        let defaults: WidgetAppearance = serde_json::from_str("{}").unwrap();
+        assert!(!defaults.compact_countdown_bold);
+        assert!(!defaults.compact_countdown_high_contrast);
+        assert_eq!(defaults.edge_scale_percent, 100);
+        assert_eq!(defaults.hud_scale_percent, 100);
+        for value in [80, 100, 125, 137, 150, 200, 300] {
+            let settings = WidgetAppearance {
+                edge_scale_percent: value,
+                hud_scale_percent: 80,
+                compact_countdown_bold: true,
+                compact_countdown_high_contrast: true,
+                ..Default::default()
+            };
+            assert!(settings.issues().is_empty());
+            for dark in [false, true] {
+                for high_contrast in [false, true] {
+                    let resolved = settings.resolve(dark, high_contrast, true, true);
+                    assert!(resolved.compact_countdown_bold);
+                    assert!(resolved.compact_countdown_high_contrast);
+                }
+            }
+        }
+        for value in [0, 79, 301, 65535] {
+            let settings = WidgetAppearance {
+                edge_scale_percent: value,
+                ..Default::default()
+            };
+            assert!(settings
+                .issues()
+                .iter()
+                .any(|issue| issue.field.ends_with("edgeScalePercent")));
+        }
+        for value in [
+            serde_json::json!({"edgeScalePercent":80.5}),
+            serde_json::json!({"hudScalePercent":"150"}),
+            serde_json::json!({"compactCountdownBold":1}),
+            serde_json::json!({"compactCountdownHighContrast":null}),
+        ] {
+            assert!(serde_json::from_value::<WidgetAppearance>(value).is_err());
+        }
+    }
     #[test]
     fn shared_fixtures_validate_retained_maps_and_all_composite_backgrounds() {
         let fixtures: serde_json::Value =
@@ -304,6 +355,8 @@ pub struct Issue {
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectiveAppearance {
+    pub compact_countdown_bold: bool,
+    pub compact_countdown_high_contrast: bool,
     pub original_structure: bool,
     pub palette: Palette,
     pub divider: String,
@@ -527,10 +580,21 @@ impl WidgetAppearance {
         issues
     }
     pub fn issues(&self) -> Vec<Issue> {
-        if self.preset_id.is_none() {
-            return self.legacy_issues();
-        }
         let mut issues = self.legacy_issues();
+        for (key, value) in [
+            ("edgeScalePercent", self.edge_scale_percent),
+            ("hudScalePercent", self.hud_scale_percent),
+        ] {
+            if !(80..=300).contains(&value) {
+                issues.push(Issue {
+                    field: format!("widgetAppearance.{key}"),
+                    message: "Use a whole percentage from 80 to 300.".into(),
+                });
+            }
+        }
+        if self.preset_id.is_none() {
+            return issues;
+        }
         for id in [
             PresetId::Original,
             PresetId::Glacier,
@@ -647,6 +711,8 @@ impl WidgetAppearance {
         };
         let quota_text = quota_paint(&palette, dark);
         EffectiveAppearance {
+            compact_countdown_bold: self.compact_countdown_bold,
+            compact_countdown_high_contrast: self.compact_countdown_high_contrast,
             frame_border,
             quota_text,
             original_structure: self.preset_id == Some(PresetId::Original)

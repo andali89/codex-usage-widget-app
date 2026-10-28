@@ -1,3 +1,4 @@
+mod compact_sizing;
 mod configuration_dialog;
 mod display_preview;
 mod geometry;

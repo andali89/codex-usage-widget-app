@@ -75,7 +75,9 @@ pub fn validation_directory() -> std::path::PathBuf {
         .parent()
         .expect("executable directory")
         .join("../validation")
-        .join(if appearance_requested() {
+        .join(if compact_options_requested() {
+            "native-compact-options"
+        } else if appearance_requested() {
             "native-appearance"
         } else {
             "native-sizing"
@@ -90,8 +92,11 @@ fn record(message: String) {
     }
 }
 
+fn compact_options_requested() -> bool {
+    std::env::args().any(|arg| arg == "--check-native-compact-options")
+}
 pub fn appearance_requested() -> bool {
-    std::env::args().any(|arg| arg == "--check-native-appearance")
+    compact_options_requested() || std::env::args().any(|arg| arg == "--check-native-appearance")
 }
 fn composition_probe_requested() -> bool {
     appearance_requested() && std::env::args().any(|arg| arg == "--probe-native-composition")
@@ -234,7 +239,9 @@ pub fn start(app: AppHandle, service: Service) {
         let _ = std::fs::write(directory.join("result.log"), "native-check result=running");
     }
     tauri::async_runtime::spawn(async move {
-        let mut result = if appearance_requested() {
+        let mut result = if compact_options_requested() {
+            compact_options_check(&app, &service).await
+        } else if appearance_requested() {
             appearance_check(&app, &service).await
         } else if topmost_requested() {
             reveal_check(&app, &service).await
@@ -726,9 +733,163 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
     )?;
     original_style_check(app, service).await?;
     showcase_style_check(app, service).await?;
+    compact_options_check(app, service).await?;
     dashboard_navigation_check(app, service).await?;
     settings_preview_check(app, service).await?;
     save_settings(service, original).await?;
+    Ok(())
+}
+
+async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    let original = service.snapshot().await?.settings;
+    service.dispatch(Action::Window(Input::Close));
+    let mut setup = original.clone();
+    setup.windows.suppress_fullscreen = false;
+    setup.widget_appearance.edge_scale_percent = 100;
+    setup.widget_appearance.hud_scale_percent = 100;
+    for mode in [DisplayMode::ScreenEdge, DisplayMode::CompactHud] {
+        setup
+            .windows
+            .visible_periods
+            .insert(mode.key().into(), VisiblePeriods::FiveHour);
+        setup.windows.reset_countdowns.insert(
+            mode.key().into(),
+            ResetCountdowns {
+                five_hour: true,
+                weekly: true,
+            },
+        );
+        setup.windows.reset_segment_counts.insert(
+            mode.key().into(),
+            crate::model::ResetSegmentCounts {
+                five_hour: 2,
+                weekly: 12,
+            },
+        );
+    }
+    setup.windows.quota_label_style = QuotaLabelStyle::Badges;
+    save_settings(service, setup).await?;
+    for theme in [ThemePreference::Light, ThemePreference::Dark] {
+        for mode in [DisplayMode::ScreenEdge, DisplayMode::CompactHud] {
+            let mut settings = service.snapshot().await?.settings;
+            settings.mode = mode;
+            settings.theme_preference = theme;
+            settings.widget_appearance.edge_scale_percent = 100;
+            settings.widget_appearance.hud_scale_percent = 100;
+            save_settings(service, settings).await?;
+            wait(app, service, "compact-options-hydration", |_| {
+                visible(app, "shell")
+            })
+            .await?;
+            for (bold, strong) in [(false, false), (true, false), (false, true), (true, true)] {
+                let mut settings = service.snapshot().await?.settings;
+                settings.widget_appearance.compact_countdown_bold = bold;
+                settings.widget_appearance.compact_countdown_high_contrast = strong;
+                save_settings(service, settings).await?;
+                let weight = if bold { "700" } else { "400" };
+                let color = if strong {
+                    "getComputedStyle(root).color"
+                } else {
+                    "getComputedStyle(root).getPropertyValue('--secondary').trim()"
+                };
+                // Resolve the secondary token through an element so CSS system/hex colors compare equally.
+                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell'),c=root?.querySelector('.reset-countdown');if(!c)return false;const probe=document.createElement('span');probe.style.color={color};root.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(c).fontWeight==='{weight}'&&getComputedStyle(c).color===expected&&root.querySelectorAll('.reset-segments i').length===2;}})()");
+                frontend_assert(
+                    app,
+                    "shell",
+                    &expression,
+                    "compact-countdown-weight-color-and-retained-bars",
+                )
+                .await?;
+            }
+            let text = f64::from(service.snapshot().await?.appearance.text_scale) / 100.0;
+            for percent in [80, 100, 125, 137, 150, 200, 300] {
+                let snapshot = service.snapshot().await?;
+                let limit = snapshot.appearance.compact_sizing[mode.key()].max_percent;
+                if percent > limit {
+                    record(format!("native-check compact-size-request={percent} limited-to={limit} mode={mode:?}"));
+                    continue;
+                }
+                let mut settings = snapshot.settings;
+                if mode == DisplayMode::ScreenEdge {
+                    settings.widget_appearance.edge_scale_percent = percent;
+                } else {
+                    settings.widget_appearance.hud_scale_percent = percent;
+                }
+                save_settings(service, settings).await?;
+                let factor = f64::from(percent) / 100.0;
+                let (width, height) = if mode == DisplayMode::ScreenEdge {
+                    (54.0, 124.0)
+                } else {
+                    (164.0, 38.0)
+                };
+                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell');if(!root)return false;const r=root.getBoundingClientRect();return Math.abs(Number(getComputedStyle(root).zoom)-{factor})<.001&&Math.abs(r.width-{})<1&&Math.abs(r.height-{})<1&&root.querySelectorAll('.reset-segments i').length===2;}})()",width*text*factor,height*text*factor);
+                frontend_assert(
+                    app,
+                    "shell",
+                    &expression,
+                    "compact-uniform-scale-current-layout",
+                )
+                .await?;
+                let shell = app
+                    .get_webview_window("shell")
+                    .ok_or("compact-size-shell")?;
+                let mut matched = false;
+                for _ in 0..100 {
+                    let (send, receive) = tokio::sync::oneshot::channel();
+                    service
+                        .0
+                        .send(Action::ShellContentSize(send))
+                        .await
+                        .map_err(|_| "compact-size-channel")?;
+                    if let Some(content) = receive.await.map_err(|_| "compact-size-reply")? {
+                        let dpi = shell.scale_factor().map_err(|_| "compact-size-dpi")?;
+                        let client = shell.inner_size().map_err(|_| "compact-size-client")?;
+                        if (f64::from(client.width) - (content.0 * dpi).ceil()).abs() <= 1.0
+                            && (f64::from(client.height) - (content.1 * dpi).ceil()).abs() <= 1.0
+                        {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    tokio::time::sleep(Duration::from_millis(30)).await;
+                }
+                require(
+                    matched,
+                    "compact-scaled-native-client-matches-rendered-bounds",
+                )?;
+                require(
+                    crate::native_windows::has_rounded_corners(&shell),
+                    "compact-scaled-rounded-hit-region",
+                )?;
+            }
+            let snapshot = service.snapshot().await?;
+            let revision = snapshot.settings.revision;
+            let mut invalid = snapshot.settings;
+            let limit = snapshot.appearance.compact_sizing[mode.key()].max_percent;
+            if mode == DisplayMode::ScreenEdge {
+                invalid.widget_appearance.edge_scale_percent = limit + 1;
+            } else {
+                invalid.widget_appearance.hud_scale_percent = limit + 1;
+            }
+            require(
+                save_settings(service, invalid).await.is_err(),
+                "compact-oversized-selection-rejected",
+            )?;
+            require(
+                service.snapshot().await?.settings.revision == revision,
+                "compact-rejected-selection-does-not-save",
+            )?;
+        }
+    }
+    if compact_options_requested() {
+        settings_preview_check(app, service).await?;
+    }
+    save_settings(service, original).await?;
+    require(
+        !service.snapshot().await?.usage.refresh_in_flight,
+        "compact-options-use-synthetic-usage",
+    )?;
     Ok(())
 }
 
@@ -1236,6 +1397,21 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
     .await?;
     let saved = service.snapshot().await?.settings;
     let main = app.get_webview_window("main").ok_or("preview-main")?;
+    let compact_controls="(()=>{[...document.querySelectorAll('label')].find(e=>e.textContent==='Bold countdown text').querySelector('input').click();[...document.querySelectorAll('label')].find(e=>e.textContent==='Higher contrast countdown text').querySelector('input').click();const size=document.querySelector('#edgeScalePercent');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(size,'80');size.dispatchEvent(new Event('input',{bubbles:true}));})();";
+    main.eval(compact_controls)
+        .map_err(|_| "compact-preview-controls")?;
+    wait(app, service, "compact-controls-preview-without-save", |s| {
+        s.appearance.widget.compact_countdown_bold
+            && s.appearance.widget.compact_countdown_high_contrast
+            && s.appearance
+                .compact_sizing
+                .get("screen-edge")
+                .is_some_and(|scale| scale.requested_percent == 80)
+            && s.settings.revision == saved.revision
+            && s.settings.widget_appearance.edge_scale_percent
+                == saved.widget_appearance.edge_scale_percent
+    })
+    .await?;
     frontend_assert(app, "main", "document.querySelector('#show-widget-border')?.checked===true&&![...document.querySelectorAll('.settings-form label,.settings-form summary')].some(e=>/transparency/i.test(e.textContent))", "border-control-visible-transparency-controls-absent").await?;
     main.eval("document.querySelector('#show-widget-border').click()")
         .map_err(|_| "preview-border")?;
@@ -1336,6 +1512,12 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
             && s.appearance.widget.palette["background"] == "#EAF2FF"
             && s.appearance.placement_constraints.margins[0] < 48.0
             && s.appearance.widget.frame_border != "transparent"
+            && s.appearance.widget.compact_countdown_bold
+                == saved.widget_appearance.compact_countdown_bold
+            && s.appearance.widget.compact_countdown_high_contrast
+                == saved.widget_appearance.compact_countdown_high_contrast
+            && s.appearance.compact_sizing["screen-edge"].requested_percent
+                == saved.widget_appearance.edge_scale_percent
     })
     .await?;
     require(
@@ -1380,6 +1562,14 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
             && s.appearance.widget.palette["weekly"] == "#F97316"
     })
     .await?;
+    main.eval(compact_controls)
+        .map_err(|_| "compact-save-controls")?;
+    wait(app, service, "compact-save-preview", |s| {
+        s.appearance.widget.compact_countdown_bold
+            && s.appearance.widget.compact_countdown_high_contrast
+            && s.appearance.compact_sizing["screen-edge"].requested_percent == 80
+    })
+    .await?;
     main.eval("document.querySelector('.save-bar button[type=submit]').click()")
         .map_err(|_| "preview-save")?;
     wait(app, service, "preview-save-once", |s| {
@@ -1408,6 +1598,15 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
         !snapshot.settings.widget_appearance.show_border
             && !reopened.settings.widget_appearance.show_border,
         "save-persists-border-off-on-storage-reopen",
+    )?;
+    require(
+        reopened.settings.widget_appearance.compact_countdown_bold
+            && reopened
+                .settings
+                .widget_appearance
+                .compact_countdown_high_contrast
+            && reopened.settings.widget_appearance.edge_scale_percent == 80,
+        "save-persists-compact-options-on-storage-reopen",
     )?;
     service.dispatch(Action::Window(Input::Close));
     wait(app, service, "preview-close-retires-session", |s| {

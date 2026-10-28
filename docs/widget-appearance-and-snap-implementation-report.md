@@ -1,5 +1,34 @@
 # Widget appearance and snapping — implementation evidence
 
+## Compact countdown readability and 80–300% widget sizing — 28 October 2026
+
+Implemented on the current **0.1.3** source baseline, settings schema **12**. The existing Subtle Edge profile, revised spacing, independent 2–12 reset-bar counts, opaque backgrounds, theme customization, and **Usage.exe** executable name are preserved. At 100%, existing compact dimensions are unchanged.
+
+- Settings → Display adds independent **Bold countdown text** (700) and **Higher contrast countdown text** (theme main text) switches, both Off by default. They apply to Edge/HUD reset text and its clock icon across all themes. Floating, hover previews, tray summaries, quota graphics, and dashboard text retain their styles. Windows high contrast/forced colors retain system color precedence, independently of bold.
+- Separate **Edge size (%)** and **HUD size (%)** number inputs and sliders accept whole percentages from **80 to 300**, with default/reset **100%**. CSS zoom uniformly scales each compact shell; its layout, rings, bars (including selected counts), text, borders, corners, and artwork remain proportional. Windows text size and DPI compose with this scale. Native client bounds and rounded hit regions track the rendered size. Snap/popup gaps and drag thresholds retain their logical sizes; anchored surfaces follow the resized shell.
+- Rust supplies per-monitor client-space budgets and per-mode requested/effective/max percentages. Both modes are checked against proposed layout and monitor selections, including inactive modes. The fitting policy reserves warning-indicator space, the shared gap on both axes, and additional taskbar safety. Native frame insets are measured from an existing shell; before one exists, a conservative 32-logical-pixel inset allowance is used and recalculated after creation. Settings shows each layout’s limit, caps sliders, rejects invalid/new oversized edits, and retains the last valid preview.
+- A saved enlargement that stops fitting after monitor, work-area, or accessibility changes temporarily uses 100%; the request remains saved and restores when it fits. Requests below 100% are never enlarged as a fallback. If the fallback itself cannot fit, Settings explains that limitation and existing work-area constraints remain. Unchanged saved oversize values do not block unrelated appearance edits.
+- The existing native draft session carries these appearance edits. Save persists and Cancel restores. Schema-11 migration adds Off/100% defaults without replacing reset bars, quota customizations, placements, revisions, reminder data, or profile metadata. Older migrations and future-version protection remain covered. No dependencies, capabilities, usage reads, scheduling, reminders, application version, installer or release publication changed.
+
+### Validation
+
+| Check | Actual result |
+| --- | --- |
+| npm.cmd test | **152 passed**, including all preset/theme readability combinations, 7:1 main-text contrast on both surface endpoints, independent sizing, invalid values, exact fit boundaries, unsaved monitor choices, and shared current-layout fixtures. |
+| npm.cmd run build | Passed, including TypeScript checking. |
+| npm.cmd run rust:test | **164 application tests + 3 dependency tests passed; 1 explicit live probe ignored**. Covers schema-11 full-document migration, storage reopen with 80%/137% and both readability flags, draft isolation, monitor fallback/restoration, and shared fit/layout fixtures at 80/100/125/137/150/200/300% with 100/150/225% text. TEMP/TMP used the project validation directory. |
+| npm.cmd run rust:fmt, rust:check, rust:clippy | Passed; Clippy checks all targets with warnings denied. Cache hard-link fallback warnings are environmental. |
+| npm.cmd run desktop:build | Existing Tauri CLI native binding remains unavailable (MODULE_NOT_FOUND). No tools were installed. |
+| cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol | Passed; rebuilt src-tauri/target/release/Usage.exe with production assets. |
+| Usage.exe --check-native-compact-options | **Passed**, explicit native-check result=pass. Synthetic-only Light/Dark Edge/HUD cases verify each readability combination, retained 2-bar settings, custom scaling including 80/137/300%, actual native/client bounds, rounded regions, oversized-save rejection and unchanged revision. |
+| Usage.exe --check-native-appearance | **Passed**, explicit native-check result=pass. Includes the existing theme/frame/navigation checks plus new compact options. Actual Settings controls preview bold/contrast/80% without saving, Cancel restores all three, and Save/reopen retains them alongside current quota colors and border preferences. |
+
+Generated logs and isolated state live under src-tauri/target/validation/compact-options-* and native-compact-options/. Initial tests exposed three assertions still using the former settings version; these were updated to schema 12 and future schema 13. Real Windows 10, mixed-DPI monitor moves, OS text/high-contrast transitions, visual review, and real pointer/focus behavior remain manual checks. Runtime checks use synthetic usage; no live Codex probe or credential access is needed. Existing tray-removal/WebView2 class-unregistration diagnostics remain visible during shutdown; both checks completed and their application processes exited. Local Markdown links and git diff --check passed.
+
+Final production executable: **src-tauri/target/release/Usage.exe**, version **0.1.3**, **13,790,208 bytes**, SHA-256 **FA18F785604E91210C01A5CAD6C8CDB4B61DAF29C9AF07000F66247220C00528**. No installer was built or installed.
+
+---
+
 ## Optional outer border and opaque backgrounds — 27 October 2026
 
 Implemented in source at application version **0.1.2**, settings schema **10**. This section supersedes the earlier borderless-Light and transparency policies; dated entries below retain their historical evidence.

@@ -40,6 +40,11 @@ test("appearance controls show only active-theme custom quotas and no embedded p
   assert.doesNotMatch(borderless,/transparency|Transparency/);
   assert.deepEqual(before.usage,state.usage);
 
+  assert.match(html,/Bold countdown text/);assert.match(html,/Higher contrast countdown text/);
+  assert.match(html,/Edge size \(%\)/);assert.match(html,/HUD size \(%\)/);
+  assert.match(html,/id="edgeScalePercent" type="number" min="80" max="300" step="1"/);
+  assert.match(html,/id="hudScalePercent" type="number" min="80" max="300" step="1"/);
+
 });
 
 test("HUD and Edge hide the whole unselected period including an enabled countdown", () => {

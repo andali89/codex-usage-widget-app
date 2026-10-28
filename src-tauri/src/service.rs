@@ -139,6 +139,12 @@ fn publish(app: &AppHandle, state: &mut AppState) {
     resolve_display(app, state);
     let composition = crate::native_windows::composition_available()
         && state.window_diagnostic.as_deref() != Some("native-composition-failed");
+    state.appearance.compact_monitor_budgets = crate::compact_sizing::monitor_budgets(app);
+    state.appearance.compact_sizing = crate::compact_sizing::resolve_with_budgets(
+        &effective_settings(state),
+        state.appearance.text_scale,
+        &state.appearance.compact_monitor_budgets,
+    );
     state.appearance.widget = effective_settings(state).widget_appearance.resolve(
         state.appearance.resolved_theme == "dark",
         state.appearance.high_contrast,
@@ -609,7 +615,13 @@ pub fn start(
                             else {crate::display_preview::Session::begin(session,expected_revision,now).map(|preview|{state.display_preview=Some(preview);publish(&app,&mut state);state.clone()})};let _=reply.send(result);
                         },
                         Action::UpdatePreview{session,sequence,patch,reply}=>{
-                            let result=state.display_preview.as_mut().ok_or_else(||"display-preview-ended".to_string()).and_then(|p|p.update(&session,sequence,patch,state.settings.revision,now));
+                            let fit_issues = patch.as_ref().map(|patch| {
+                                let mut next = state.settings.clone();
+                                next.widget_appearance = patch.widget_appearance.clone();
+                                next.windows.snap_gap_logical_px = patch.snap_gap_logical_px;
+                                crate::compact_sizing::issues(&app, &next, &state.settings, state.appearance.text_scale)
+                            }).unwrap_or_default();
+                            let result=if !fit_issues.is_empty() { Err(serde_json::json!({"code":"invalid-widget-settings","issues":fit_issues}).to_string()) } else {state.display_preview.as_mut().ok_or_else(||"display-preview-ended".to_string()).and_then(|p|p.update(&session,sequence,patch,state.settings.revision,now)) };
                             let result=result.map(|()|{coordinate(&app,&mut state,&mut windows,&actor_service,None);state.clone()});let _=reply.send(result);
                         },
                         Action::EndPreview{session,reply}=>{
@@ -676,6 +688,9 @@ pub fn start(
                             settings.autostart=state.settings.autostart.request(settings.autostart.requested);
                             let outcome = if expected_revision != state.settings.revision { Err("settings-conflict".into()) }
                             else if !settings.widget_appearance.issues().is_empty() { Err(serde_json::json!({"code":"invalid-widget-settings","issues":settings.widget_appearance.issues()}).to_string()) }
+                            else if !crate::compact_sizing::issues(&app, &settings, &state.settings, state.appearance.text_scale).is_empty() {
+                                Err(serde_json::json!({"code":"invalid-widget-settings","issues":crate::compact_sizing::issues(&app,&settings,&state.settings,state.appearance.text_scale)}).to_string())
+                            }
                             else if let Err(code) = settings.validate() { Err(code.into()) }
                             else if let Err(code) = settings.reminders.validate_edit(&state.settings.reminders,wall) {Err(code.into())}
                             else {
@@ -888,6 +903,13 @@ fn coordinate(
 ) {
     resolve_display(app, state);
     let display = effective_settings(state);
+    state.appearance.compact_sizing =
+        crate::compact_sizing::resolve(app, &display, state.appearance.text_scale);
+    let widget_scale = state
+        .appearance
+        .compact_sizing
+        .get(display.mode.key())
+        .map_or(1.0, |s| f64::from(s.effective_percent) / 100.0);
     windows.set_preview_freeze(
         state
             .display_preview
@@ -901,6 +923,7 @@ fn coordinate(
         service,
         focus,
         !state.appearance.high_contrast,
+        widget_scale,
     ) {
         windows.coordination_fault = Some(code.into());
         if windows.interaction.state.detail == DetailState::Popup && focus == Some(Surface::Main) {
@@ -911,6 +934,7 @@ fn coordinate(
                 service,
                 None,
                 !state.appearance.high_contrast,
+                widget_scale,
             );
         } else if windows.interaction.state.shell == crate::interaction::ShellState::Preview {
             windows.interaction.collapse();
