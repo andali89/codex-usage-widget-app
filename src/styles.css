@@ -288,6 +288,8 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .stable-compact .edge-values { flex:1; min-height:0; width:100%; justify-content:center; gap:.3125rem; }
 /* Keep the selected Balanced profile's small gap below the brand mark. */
 .mode-screen-edge .edge-values { transform:translateY(.15625rem); }
+/* Use the lower padding to clear the last reset strip and its stale outline. */
+.mode-screen-edge .status-warning { transform:translateY(.625rem); }
 .mode-screen-edge .quota-ring { width:3rem; height:3rem; flex:none; }
 .mode-screen-edge .ring-reading>strong { font-size:.78125rem; }
 .stable-compact .edge-value { width:100%; min-width:0; gap:.1875rem; }

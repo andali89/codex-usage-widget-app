@@ -2,6 +2,16 @@
 
 Updated: 2026-10-28. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
 
+## Edge warning icon overlap correction — 2026-10-28
+
+Reproduced the warning triangle overlapping the lower reset strip in the Balanced Edge layout. At 200% text scale, the warning box overlapped the last strip by 2 px Words / 2.5 px Badges in logical units; the retained-data outline extended the visible conflict to 5 / 5.5 px. Earlier layout validation checked each element's containment within the shell, but did not check the warning against the painted bounds of neighboring quota content.
+
+The Edge-only warning now sits **10 logical px lower** inside the existing bottom padding. The quota stack, rings, 42 px segmented strips, 54 px shell width, fixed heights and 18 px warning allowance are unchanged. HUD warnings are unaffected. [Before](assets/edge-sizing-preview/warning-before.jpg) and [after](assets/edge-sizing-preview/warning-after.jpg) show synthetic retained data at 200% text scale.
+
+Validation: `npm.cmd run build` passed, including TypeScript and final frontend bundling. Browser checks passed **256 presentations**, including **128 warning presentations**, across Words/Badges, all effective visible-period/countdown combinations, Light/Dark, 100/200% text, and fresh/retained-long/unavailable/fractional-due readings. The warning cleared the painted quota bounds including dashed outlines by at least **3.4 logical px**, and the outer bottom border by at least **6.5 logical px**. Expected dimensions, overflow and countdown clipping checks also passed. Checks used the production component/CSS validation fixture under `src-tauri/target/validation/`; the local server was stopped afterward.
+
+The standard `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` could not replace the existing executable (`Access is denied`, including a normal-filesystem-access retry). No user process was stopped. The established alternate build, `cargo rustc --manifest-path src-tauri/Cargo.toml --release --locked --bin codex-usage-widget --features tauri/custom-protocol -- -C extra-filename=-edge-warning`, passed. Its binary was copied from `release/deps/codex_usage_widget-edge-warning.exe` to **`src-tauri/target/release/codex-usage-widget-edge-warning.exe`** (13,681,664 bytes). The standard-named executable was not updated. `git diff --check` and documentation links passed. No unit/Rust test suites, installer build, native pointer/focus/DPI check, or installation was run for this CSS-only correction; the alternate executable was not launched.
+
 ## Edge segmented indicator width — 2026-10-28
 
 Latest follow-up: changed the Edge reset strip from **40 px to 42 logical px** (`2.5rem` → `2.625rem`) at default text size, after the earlier 38 → 40 px increment. It remains centered; the ten segments, segment gap, ring/text sizes, spacing and outer widget dimensions are unchanged. The canonical design specification now records the 42 px width. Historical previews and captures retain their prior width.
