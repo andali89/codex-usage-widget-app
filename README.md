@@ -2,21 +2,19 @@
 
 Keep Codex remaining quota and expected reset times in view on your Windows desktop. Choose a floating card, screen-edge widget, compact HUD, or system tray summary, with usage read through your local Codex CLI.
 
-**[Download v0.1.0 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.0)** · [Release notes](docs/v0.1.0-release-notes.md) · [Documentation](docs/README.md)
+**[Download v0.1.2 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.2)** · [Release notes](docs/v0.1.2-release-notes.md) · [Documentation](docs/README.md)
 
-Source is prepared for [v0.1.2](docs/v0.1.2-release-notes.md), with an empty proxy default, a clearly labeled example placeholder, and 120-second refresh defaults for Detail, Compact, and Background. Existing saved settings are preserved. Downloads above remain v0.1.0 until a newer release is published.
-
-An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.0 is a public preview; see [known limitations](#known-limitations).
+An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.2 is a public preview; see [known limitations](#known-limitations).
 
 ## Download and install
 
-Choose a download from the [v0.1.0 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.0):
+Choose a download from the [v0.1.2 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.2):
 
 | Download | Use |
 | --- | --- |
-| [Windows installer](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.0/Codex.Usage.Widget_0.1.0_x64-setup.exe) | Run the setup executable to install for your Windows account. |
-| [Portable ZIP](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.0/Codex.Usage.Widget_0.1.0_x64-portable.zip) | Extract the entire ZIP into a writable folder and run `codex-usage-widget.exe`. |
-| [SHA-256 checksums](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.0/SHA256SUMS.txt) | Verify the installer and portable archive. |
+| [Windows installer](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.2/Codex.Usage.Widget_0.1.2_x64-setup.exe) | Run the setup executable to install for your Windows account. |
+| [Portable ZIP](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.2/Codex.Usage.Widget_0.1.2_x64-portable.zip) | Extract the entire ZIP into a writable folder and run `codex-usage-widget.exe`. |
+| [SHA-256 checksums](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.2/SHA256SUMS.txt) | Verify the installer and portable archive. |
 
 Requirements:
 
@@ -27,6 +25,22 @@ Requirements:
 After installation, open the widget and choose a display mode in Settings or the tray menu. If automatic Codex discovery fails, set the full native `codex.exe` path in **Settings → Connection & diagnostics**. Authentication stays with Codex.
 
 GitHub's **Source code** ZIP/TAR archives are for building the project, not running the application.
+
+## Screenshots
+
+These screenshots use synthetic example data; they do not show a real account.
+
+**Overview dashboard**
+
+![Overview dashboard in Dark mode, showing example remaining quota, resets, credits, and reminders](docs/assets/screenshots/overview.png)
+
+| Floating | Screen Edge |
+| --- | --- |
+| <img src="docs/assets/screenshots/floating.png" width="274" alt="Floating widget showing example five-hour and weekly quotas" /> | <img src="docs/assets/screenshots/screen-edge.png" width="108" alt="Screen Edge widget showing example quota rings and reset indicators" /> |
+
+| Compact HUD | System Tray hover |
+| --- | --- |
+| <img src="docs/assets/screenshots/compact-hud.png" width="480" alt="Compact HUD in Dark mode with example quotas and reset indicators" /> | <img src="docs/assets/screenshots/tray-preview.png" width="260" alt="System Tray hover summary in Dark mode showing example quotas" /> |
 
 ## Features
 
