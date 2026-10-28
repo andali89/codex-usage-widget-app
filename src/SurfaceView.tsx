@@ -37,6 +37,17 @@ export default function SurfaceView({ surface }: { surface: "shell" | "preview" 
     return () => observer.disconnect();
   }, [surface, state?.presentation.generation, state?.presentation.previewSource, state?.settings.mode, state?.appearance.resolvedTheme, state?.appearance.highContrast, state?.appearance.reducedMotion, state?.appearance.textScale]);
   useLayoutEffect(() => { if(state) applyAppearance(state); }, [state?.appearance, state?.settings.widgetAppearance]);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element || surface !== "shell" || (state?.settings.mode !== "screen-edge" && state?.settings.mode !== "compact-hud")) return;
+    // Capture Tab before it moves focus into the widget from the document body.
+    const showKeyboardFocus = () => { delete element.dataset.pointerFocus; };
+    document.addEventListener("keydown", showKeyboardFocus, true);
+    return () => {
+      document.removeEventListener("keydown", showKeyboardFocus, true);
+      delete element.dataset.pointerFocus;
+    };
+  }, [surface, state?.settings.mode]);
   if (!state) return <div className="native-loading">{error ?? "Loading usage…"}</div>;
   const sourceUsage = state.usage, mode = state.settings.mode;
   const selection = (mode === "screen-edge" || mode === "compact-hud") ? state.settings.windows.visiblePeriods?.[mode] ?? "both" : "both";
@@ -53,6 +64,7 @@ export default function SurfaceView({ surface }: { surface: "shell" | "preview" 
   const layoutStyle = layout ? { "--compact-width": `${layout.width / 16}rem`, "--compact-height": `${layout.height / 16}rem` } as CSSProperties : undefined;
   const contextMenu = (event: MouseEvent<HTMLDivElement>) => { event.preventDefault(); void surfaceAction({ type: "context-menu", x: event.clientX, y: event.clientY }); };
   const pointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (surface === "shell" && (mode === "screen-edge" || mode === "compact-hud")) event.currentTarget.dataset.pointerFocus = "true";
     if (surface !== "shell" || event.button !== 0 || state.settings.windows.lockPosition || isControl(event.target)) return;
     dragOrigin.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
     dragging.current = false; suppressClick.current = false; event.currentTarget.setPointerCapture(event.pointerId);

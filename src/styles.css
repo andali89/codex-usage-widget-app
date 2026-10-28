@@ -222,6 +222,7 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .widget-header .brand-mark { width:1.75rem; height:1.75rem; }
 .widget-header .icon-button { margin-left:-2px; }
 .glance-target { outline-offset:3px; border-radius:7px; }
+.native-surface.shell:is(.mode-screen-edge,.mode-compact-hud)[data-pointer-focus=true] .glance-target:focus { outline:none; }
 .widget-quotas,.preview-quotas { display:grid; gap:6px; }
 .widget-quotas .quota-card { min-inline-size:16rem; }
 .compact-card { padding:8px; box-shadow:none; background:var(--raised); }

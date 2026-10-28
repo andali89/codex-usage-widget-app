@@ -522,6 +522,7 @@ Avoid hidden animations, per-second backend broadcasts, idle polling of cursor p
 - Apply Section 6.4's 4.5:1 normal-text and 3:1 essential-graphics/control contrast targets in both themes; use system colors in high contrast.
 - Respect system text scaling and reduced-motion preferences; avoid tiny click targets in edge mode.
 - Preserve focus when hover previews appear; move focus deliberately only when opening a keyboard-invoked dashboard.
+- HUD and Edge suppress the main-content focus outline during pointer interaction, including click and drag. Keyboard input restores the normal visible focus cue. This does not hide the widget frame, period dividers or retained-data outlines.
 - Avoid automatic overlays in fullscreen or presentation contexts unless explicitly enabled.
 - Use minimum 32-pixel desktop controls and a touch-friendly 44-pixel option; text scaling must reflow cards instead of clipping controls.
 - Allow the compact tray hover box to grow beyond its baseline size for text scaling and long period labels. Keep its content read-only; provide the same information through the keyboard-accessible dashboard.
