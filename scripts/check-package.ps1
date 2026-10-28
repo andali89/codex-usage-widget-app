@@ -1,7 +1,7 @@
 param(
-    [string]$Installer = 'src-tauri/target/release/bundle/nsis/Codex Usage Widget_0.1.2_x64-setup.exe',
+    [string]$Installer = 'src-tauri/target/release/bundle/nsis/Codex Usage Widget_0.1.3_x64-setup.exe',
     [string]$Executable = 'src-tauri/target/release/codex-usage-widget.exe',
-    [string]$Version = '0.1.2',
+    [string]$Version = '0.1.3',
     [string]$UpgradeInstaller = '',
     [string]$UpgradeExecutable = '',
     [string]$UpgradeVersion = '',

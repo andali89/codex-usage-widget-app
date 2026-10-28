@@ -6,6 +6,8 @@ Keep Codex remaining quota and expected reset times in view on your Windows desk
 
 An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.2 is a public preview; see [known limitations](#known-limitations).
 
+Development version: **0.1.3 (unreleased)**. See the [0.1.3 release notes](docs/v0.1.3-release-notes.md) for the current widget sizing and spacing changes.
+
 ## Download and install
 
 Choose a download from the [v0.1.2 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.2):

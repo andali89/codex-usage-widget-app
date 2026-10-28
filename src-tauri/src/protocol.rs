@@ -361,7 +361,7 @@ impl Client {
     }
 
     async fn transaction(&mut self, salt: &str) -> Result<Observation, Failure> {
-        self.request("initialize", json!({"clientInfo":{"name":"codex_usage_widget","version":"0.1.0"},"capabilities":{"experimentalApi":false,"explicitGatewayOauth":true}})).await?;
+        self.request("initialize", json!({"clientInfo":{"name":"codex_usage_widget","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":false,"explicitGatewayOauth":true}})).await?;
         self.send(json!({"method":"initialized"})).await?;
         let before = self
             .request("account/read", json!({"refreshToken":false}))
