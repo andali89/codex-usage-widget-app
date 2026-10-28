@@ -4,9 +4,9 @@ Updated: 2026-10-28. Reference: the [canonical design report](codex-widget-desig
 
 ## Edge segmented indicator width — 2026-10-28
 
-Changed the Edge reset strip from **38 px to 40 logical px** (`2.375rem` → `2.5rem`) at default text size. It remains centered; the ten segments, segment gap, ring/text sizes, spacing and outer widget dimensions are unchanged. The canonical design specification now records the 40 px width. Historical previews and captures retain their prior width.
+Latest follow-up: changed the Edge reset strip from **40 px to 42 logical px** (`2.5rem` → `2.625rem`) at default text size, after the earlier 38 → 40 px increment. It remains centered; the ten segments, segment gap, ring/text sizes, spacing and outer widget dimensions are unchanged. The canonical design specification now records the 42 px width. Historical previews and captures retain their prior width.
 
-Validation: `npm.cmd run build` passed, including TypeScript and production bundling. `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` passed using the established Tauri CLI fallback and rebuilt `src-tauri/target/release/codex-usage-widget.exe`. `git diff --check` passed. Per user request, no test suites, browser validation or native runtime checks were run. The executable was not launched or installed; no installer was rebuilt.
+Validation of the 42 px follow-up: `npm.cmd run build` passed, including TypeScript and production bundling. `cargo build --manifest-path src-tauri/Cargo.toml --locked --release --features tauri/custom-protocol` passed using the established Tauri CLI fallback and rebuilt `src-tauri/target/release/codex-usage-widget.exe`. `git diff --check` passed. Per user request, no test suites, browser validation or native runtime checks were run. The executable was not launched or installed; no installer was rebuilt. The earlier 40 px increment used the same successful build commands and also skipped tests as requested.
 
 ## Confirmed Balanced Edge implementation — 2026-10-28
 
