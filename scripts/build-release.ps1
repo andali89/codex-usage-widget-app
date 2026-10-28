@@ -27,7 +27,7 @@ try {
     & npm.cmd run desktop:package
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed; no assets were staged.' }
 
-    $widgetBinary = Join-Path $widgetTarget 'release/codex-usage-widget.exe'
+    $widgetBinary = Join-Path $widgetTarget 'release/Usage.exe'
     $widgetBytes = [IO.File]::ReadAllBytes($widgetBinary)
     $widgetTexts = @([Text.Encoding]::UTF8.GetString($widgetBytes), [Text.Encoding]::Unicode.GetString($widgetBytes))
     foreach ($widgetPrefix in @($widgetProfile, $widgetRoot)) {

@@ -99,6 +99,7 @@ pub struct WindowSettings {
     pub quota_label_style: QuotaLabelStyle,
     pub placements: BTreeMap<String, crate::geometry::Placement>,
     pub reset_countdowns: BTreeMap<String, ResetCountdowns>,
+    pub reset_segment_counts: BTreeMap<String, ResetSegmentCounts>,
     pub visible_periods: BTreeMap<String, VisiblePeriods>,
     #[serde(deserialize_with = "deserialize_snap_gap")]
     pub snap_gap_logical_px: u8,
@@ -123,6 +124,21 @@ pub struct ResetCountdowns {
     pub five_hour: bool,
     pub weekly: bool,
 }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default, deny_unknown_fields)]
+pub struct ResetSegmentCounts {
+    pub five_hour: u8,
+    pub weekly: u8,
+}
+impl Default for ResetSegmentCounts {
+    fn default() -> Self {
+        Self {
+            five_hour: 10,
+            weekly: 10,
+        }
+    }
+}
+
 impl Default for WindowSettings {
     fn default() -> Self {
         Self {
@@ -133,6 +149,7 @@ impl Default for WindowSettings {
             edge_side: EdgeSide::Right,
             quota_label_style: QuotaLabelStyle::Words,
             reset_countdowns: BTreeMap::new(),
+            reset_segment_counts: BTreeMap::new(),
             visible_periods: BTreeMap::new(),
             snap_gap_logical_px: 8,
             snap_anchors: ["floating", "screen-edge", "compact-hud"]
@@ -193,7 +210,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            schema_version: 10,
+            schema_version: 11,
             revision: 0,
             theme_preference: ThemePreference::System,
             mode: DisplayMode::SystemTray,
@@ -216,7 +233,7 @@ impl Default for Settings {
 
 impl Settings {
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.schema_version != 10 {
+        if self.schema_version != 11 {
             return Err("settings-version");
         }
         self.storage_location.validate()?;
@@ -253,6 +270,18 @@ impl Settings {
             .any(|mode| !["floating", "screen-edge", "compact-hud"].contains(&mode.as_str()))
         {
             return Err("invalid-placement");
+        }
+        if self
+            .windows
+            .reset_segment_counts
+            .iter()
+            .any(|(mode, counts)| {
+                !["screen-edge", "compact-hud"].contains(&mode.as_str())
+                    || !(2..=12).contains(&counts.five_hour)
+                    || !(2..=12).contains(&counts.weekly)
+            })
+        {
+            return Err("invalid-reset-segment-counts");
         }
         if self.windows.placements.len() > 3
             || self.windows.placements.iter().any(|(mode, p)| {
@@ -597,6 +626,66 @@ pub fn normalize(raw: &Value, at_ms: i64, previous: &Usage) -> Usage {
 mod tests {
     use super::*;
     #[test]
+    fn reset_segment_counts_default_validate_and_round_trip() {
+        let mut settings: Settings = serde_json::from_value(serde_json::json!({
+            "windows":{"resetSegmentCounts":{"screen-edge":{"fiveHour":5},"compact-hud":{"weekly":7}}}
+        })).unwrap();
+        assert_eq!(
+            settings.windows.reset_segment_counts["screen-edge"].weekly,
+            10
+        );
+        assert_eq!(
+            settings.windows.reset_segment_counts["compact-hud"].five_hour,
+            10
+        );
+        settings.validate().unwrap();
+        let copy: Settings =
+            serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert_eq!(
+            copy.windows.reset_segment_counts["screen-edge"].five_hour,
+            5
+        );
+        assert_eq!(copy.windows.reset_segment_counts["compact-hud"].weekly, 7);
+        assert!(Settings::default().windows.reset_segment_counts.is_empty());
+        assert_eq!(ResetSegmentCounts::default().five_hour, 10);
+        for count in [0, 1, 2, 12, 13, 255] {
+            for five_hour in [true, false] {
+                let mut pair = ResetSegmentCounts::default();
+                if five_hour {
+                    pair.five_hour = count;
+                } else {
+                    pair.weekly = count;
+                }
+                settings
+                    .windows
+                    .reset_segment_counts
+                    .insert("screen-edge".into(), pair);
+                assert_eq!(settings.validate().is_ok(), (2..=12).contains(&count));
+            }
+        }
+        settings.windows.reset_segment_counts.clear();
+        for mode in ["floating", "system-tray", "unknown"] {
+            settings
+                .windows
+                .reset_segment_counts
+                .insert(mode.into(), ResetSegmentCounts::default());
+            assert_eq!(settings.validate(), Err("invalid-reset-segment-counts"));
+            settings.windows.reset_segment_counts.clear();
+        }
+        for value in [
+            serde_json::json!(-1),
+            serde_json::json!(2.5),
+            serde_json::json!(256),
+            serde_json::json!("5"),
+            serde_json::Value::Null,
+        ] {
+            assert!(serde_json::from_value::<ResetSegmentCounts>(
+                serde_json::json!({"fiveHour":value})
+            )
+            .is_err());
+        }
+    }
+    #[test]
     fn connection_storage_and_visible_period_preferences_validate_and_round_trip() {
         let mut settings = Settings::default();
         assert_eq!(settings.storage_location, StorageLocation::Executable);
@@ -628,7 +717,7 @@ mod tests {
     #[test]
     fn quota_label_style_defaults_and_round_trips_in_current_schema() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":10,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":11,"windows":{}})).unwrap();
         assert_eq!(old.windows.quota_label_style, QuotaLabelStyle::Words);
         for style in [QuotaLabelStyle::Words, QuotaLabelStyle::Badges] {
             let mut settings = old.clone();
@@ -646,7 +735,7 @@ mod tests {
     #[test]
     fn countdown_options_default_for_old_settings_and_round_trip_per_mode() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":10,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":11,"windows":{}})).unwrap();
         assert!(old.windows.reset_countdowns.is_empty());
         let mut next = old;
         next.windows.reset_countdowns.insert(

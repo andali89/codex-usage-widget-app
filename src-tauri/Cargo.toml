@@ -8,6 +8,10 @@ publish = false
 [patch.crates-io]
 auto-launch = { path = "vendor/auto-launch" }
 
+[[bin]]
+name = "Usage"
+path = "src/main.rs"
+
 [lib]
 name = "codex_usage_widget_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

@@ -113,3 +113,42 @@ test("credit rows disclose only after three and keep the reported available coun
     if(count>0) assert.match(html,/1970-01-01T00:00:00.000Z/);
   }
 });
+
+test("compact reset strips render independent counts and retain unavailable and due labels", () => {
+  const windows=[{...quota,key:"five"},{...quota,key:"week",durationMinutes:10080,resetsAtMs:null}];
+  for(const [mode,segmentCounts] of [["screen-edge",{fiveHour:5,weekly:7}],["compact-hud",{fiveHour:2,weekly:12}]]) {
+    const props={mode,windows,segmentCounts,resets:{fiveHour:true,weekly:true},labelStyle:"words",retained:true,now:3600000};
+    const html=renderToStaticMarkup(createElement(CompactQuotaReadings,props));
+    const strips=[...html.matchAll(/class="reset-segments[^\"]*"[^>]*>(.*?)<\/span>/g)].map(match=>match[1]);
+    assert.deepEqual(strips.map(strip=>(strip.match(/<i[ >]/g)??[]).length),[segmentCounts.fiveHour,segmentCounts.weekly]);
+    assert.match(html,/due — unconfirmed/);assert.match(html,/time unavailable/);assert.match(html,/retained/);
+    const defaults=renderToStaticMarkup(createElement(CompactQuotaReadings,{...props,segmentCounts:undefined}));
+    assert.deepEqual([...defaults.matchAll(/class="reset-segments[^\"]*"[^>]*>(.*?)<\/span>/g)].map(m=>(m[1].match(/<i[ >]/g)??[]).length),[10,10]);
+  }
+});
+
+test("bar selectors default to ten and retain independent disabled choices", () => {
+  const value={visiblePeriods:{"screen-edge":"five-hour"},resetCountdowns:{"screen-edge":{fiveHour:true,weekly:true},"compact-hud":{fiveHour:false,weekly:true}},resetSegmentCounts:{"screen-edge":{fiveHour:5,weekly:7},"compact-hud":{fiveHour:2,weekly:12}}};
+  const render=value=>renderToStaticMarkup(createElement(PeriodSettings,{value,onChange:()=>{throw Error("render must not save");}}));
+  const html=render(value);
+  for(const [label,count,disabled] of [["Screen Edge: 5-hour reset bars",5,false],["Screen Edge: Weekly reset bars",7,true],["Compact HUD: 5-hour reset bars",2,true],["Compact HUD: Weekly reset bars",12,false]]) {
+    const select=html.match(new RegExp(`<select aria-label="${label}"([^>]*)>(.*?)</select>`));
+    assert.ok(select);assert.equal(select[1].includes('disabled=""'),disabled);
+    assert.match(select[2],new RegExp(`value="${count}" selected=""`));
+    assert.deepEqual([...select[2].matchAll(/value="(\d+)"/g)].map(m=>Number(m[1])),Array.from({length:11},(_,i)=>i+2));
+  }
+  const defaults=render({...value,resetSegmentCounts:undefined});
+  assert.equal((defaults.match(/value="10" selected=""/g)??[]).length,4);
+  assert.doesNotMatch(html,/<select aria-label="Floating: [^"]* reset bars"/);
+  assert.equal(value.resetSegmentCounts['screen-edge'].weekly,7);
+});
+
+test("widget shells read counts from their own saved mode",async()=>{
+  const WidgetContents=(await server.ssrLoadModule('/src/WidgetContents.tsx')).default;
+  const state={settings:{mode:'screen-edge',windows:{quotaLabelStyle:'words',lockPosition:false,visiblePeriods:{},resetCountdowns:{'screen-edge':{fiveHour:true,weekly:true},'compact-hud':{fiveHour:true,weekly:true}},resetSegmentCounts:{'screen-edge':{fiveHour:5,weekly:7},'compact-hud':{fiveHour:2,weekly:12}}}},usage:{windows:[{...quota,key:'five',quality:'valid'},{...quota,key:'week',durationMinutes:10080,quality:'valid'}],freshness:'fresh',resetCreditsAvailable:null},presentation:{previewSource:'shell'}};
+  for(const [mode,counts] of [['screen-edge',[5,7]],['compact-hud',[2,12]]]) {
+    state.settings.mode=mode;
+    const html=renderToStaticMarkup(createElement(WidgetContents,{state,surface:'shell',now:0}));
+    assert.deepEqual([...html.matchAll(/class="reset-segments[^\"]*"[^>]*>(.*?)<\/span>/g)].map(m=>(m[1].match(/<i[ >]/g)??[]).length),counts);
+  }
+});

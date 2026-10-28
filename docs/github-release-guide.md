@@ -7,7 +7,7 @@
 Each run installs locked npm dependencies, runs frontend policy tests, Rust formatting and Rust behavioral tests, then calls the existing `release:build` script (including frontend type checking/build and source-path checks). It stages these three draft-release attachments:
 
 - `Codex Usage Widget_<VERSION>_x64-setup.exe`.
-- `Codex Usage Widget_<VERSION>_x64-portable.zip`, containing only `codex-usage-widget.exe`, `notification.png`, and `LICENSE` at its root.
+- `Codex Usage Widget_<VERSION>_x64-portable.zip`, containing only `Usage.exe`, `notification.png`, and `LICENSE` at its root. Published v0.1.2 archives retain their original executable name.
 - `SHA256SUMS.txt`, covering the installer and portable ZIP.
 
 Portable users extract the entire ZIP into a writable folder and run the executable. Both downloads require WebView2 Runtime 120 or newer and a separately installed, signed-in native Codex CLI. The portable ZIP does not install WebView2. Settings, logs, credentials and local usage data are excluded by the explicit packaging file list. Third-party notice review remains required before public distribution, as described in the root README.

@@ -84,7 +84,7 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
         .get("schemaVersion")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    if version > 10 {
+    if version > 11 {
         return Err("storage-future-version");
     }
     if version < 6 {
@@ -190,6 +190,13 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
             .ok_or("storage-corrupt")?
             .insert("schemaVersion".into(), 10.into());
         // WidgetAppearance's default adds showBorder=true without replacing saved maps.
+    }
+    if version < 11 {
+        value
+            .as_object_mut()
+            .ok_or("storage-corrupt")?
+            .insert("schemaVersion".into(), 11.into());
+        // Missing resetSegmentCounts entries retain ten bars through defaults.
     }
     let settings: Settings = serde_json::from_value(value).map_err(|_| "storage-corrupt")?;
     settings.validate()?;
@@ -406,6 +413,50 @@ mod tests {
     use super::*;
     use crate::model::ThemePreference;
     #[test]
+    fn schema_ten_reset_segment_migration_preserves_document_and_round_trips_counts() {
+        let mut engine = crate::reminders::Engine::new(Durable::default(), false);
+        engine.test_claim(1000, 1).unwrap();
+        let mut settings = serde_json::to_value(Settings::default()).unwrap();
+        settings["schemaVersion"] = 10.into();
+        settings["revision"] = 42.into();
+        settings["windows"]["resetCountdowns"] =
+            serde_json::json!({"screen-edge":{"fiveHour":true,"weekly":false}});
+        settings["windows"]["visiblePeriods"] = serde_json::json!({"compact-hud":"weekly"});
+        settings["windows"]
+            .as_object_mut()
+            .unwrap()
+            .remove("resetSegmentCounts");
+        let document = serde_json::json!({"settings":settings,"reminders":engine.data,"profileId":"a".repeat(64),"dataRevision":17});
+        let bytes = serde_json::to_vec(&Envelope {
+            format: 4,
+            checksum: format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(&document).unwrap())
+            ),
+            settings: document.clone(),
+        })
+        .unwrap();
+        let loaded = decode(&bytes).unwrap();
+        let mut expected = document;
+        expected["settings"]["schemaVersion"] = 11.into();
+        expected["settings"]["windows"]["resetSegmentCounts"] = serde_json::json!({});
+        let actual = serde_json::json!({"settings":loaded.settings,"reminders":loaded.reminders,"profileId":loaded.profile_id,"dataRevision":loaded.data_revision});
+        assert_eq!(actual, expected);
+        let mut custom = actual;
+        custom["settings"]["windows"]["resetSegmentCounts"] = serde_json::json!({"screen-edge":{"fiveHour":5,"weekly":7},"compact-hud":{"fiveHour":2,"weekly":12}});
+        let bytes = serde_json::to_vec(&Envelope {
+            format: 4,
+            checksum: format!("{:x}", Sha256::digest(serde_json::to_vec(&custom).unwrap())),
+            settings: custom.clone(),
+        })
+        .unwrap();
+        let loaded = decode(&bytes).unwrap();
+        assert_eq!(
+            serde_json::to_value(loaded.settings).unwrap(),
+            custom["settings"]
+        );
+    }
+    #[test]
     fn schema_nine_adds_border_and_preserves_the_complete_document() {
         let mut engine = crate::reminders::Engine::new(Durable::default(), false);
         engine.test_claim(1000, 1).unwrap();
@@ -435,7 +486,7 @@ mod tests {
         .unwrap();
         let loaded = decode(&bytes).unwrap();
         let mut expected = document;
-        expected["settings"]["schemaVersion"] = 10.into();
+        expected["settings"]["schemaVersion"] = 11.into();
         expected["settings"]["widgetAppearance"]["showBorder"] = true.into();
         let actual = serde_json::json!({
             "settings":loaded.settings,
@@ -459,7 +510,7 @@ mod tests {
         })
         .unwrap();
         let loaded = decode(&bytes).unwrap();
-        value["schemaVersion"] = 10.into();
+        value["schemaVersion"] = 11.into();
         assert_eq!(serde_json::to_value(loaded.settings).unwrap(), value);
     }
     #[test]
@@ -491,7 +542,7 @@ mod tests {
             })
             .unwrap();
             let loaded = decode(&bytes).unwrap();
-            assert_eq!(loaded.settings.schema_version, 10);
+            assert_eq!(loaded.settings.schema_version, 11);
             assert_eq!(loaded.settings.revision, 42);
             assert_eq!(loaded.settings.theme_preference, ThemePreference::Dark);
             assert_eq!(loaded.settings.windows.snap_gap_logical_px, 24);
@@ -583,7 +634,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 10);
+        assert_eq!(migrated.settings.schema_version, 11);
         assert_eq!(migrated.settings.revision, 42);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert_eq!(
@@ -632,7 +683,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 10);
+        assert_eq!(migrated.settings.schema_version, 11);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(migrated.settings.proxy_url.is_none());
         assert_eq!(
@@ -756,7 +807,7 @@ mod tests {
             serde_json::json!({"schemaVersion":3,"themePreference":"dark"}),
         ))
         .unwrap();
-        assert_eq!(migrated.settings.schema_version, 10);
+        assert_eq!(migrated.settings.schema_version, 11);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(!migrated.settings.autostart.requested);
         assert!(!migrated.settings.autostart.pending);

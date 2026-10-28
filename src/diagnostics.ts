@@ -5,6 +5,7 @@ export function diagnostic(code: string, codexCliVersion?: string | null): strin
     "invalid-widget-appearance": "Review both widget palettes and background transparency before saving.",
     "invalid-proxy-url": "Enter an HTTP or HTTPS proxy URL with a valid host and port, without credentials, a path, query or fragment.",
     "invalid-storage-directory": "Enter an absolute configuration folder path.",
+    "invalid-reset-segment-counts": "Choose a whole bar count from 2 to 12 for each HUD and Edge period.",
     "invalid-visible-periods": "Choose both periods, 5-hour only, or weekly only for HUD and Edge.",
     "storage-fallback": "The preferred configuration folder is unavailable. The active fallback folder is shown below; your preferred choice is retained.",
     "storage-stale-fallback": "Only an older configuration copy was available. Reminders are paused; review settings and explicitly re-enable them after recovery.",

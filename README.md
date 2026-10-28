@@ -54,7 +54,7 @@ These screenshots use synthetic example data; they do not show a real account.
 | Compact HUD | Movable horizontal strip with quota values, bars, and optional countdowns. |
 
 - View remaining quota, expected resets, data freshness, and reset-credit information when provided by Codex.
-- Choose 5-hour, weekly, or both periods independently for Edge and HUD, with optional countdowns and word or badge labels.
+- Choose 5-hour, weekly, or both periods independently for Edge and HUD, with optional countdowns and word or badge labels. Set 2–12 remaining-time bars independently for each period and widget (default 10); Save applies the choices.
 - Select Light, Dark, or Follow Windows appearance; configure position lock, always on top, and launch at sign-in.
 - Choose Original or ten showcase-inspired paired Light/Dark themes, optionally customize quota colors from 24 or more named swatches plus the selected theme’s colors, and set one snap gap for Floating, Edge, and HUD (0–48 logical px; default 8). Appearance and gap edits temporarily update the active widget; Save keeps them and Cancel restores saved settings. Show widget border defaults to On and applies across themes, widget modes, and hover summaries; turning it off preserves widget dimensions and internal dividers. Widget backgrounds are currently opaque, and the transparency setting is hidden. Existing saved transparency values are retained but inactive. Windows high contrast keeps a visible border. See the [appearance and snapping report](docs/widget-appearance-and-snap-implementation-report.md).
 - Configure an HTTP/HTTPS proxy without credentials for the widget's Codex process and choose EXE-adjacent, AppData, or custom configuration storage.
@@ -113,7 +113,7 @@ npm.cmd run rust:clippy
 npm.cmd run desktop:build
 ```
 
-`build` includes frontend type checking. `desktop:build` produces `src-tauri/target/release/codex-usage-widget.exe` without an installer. To build the per-user NSIS installer, run `npm.cmd run desktop:package`; output is under `src-tauri/target/release/bundle/nsis/`.
+`build` includes frontend type checking. `desktop:build` produces `src-tauri/target/release/Usage.exe` without an installer. The default main binary is `Usage.exe` for debug, release and future packages; published v0.1.2 archives keep their original filename. To build the per-user NSIS installer, run `npm.cmd run desktop:package`; output is under `src-tauri/target/release/bundle/nsis/`.
 
 Regular tests skip live Codex access. Run `npm.cmd run protocol:probe` explicitly for a live read-only check against the local signed-in CLI. Native tray, focus, DPI, notification, and accessibility behavior require Windows runtime checks; successful builds alone do not validate them.
 

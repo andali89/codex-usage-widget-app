@@ -12,6 +12,7 @@ export type VisiblePeriods = "both" | "five-hour" | "weekly";
 export type StorageLocation = { kind: "executable" | "app-data" } | { kind: "custom"; directory: string };
 export interface StorageStatus { preferred: StorageLocation; activeDirectory: string; fallback: boolean; diagnostic: string | null; portableLocator: boolean }
 export interface ResetCountdowns { fiveHour: boolean; weekly: boolean }
+export interface ResetSegmentCounts { fiveHour: number; weekly: number }
 export interface ReminderRule { low: boolean; thresholds: number[]; approaching: boolean; leadMinutes: number; recovery: boolean }
 export interface ReminderSchedule { id:string; revision:number; enabled:boolean; label:string; timing:{kind:"once";atMs:number}|{kind:"weekly";minute:number;weekdays:number[]} }
 export interface ReminderPreferences { enabled:boolean; defaults:ReminderRule; windowRules:Record<string,ReminderRule>; quietHours:{enabled:boolean;startMinute:number;endMinute:number;weekdays:number[]}; schedules:ReminderSchedule[]; silent:boolean; detailed:boolean; suppressFullscreen:boolean }
@@ -23,7 +24,7 @@ export interface Settings {
   mode: DisplayMode; codexPath: string | null; proxyUrl: string | null; storageLocation: StorageLocation;
   foregroundSeconds: number; compactSeconds: number; backgroundSeconds: number;
   widgetAppearance: WidgetAppearanceSettings;
-  windows: { snapGapLogicalPx:number; snapAnchors:Partial<Record<DisplayMode,{horizontal:"none"|"left"|"right";vertical:"none"|"top"|"bottom"}>>; hoverEnabled: boolean; lockPosition: boolean; alwaysOnTop: boolean; suppressFullscreen: boolean; edgeSide: "left" | "right"; quotaLabelStyle: QuotaLabelStyle; placements: Partial<Record<DisplayMode, { monitor: string | null; x: number; y: number }>>; resetCountdowns: Partial<Record<DisplayMode, ResetCountdowns>>; visiblePeriods: Partial<Record<"screen-edge" | "compact-hud", VisiblePeriods>> };
+  windows: { snapGapLogicalPx:number; snapAnchors:Partial<Record<DisplayMode,{horizontal:"none"|"left"|"right";vertical:"none"|"top"|"bottom"}>>; hoverEnabled: boolean; lockPosition: boolean; alwaysOnTop: boolean; suppressFullscreen: boolean; edgeSide: "left" | "right"; quotaLabelStyle: QuotaLabelStyle; placements: Partial<Record<DisplayMode, { monitor: string | null; x: number; y: number }>>; resetCountdowns: Partial<Record<DisplayMode, ResetCountdowns>>; resetSegmentCounts: Partial<Record<"screen-edge" | "compact-hud", ResetSegmentCounts>>; visiblePeriods: Partial<Record<"screen-edge" | "compact-hud", VisiblePeriods>> };
   reminders: ReminderPreferences;
   autostart: {requested:boolean;pending:boolean;effective:boolean|null;diagnostic:string|null};
 }

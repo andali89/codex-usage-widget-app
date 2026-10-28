@@ -2,6 +2,26 @@
 
 Updated: 2026-10-28. Reference: the [canonical design report](codex-widget-design-report.md) and its supplied private reference board (not distributed with this repository).
 
+## Independent reset-bar counts and Usage.exe — 2026-10-28
+
+Display settings now provide four independent **Remaining-time bars** selectors: Screen Edge five-hour/weekly and Compact HUD five-hour/weekly. Each accepts **2–12** whole bars and defaults to **10**, including existing configurations. Hidden periods and disabled countdowns disable the associated selector while retaining its count. Save applies edits and Cancel restores the saved choices. Bar-count drafts do not participate in temporary appearance previews.
+
+Rust owns the validated `windows.resetSegmentCounts` map, accepting only `screen-edge` and `compact-hud` keys with `fiveHour`/`weekly` values. Missing entries or period fields default to ten bars. Settings schema **11** migrates earlier settings while preserving the rest of the configuration, profile identity, revision and reminder bookkeeping; envelope formats remain unchanged. The shared renderer calculates lit bars directly from the remaining-time fraction and selected count. Unavailable, retained and due-unconfirmed labels retain their previous meaning. CSS grids divide fixed-width strips (**42 logical px Edge / 48 HUD**) into equal bars; shell dimensions, countdown typography and warning spacing remain unchanged.
+
+The default Cargo binary target and Tauri main binary name are now **Usage**, producing **Usage.exe**. Product name, application identifier and version remain Codex Usage Widget **0.1.3**. Release/portable workflow, packaging checks, native-stress default path and installed-notification executable lookup use the new name. Published v0.1.2 assets and historical build records retain their original names.
+
+Focused validation:
+
+- `npm.cmd run build` passed (TypeScript and production bundle).
+- `node --test tests/presentation.test.mjs tests/quota-presentation.test.mjs` passed **19** focused presentation tests, including selected counts, direct fraction rounding, defaults, independent periods/modes, disabled controls, unavailable and due states.
+- `npm.cmd run rust:fmt` and `npm.cmd run rust:check` passed. Compilation emitted the existing incremental-cache hard-link/copy warning.
+- `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib reset_segment` passed **2** targeted tests; `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib storage::tests::schema_` passed **7** migration tests. Coverage includes partial defaults, invalid types/ranges/mode keys, serialization and schema-10 document preservation.
+- A brief browser check used the synthetic Settings fixture: all four defaulted to ten; Cancel restored the initial defaults; Save kept Edge **5/7** and HUD **2/12** independently; hiding a period retained its count while disabling its selector; Cancel after another edit restored the saved baseline. [Settings capture](assets/screenshots/reset-bar-settings.jpg) contains synthetic data only. This check uses mocked IPC; Rust tests cover persisted serialization/migration.
+- `npm.cmd run desktop:build` failed before compilation because the installed Tauri CLI native binding is invalid. The direct fallback `cargo build --manifest-path src-tauri/Cargo.toml --release --locked --bin Usage --features tauri/custom-protocol` passed and produced **src-tauri/target/release/Usage.exe** (13,675,008 bytes, product version **0.1.3**). Cargo metadata confirms Usage is the only binary target.
+- Changed PowerShell scripts passed syntax parsing, 70 relative Markdown links in the changed documents resolved, and `git diff --check` passed.
+
+No extensive appearance matrix, full test suites, installer packaging/upgrade, installation or native UI/DPI checks were run. The executable was not launched. The Tauri CLI packaging path and installed shortcut behavior remain manually unverified. The temporary fixture tab and server were closed after validation.
+
 ## HUD/Edge pointer focus outline — 2026-10-28
 
 HUD and Edge now hide the main-content focus outline during mouse, pen and touch pointer interaction, while preserving the existing keyboard-focus cue. Pointer-down sets a transient `data-pointer-focus` flag on those shells before the position-lock/drag guard. A capture-phase document key listener clears the flag before keyboard focus moves into the widget, including Tab from the document body. Listener cleanup removes both the handler and flag on mode change or unmount. The scoped CSS rule affects only the focused main-content target; outer widget borders, dividers and retained-data outlines are unchanged. Focus, pointer capture, click activation and drag defaults are not cancelled or replaced. Version remains **0.1.3**; no saved setting or IPC change is introduced.

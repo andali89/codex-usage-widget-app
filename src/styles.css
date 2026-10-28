@@ -305,8 +305,10 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .mode-screen-edge .reset-indicator { width:100%; }
 .mode-screen-edge .reset-countdown { width:3rem; justify-content:center; gap:0; font-size:.71875rem; line-height:1.1; letter-spacing:-.02em; }
 .mode-screen-edge .reset-countdown .icon { display:none; }
-.mode-screen-edge .reset-segments { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); width:2.625rem; gap:.1rem; }
-.mode-screen-edge .reset-segments i { width:auto; }
+.mode-screen-edge .reset-segments { display:grid; grid-template-columns:repeat(var(--reset-segment-count,10),minmax(0,1fr)); width:2.625rem; gap:.1rem; }
+.mode-screen-edge .reset-segments i, .mode-compact-hud .reset-segments i { width:auto; }
+.mode-compact-hud .reset-segments { display:grid; grid-template-columns:repeat(var(--reset-segment-count,10),minmax(0,1fr)); width:3rem; }
+.reset-period-options { display:grid; align-content:start; gap:.35rem; }
 .stable-compact .hud-values { flex:1; min-width:0; justify-content:flex-start; gap:.5rem; }
 .stable-compact .hud-quota { --period-width:2rem; grid-template-columns:var(--period-width) 5.5ch; gap:.1875rem .125rem; }
 .stable-compact[data-label-style=badges] .hud-quota { --period-width:.875rem; }

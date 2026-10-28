@@ -1,5 +1,5 @@
 param(
-    [string]$Executable = 'src-tauri/target/debug/codex-usage-widget.exe',
+    [string]$Executable = 'src-tauri/target/debug/Usage.exe',
     [string]$Output = 'src-tauri/target/validation/native-stress-samples.csv'
 )
 $ErrorActionPreference = 'Stop'
@@ -9,7 +9,7 @@ if (-not $widgetExecutable.StartsWith($widgetRoot + [IO.Path]::DirectorySeparato
 $widgetOutput = [IO.Path]::GetFullPath((Join-Path $widgetRoot $Output))
 $widgetTarget = Join-Path $widgetRoot 'src-tauri/target'
 if (-not $widgetOutput.StartsWith($widgetTarget + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Write validation samples below src-tauri/target.' }
-if (Get-Process -Name 'codex-usage-widget' -ErrorAction SilentlyContinue) { throw 'Close the running widget before this isolated validation run.' }
+if (Get-Process -Name 'Usage','codex-usage-widget' -ErrorAction SilentlyContinue) { throw 'Close the running widget before this isolated validation run.' }
 New-Item -ItemType Directory -Path (Split-Path -Parent $widgetOutput) -Force | Out-Null
 $widgetStdout = [IO.Path]::ChangeExtension($widgetOutput, 'stdout.log')
 $widgetStderr = [IO.Path]::ChangeExtension($widgetOutput, 'stderr.log')

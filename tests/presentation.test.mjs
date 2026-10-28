@@ -63,3 +63,19 @@ test("new process epoch replaces old state and rejects delayed retired events", 
   assert.equal(replica.apply({ processEpoch: "a", revision: 501 }).accepted, false);
   assert.equal(replica.current.processEpoch, "b");
 });
+
+test("reset bars use the selected count directly and preserve countdown boundaries", () => {
+  const duration = 300 * 60_000;
+  for (const count of [2, 5, 7, 10, 12]) {
+    assert.equal(resetSegments(duration, 0, 300, count), count);
+    assert.equal(resetSegments(duration, duration / 2, 300, count), Math.ceil(count / 2));
+    assert.equal(resetSegments(duration, duration - 1, 300, count), 1);
+    assert.equal(resetSegments(duration, duration, 300, count), 0);
+    assert.equal(resetSegments(duration, duration + 1, 300, count), 0);
+    assert.equal(resetSegments(duration * 2, 0, 300, count), count);
+    assert.equal(resetSegments(null, 0, 300, count), null);
+    assert.equal(resetSegments(duration, 0, null, count), null);
+  }
+  // 41% of seven is three bars; rounding to ten bars first would incorrectly give four.
+  assert.equal(resetSegments(duration * .41, 0, 300, 7), 3);
+});

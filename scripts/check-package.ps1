@@ -1,6 +1,6 @@
 param(
     [string]$Installer = 'src-tauri/target/release/bundle/nsis/Codex Usage Widget_0.1.3_x64-setup.exe',
-    [string]$Executable = 'src-tauri/target/release/codex-usage-widget.exe',
+    [string]$Executable = 'src-tauri/target/release/Usage.exe',
     [string]$Version = '0.1.3',
     [string]$UpgradeInstaller = '',
     [string]$UpgradeExecutable = '',
@@ -30,7 +30,7 @@ if ($NativeCheck -ne 'None') {
     if (-not $widgetDebugText.Contains('--check-native-notifications') -or -not $widgetDebugText.Contains('native-check result=pass')) { throw 'Native checks require a debug executable with the isolated validation hooks.' }
 }
 if (Test-Path -LiteralPath $widgetInstallRoot) { throw 'The isolated installation target already exists; inspect it before rerunning.' }
-if (Get-Process -Name 'codex-usage-widget*' -ErrorAction SilentlyContinue) { throw 'Close the widget before package validation.' }
+if (Get-Process -Name 'Usage','codex-usage-widget*' -ErrorAction SilentlyContinue) { throw 'Close the widget before package validation.' }
 $widgetProduct = 'Codex Usage Widget'
 $widgetUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $widgetProduct
 $widgetLocationKey = 'Software\codexusagewidget\' + $widgetProduct
@@ -112,7 +112,7 @@ function Assert-WidgetInstalled([string]$ExpectedVersion = $Version, [string]$Ex
     try {
         if ($widgetIdentity.GetValue('DisplayName') -ne $widgetProduct -or $widgetIdentity.GetValue('WidgetInstallLocation') -ne $widgetInstallRoot -or $widgetIdentity.GetValue('IconUri') -ne (Join-Path $widgetInstallRoot 'notification.png') -or -not [IO.File]::Exists((Join-Path $widgetInstallRoot 'notification.png'))) { throw 'Notification identity metadata/icon mismatch.' }
     } finally { $widgetIdentity.Dispose() }
-    Assert-WidgetArtifact (Join-Path $widgetInstallRoot 'codex-usage-widget.exe') $ExpectedExecutable
+    Assert-WidgetArtifact (Join-Path $widgetInstallRoot 'Usage.exe') $ExpectedExecutable
     if (-not (Test-Path -LiteralPath $widgetStartShortcut)) { throw 'Missing installed Start menu identity shortcut.' }
     # Read only this .lnk file's metadata; no shell UI or input is automated.
     $widgetShell = [Activator]::CreateInstance([Type]::GetTypeFromProgID('Shell.Application'))
@@ -121,7 +121,7 @@ function Assert-WidgetInstalled([string]$ExpectedVersion = $Version, [string]$Ex
     try {
         $widgetFolder = $widgetShell.Namespace((Split-Path -Parent $widgetStartShortcut))
         $widgetLink = $widgetFolder.ParseName((Split-Path -Leaf $widgetStartShortcut))
-        if ($widgetLink.ExtendedProperty('System.AppUserModel.ID') -ne 'dev.codexusagewidget.desktop' -or $widgetLink.ExtendedProperty('System.Link.TargetParsingPath') -ne (Join-Path $widgetInstallRoot 'codex-usage-widget.exe')) { throw 'Shortcut identity/target mismatch.' }
+        if ($widgetLink.ExtendedProperty('System.AppUserModel.ID') -ne 'dev.codexusagewidget.desktop' -or $widgetLink.ExtendedProperty('System.Link.TargetParsingPath') -ne (Join-Path $widgetInstallRoot 'Usage.exe')) { throw 'Shortcut identity/target mismatch.' }
     } finally {
         foreach ($widgetCom in @($widgetLink, $widgetFolder, $widgetShell)) { if ($null -ne $widgetCom) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($widgetCom) } }
     }
@@ -135,7 +135,7 @@ function Invoke-WidgetNativeCheck {
     $widgetStdout = Join-Path $widgetLogRoot 'package-native.stdout.log'
     $widgetStderr = Join-Path $widgetLogRoot 'package-native.stderr.log'
     $widgetObserved = @{}
-    $widgetChild = Start-Process -FilePath (Join-Path $widgetInstallRoot 'codex-usage-widget.exe') -ArgumentList $widgetArgument -WindowStyle Hidden -PassThru -RedirectStandardOutput $widgetStdout -RedirectStandardError $widgetStderr
+    $widgetChild = Start-Process -FilePath (Join-Path $widgetInstallRoot 'Usage.exe') -ArgumentList $widgetArgument -WindowStyle Hidden -PassThru -RedirectStandardOutput $widgetStdout -RedirectStandardError $widgetStderr
     [void]$widgetChild.Handle
     $widgetObserved[$widgetChild.Id] = $widgetChild.StartTime.ToUniversalTime().Ticks
     $widgetWatch = [Diagnostics.Stopwatch]::StartNew()
@@ -221,7 +221,7 @@ try {
             if ($null -ne $widgetRegistration) { $widgetRegistration.Dispose(); throw 'Uninstall registration survived cleanup.' }
             $widgetIdentity = $widgetUser.OpenSubKey($widgetIdentityKey)
             if ($null -ne $widgetIdentity) { $widgetIdentity.Dispose(); throw 'Notification identity metadata survived cleanup.' }
-            if ([IO.File]::Exists((Join-Path $widgetInstallRoot 'codex-usage-widget.exe')) -or (Test-Path -LiteralPath $widgetStartShortcut) -or (Test-Path -LiteralPath $widgetDesktopShortcut)) { throw 'Installed executable/shortcuts survived cleanup.' }
+            if ([IO.File]::Exists((Join-Path $widgetInstallRoot 'Usage.exe')) -or (Test-Path -LiteralPath $widgetStartShortcut) -or (Test-Path -LiteralPath $widgetDesktopShortcut)) { throw 'Installed executable/shortcuts survived cleanup.' }
             Assert-WidgetPortableData
             if ((Get-WidgetDigest $widgetState) -ne $widgetStateBefore) { throw 'Uninstall changed existing widget state.' }
             if ((Get-WidgetDigest $widgetSentinel) -ne $widgetSentinelBefore) { throw 'Uninstall removed the app-data preservation fixture.' }

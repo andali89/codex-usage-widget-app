@@ -103,7 +103,7 @@ jobs:
           $portable = Join-Path $env:RUNNER_TEMP 'widget-portable'
           New-Item -ItemType Directory -Path $portable | Out-Null
           # Explicit allowlist: never archive a build directory or user state.
-          Copy-Item -LiteralPath 'src-tauri/target/publication-remapped/release/codex-usage-widget.exe' -Destination $portable
+          Copy-Item -LiteralPath 'src-tauri/target/publication-remapped/release/Usage.exe' -Destination $portable
           Copy-Item -LiteralPath 'src-tauri/icons/notification.png' -Destination $portable
           Copy-Item -LiteralPath 'LICENSE' -Destination $portable
           $zip = "Codex Usage Widget_${version}_x64-portable.zip"

@@ -23,9 +23,9 @@ export function compactReset(deadline: number | null, now: number, _durationMinu
 }
 
 /** A forecast of time remaining, independent of quota percentage or recovery. */
-export function resetSegments(deadline: number | null, now: number, durationMinutes: number | null): number | null {
+export function resetSegments(deadline: number | null, now: number, durationMinutes: number | null, count = 10): number | null {
   if (deadline === null || durationMinutes === null || !Number.isFinite(deadline) || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return null;
-  return Math.ceil(Math.min(1, Math.max(0, (deadline - now) / (durationMinutes * 60_000))) * 10);
+  return Math.ceil(Math.min(1, Math.max(0, (deadline - now) / (durationMinutes * 60_000))) * count);
 }
 
 export function resetTimestamp(deadline: number): string {

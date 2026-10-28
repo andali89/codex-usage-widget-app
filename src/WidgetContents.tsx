@@ -32,11 +32,11 @@ export default function WidgetContents({state,surface,now,onAction=()=>{}}:{stat
       </div>
     </> : mode === "screen-edge" ? <>
       <BrandMark small /><div className="glance-target edge-values" role="button" tabIndex={0} aria-label={activationLabel}>
-        <CompactQuotaReadings mode="screen-edge" windows={u.windows} selection={selection} resets={savedResets} labelStyle={labelStyle} retained={retained} now={now}/>
+        <CompactQuotaReadings mode="screen-edge" segmentCounts={state.settings.windows.resetSegmentCounts?.["screen-edge"]} windows={u.windows} selection={selection} resets={savedResets} labelStyle={labelStyle} retained={retained} now={now}/>
       </div>{warningMark}
     </> : <>
       <BrandMark small /><div className="glance-target hud-values" role="button" tabIndex={0} aria-label={activationLabel}>
-        <CompactQuotaReadings mode="compact-hud" windows={u.windows} selection={selection} resets={savedResets} labelStyle={labelStyle} retained={retained} now={now}/>
+        <CompactQuotaReadings mode="compact-hud" segmentCounts={state.settings.windows.resetSegmentCounts?.["compact-hud"]} windows={u.windows} selection={selection} resets={savedResets} labelStyle={labelStyle} retained={retained} now={now}/>
       </div>{warningMark}
     </> : trayPreview ? <><BrandMark small /><div className="tray-summary-content"><p>{summary.first}</p>{summary.second && <p className="muted">{summary.second}</p>}</div></> : <>
       <header className="widget-header"><BrandMark /><strong>Codex <span className="muted">usage</span></strong></header>

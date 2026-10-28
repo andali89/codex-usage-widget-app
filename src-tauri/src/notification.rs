@@ -292,7 +292,7 @@ fn installed(app: &tauri::AppHandle) -> bool {
         return false;
     };
     let expected = std::path::Path::new(location.trim_matches('"'))
-        .join("codex-usage-widget.exe")
+        .join("Usage.exe")
         .canonicalize();
     let actual = tauri::utils::platform::current_exe().and_then(|p| p.canonicalize());
     let shortcut = app
