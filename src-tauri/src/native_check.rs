@@ -400,7 +400,7 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                                 if mode == DisplayMode::ScreenEdge {
                                     18.0
                                 } else {
-                                    20.0
+                                    28.0
                                 }
                             } else {
                                 0.0

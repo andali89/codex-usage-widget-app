@@ -316,6 +316,7 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .stable-compact .hud-track { min-width:0; height:.3125rem; }
 .hud-reset-slot { grid-column:3; grid-row:1 / 3; width:3.4375rem; min-width:0; }
 .mode-compact-hud .reset-indicator { justify-items:end; }
+.mode-compact-hud .status-warning { margin-left:.5rem; }
 .mode-compact-hud .reset-countdown { gap:.125rem; }
 .mode-compact-hud .reset-countdown .icon { width:.6875rem; height:.6875rem; }
 .native-surface.preview { width:21rem; padding:12px; background:linear-gradient(145deg,var(--wash),var(--shell)); }
