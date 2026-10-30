@@ -40,6 +40,7 @@ storage-locations/
 
 # Local logs and compiler state
 *.log
+**/diagnostics/widget*.jsonl
 *.tsbuildinfo
 
 # Private design references; production artwork and public screenshots are tracked

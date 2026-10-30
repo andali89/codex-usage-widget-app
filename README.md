@@ -77,6 +77,8 @@ Usage reads go through the local Codex app-server. The widget does not copy cred
 
 Settings and opaque reminder bookkeeping are stored locally, beside the executable by default. General settings offers AppData or a custom folder and shows the active location and any fallback warnings. Displayed quota values are not restored from disk across restarts.
 
+Optional local diagnostic logging is **off by default**. Enable it in **Settings → Connection & diagnostics**, Save, and use **Open logs folder** to investigate loading/stale episodes and refresh timing. Logs are in `diagnostics/` beside the active configuration, capped at 5 MiB per folder with rotation. They exclude credentials, account identifiers, quota values and raw responses. Disabling retains existing logs; configuration moves leave earlier logs in their earlier folders. See the [diagnostic logging guide and validation report](docs/diagnostic-logging-implementation-report.md) for analysis commands and limitations.
+
 ## Known limitations
 
 - **Windows notifications remain unresolved. Do not rely on reminder delivery.** See the [notification investigation](docs/notification-error-investigation.md).

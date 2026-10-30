@@ -4,6 +4,9 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 ## Current references
 
+- [Potential account-update quota clearing](account-update-empty-quota-investigation.md): reported Overview retry wording with empty Edge/HUD values, suspected account-notification handling, and deferred fix/validation directions; runtime cause remains unconfirmed.
+- [Optional diagnostic logging](diagnostic-logging-implementation-report.md): opt-in loading/stale/refresh and webview evidence, local rotation/privacy limits, summary commands, validation and remaining limitations.
+
 - [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
 - [Publication audit](publication-audit.md): tracked-file/history review, privacy findings, release artifacts, and verification limits.
 - [Version 0.1.3 release notes](v0.1.3-release-notes.md): unreleased local version with compact widget sizing and warning-spacing improvements.

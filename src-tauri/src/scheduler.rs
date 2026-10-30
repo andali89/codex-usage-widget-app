@@ -107,6 +107,10 @@ impl Scheduler {
         self.last_start_ms.map_or(0, |n| n.saturating_add(5000))
     }
     pub fn request(&mut self, now: u64) {
+        crate::diagnostics::event(
+            "scheduler_request",
+            || serde_json::json!({"coalesced":self.in_flight,"circuit_open":self.circuit_open,"due_in_ms":self.due_ms.map(|d|d.saturating_sub(now))}),
+        );
         // Manual/open requests join the current read. Only an invalidating hint
         // (finish(dirty=true)) can require a coalesced follow-up.
         if !self.in_flight && !self.circuit_open {
@@ -155,6 +159,10 @@ impl Scheduler {
         if self.in_flight || due.is_none_or(|n| now < n.max(self.minimum())) {
             return false;
         }
+        crate::diagnostics::event(
+            "scheduler_start",
+            || serde_json::json!({"trigger":if self.last_start_ms.is_none(){"startup"}else if reset_due.is_some_and(|n|n<=now){"reset_deadline"}else if self.failures>0{"retry_backoff"}else{"scheduled"}}),
+        );
         for check in self.reset_checks.values_mut() {
             if check.active && check.next_due.is_some_and(|n| now >= n) {
                 check.checks += 1;
@@ -178,6 +186,10 @@ impl Scheduler {
         interval_ms: u64,
         dirty: bool,
     ) {
+        crate::diagnostics::event(
+            "scheduler_finish",
+            || serde_json::json!({"success":success,"permanent":permanent,"dirty":dirty,"interval_ms":interval_ms}),
+        );
         self.in_flight = false;
         if permanent || self.circuit_open {
             self.due_ms = None;

@@ -1,5 +1,6 @@
 mod compact_sizing;
 mod configuration_dialog;
+mod diagnostics;
 mod display_preview;
 mod geometry;
 mod interaction;
@@ -30,6 +31,62 @@ struct TrayControls {
     modes: Vec<(model::DisplayMode, tauri::menu::CheckMenuItem<tauri::Wry>)>,
     visibility: tauri::menu::MenuItem<tauri::Wry>,
     reset: tauri::menu::MenuItem<tauri::Wry>,
+}
+
+#[tauri::command]
+fn diagnostics_status() -> diagnostics::Status {
+    diagnostics::status()
+}
+
+#[tauri::command]
+fn diagnostics_report(
+    window: tauri::WebviewWindow,
+    events: Vec<diagnostics::FrontendEvent>,
+) -> Result<(), &'static str> {
+    diagnostics::frontend(window.label(), events)
+}
+
+#[tauri::command]
+async fn open_diagnostics_folder(window: tauri::WebviewWindow) -> Result<(), &'static str> {
+    if window.label() != "main" {
+        return Err("diagnostics-source");
+    }
+    let directory = diagnostics::status().directory;
+    if directory.is_empty() {
+        return Err("diagnostics-directory");
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&directory).map_err(|_| "diagnostics-open")?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            let operation: Vec<u16> = "open".encode_utf16().chain(Some(0)).collect();
+            let path: Vec<u16> = std::ffi::OsStr::new(&directory)
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            let result = unsafe {
+                windows_sys::Win32::UI::Shell::ShellExecuteW(
+                    std::ptr::null_mut(),
+                    operation.as_ptr(),
+                    path.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    1,
+                )
+            };
+            if result as isize <= 32 {
+                return Err("diagnostics-open");
+            }
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            Err("diagnostics-platform")
+        }
+    })
+    .await
+    .map_err(|_| "diagnostics-open")?
 }
 
 #[tauri::command]
@@ -485,6 +542,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             reminder_action,
             get_state,
+            diagnostics_status,
+            diagnostics_report,
+            open_diagnostics_folder,
             refresh,
             retry_autostart,
             save_settings,
@@ -546,6 +606,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::Destroyed => {
+                diagnostics::event(
+                    "webview_destroyed",
+                    || serde_json::json!({"source":window.label()}),
+                );
                 let source = match window.label() {
                     "main" => Some(Surface::Main),
                     "shell" => Some(Surface::Shell),

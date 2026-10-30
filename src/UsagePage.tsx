@@ -1,11 +1,13 @@
 import { diagnostic, useVisibleClock, type AppState } from "./state";
 import { quotaPending, usagePending } from "./summary";
+import { useDiagnostics } from "./useDiagnostics";
 import QuotaCard from "./QuotaCard";
 import { EmptyArt, Icon } from "./visuals";
 import ResetCreditsCard from "./ResetCreditsCard";
 
 export default function UsagePage({ state, onSettings, onReminders, onLayoutChange }: { state: AppState; onSettings: () => void; onReminders: () => void; onLayoutChange: () => void }) {
   const now = useVisibleClock(state.dashboardVisible);
+  useDiagnostics(state,"usage",now,state.dashboardVisible);
   const u = state.usage;
   const stale = u.freshness === "stale";
   const pending = usagePending(u);

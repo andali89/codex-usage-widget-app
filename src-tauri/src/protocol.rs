@@ -246,6 +246,7 @@ struct Client {
     reader: tokio::task::JoinHandle<()>,
     stderr: tokio::task::JoinHandle<()>,
     next_id: u64,
+    diagnostic_read_id: u64,
     dirty: bool,
     account_changed: bool,
     #[cfg(windows)]
@@ -311,6 +312,7 @@ impl Client {
             reader,
             stderr,
             next_id: 1,
+            diagnostic_read_id: 0,
             dirty: false,
             account_changed: false,
             #[cfg(windows)]
@@ -336,7 +338,8 @@ impl Client {
         }
         let id = self.next_id;
         self.next_id += 1;
-        tokio::time::timeout(TIMEOUT, async {
+        let started = std::time::Instant::now();
+        let result=tokio::time::timeout(TIMEOUT, async {
             self.send(json!({"id":id,"method":method,"params":params})).await?;
             loop {
                 let frame = self.frames.recv().await.ok_or_else(|| Failure::new("codex-exited"))??;
@@ -345,8 +348,8 @@ impl Client {
                         return Err(Failure::permanent("protocol-invalid-response"));
                     }
                     match frame.get("method").and_then(Value::as_str) {
-                        Some("account/updated") => self.account_changed = true,
-                        Some("account/rateLimits/updated") => self.dirty = true,
+                        Some("account/updated") => { self.account_changed = true;crate::diagnostics::event("protocol_hint",||json!({"read_id":self.diagnostic_read_id,"trigger":"account_updated"})); },
+                        Some("account/rateLimits/updated") => { self.dirty = true;crate::diagnostics::event("protocol_hint",||json!({"read_id":self.diagnostic_read_id,"trigger":"quota_updated"})); },
                         _ => {}
                     }
                     if let Some(request_id) = frame.get("id") {
@@ -357,7 +360,12 @@ impl Client {
                 }
                 return response_result(frame, id);
             }
-        }).await.map_err(|_| Failure::new("protocol-timeout"))?
+        }).await.unwrap_or_else(|_| Err(Failure::new("protocol-timeout")));
+        crate::diagnostics::event(
+            "protocol_stage",
+            || json!({"read_id":self.diagnostic_read_id,"stage":match method {"initialize"=>"initialize","account/rateLimits/read"=>"quota_read",_ if id<4=>"account_before",_=>"account_after"},"duration_ms":started.elapsed().as_millis() as u64,"error":result.as_ref().err().map(|e|e.code)}),
+        );
+        result
     }
 
     async fn transaction(&mut self, salt: &str) -> Result<Observation, Failure> {
@@ -449,12 +457,24 @@ pub async fn read_cycle(
     proxy_url: Option<&str>,
     salt: &str,
     mut stop: watch::Receiver<bool>,
+    read_id: u64,
 ) -> Result<Observation, Failure> {
-    let path = discover(configured)?;
+    let cycle_started = std::time::Instant::now();
+    let found = discover(configured);
+    crate::diagnostics::event(
+        "protocol_stage",
+        || json!({"read_id":read_id,"stage":"discovery","duration_ms":cycle_started.elapsed().as_millis() as u64,"error":found.as_ref().err().map(|e|e.code)}),
+    );
+    let path = found?;
+    let spawn_started = std::time::Instant::now();
     let mut client = tokio::select! {
         _ = stop.changed() => return Err(Failure::new("shutdown")),
-        result = Client::spawn(&path, proxy_url) => result?,
+        result = Client::spawn(&path, proxy_url) => {
+            crate::diagnostics::event("protocol_stage",||json!({"read_id":read_id,"stage":"launch","duration_ms":spawn_started.elapsed().as_millis() as u64,"error":result.as_ref().err().map(|e|e.code)}));
+            result?
+        },
     };
+    client.diagnostic_read_id = read_id;
     let mut result = tokio::select! {
         _ = stop.changed() => Err(Failure::new("shutdown")),
         result = client.transaction(salt) => result,
@@ -475,7 +495,12 @@ pub async fn read_cycle(
             }
         }
     }
+    let cleanup_started = std::time::Instant::now();
     client.shutdown().await;
+    crate::diagnostics::event(
+        "protocol_stage",
+        || json!({"read_id":read_id,"stage":"cleanup","duration_ms":cleanup_started.elapsed().as_millis() as u64}),
+    );
     if let Err(error) = &mut result {
         if error.is_incompatible() {
             error.codex_cli_version = tokio::select! {
@@ -484,6 +509,10 @@ pub async fn read_cycle(
             };
         }
     }
+    crate::diagnostics::event(
+        "read_complete",
+        || json!({"read_id":read_id,"duration_ms":cycle_started.elapsed().as_millis() as u64,"error":result.as_ref().err().map(|e|e.code),"dirty":result.as_ref().is_ok_and(|o|o.dirty)}),
+    );
     result
 }
 
@@ -716,7 +745,7 @@ mod tests {
     async fn live_read_only_protocol_gate() {
         let (_send, stop) = watch::channel(false);
         let proxy_url = std::env::var("CODEX_USAGE_WIDGET_PROBE_PROXY").ok();
-        let result = read_cycle(None, proxy_url.as_deref(), "live-probe-session", stop)
+        let result = read_cycle(None, proxy_url.as_deref(), "live-probe-session", stop, 0)
             .await
             .expect("read-only protocol gate failed (safe code)");
         let normalized = crate::model::normalize(

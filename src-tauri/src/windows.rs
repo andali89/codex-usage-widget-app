@@ -338,6 +338,10 @@ impl Windows {
         for (index, label) in ["main", "shell", "preview"].into_iter().enumerate() {
             if self.idle[index].take_due(now) {
                 if let Some(window) = app.get_webview_window(label) {
+                    crate::diagnostics::event(
+                        "webview_idle_destroy",
+                        || serde_json::json!({"source":window.label()}),
+                    );
                     match window.destroy() {
                         Ok(()) => match index {
                             0 => {
@@ -968,6 +972,7 @@ impl Windows {
                 // bypasses it in the pinned Tao version and is unnecessary while
                 // this window is hidden until the frontend has hydrated.
                 .on_page_load(|window, payload| {
+                    crate::diagnostics::event("webview_page",||serde_json::json!({"source":window.label(),"started":matches!(payload.event(),tauri::webview::PageLoadEvent::Started)}));
                     if window.label() == "main"
                         && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
                     {
@@ -990,6 +995,7 @@ impl Windows {
                 .min_inner_size(if standard { 380.0 } else { 16.0 }, 16.0)
                 .build()
         };
+        crate::diagnostics::event("webview_create", || serde_json::json!({"source":label}));
         let window = match create(
             label == "shell" && native::composition_available() && !self.composition_failed,
         ) {

@@ -2,6 +2,9 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "get_state",
+            "diagnostics_status",
+            "diagnostics_report",
+            "open_diagnostics_folder",
             "refresh",
             "retry_autostart",
             "save_settings",

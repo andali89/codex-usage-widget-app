@@ -35,6 +35,8 @@ pub enum Action {
     PreviewContentSize(oneshot::Sender<Option<(f64, f64)>>),
     DashboardSettled(oneshot::Sender<bool>),
     Refresh,
+    #[cfg(debug_assertions)]
+    DiagnosticFixture(Box<Usage>),
     Autostart(oneshot::Sender<Result<AppState, String>>),
     Save {
         expected_revision: u64,
@@ -67,7 +69,9 @@ impl Service {
         rx.await.map_err(|_| "service-stopped".into())
     }
     pub fn dispatch(&self, action: Action) {
-        let _ = self.0.try_send(action);
+        if self.0.try_send(action).is_err() {
+            crate::diagnostics::event("action_queue_drop", || serde_json::json!({}));
+        }
     }
     pub fn dispatch_reliable(&self, action: Action) {
         let tx = self.0.clone();
@@ -153,7 +157,12 @@ fn publish(app: &AppHandle, state: &mut AppState) {
     );
     if let Some(store) = app.try_state::<std::sync::Arc<Store>>() {
         state.storage = store.status();
+        crate::diagnostics::global().follow_storage(
+            state.settings.diagnostic_logging_enabled,
+            PathBuf::from(&state.storage.active_directory),
+        );
     }
+    state.diagnostic_segment = crate::diagnostics::status().segment;
     state.revision += 1;
     if let Some(tray) = app.tray_by_id("main") {
         let summary = tooltip(&state.usage);
@@ -176,7 +185,13 @@ fn publish(app: &AppHandle, state: &mut AppState) {
             "Hide widget"
         });
     }
-    let _ = app.emit("widget-state", &*state);
+    crate::diagnostics::observe(state);
+    if app.emit("widget-state", &*state).is_err() {
+        crate::diagnostics::event(
+            "publish_failed",
+            || serde_json::json!({"revision":state.revision}),
+        );
+    }
 }
 
 fn tooltip(usage: &Usage) -> String {
@@ -278,6 +293,10 @@ pub fn start(
     let store = std::sync::Arc::new(store);
     app.manage(store.clone());
     let loaded = crate::native_check::prepare(loaded);
+    crate::diagnostics::global().configure(
+        loaded.settings.diagnostic_logging_enabled,
+        PathBuf::from(store.status().active_directory),
+    );
     let first_launch = loaded.first_launch;
     let dashboard = crate::lifecycle::initial_dashboard(
         first_launch,
@@ -299,6 +318,7 @@ pub fn start(
     let foreground_seconds = loaded.settings.foreground_seconds;
     let mut notification = crate::notification::Adapter::new(&app);
     let mut state = AppState {
+        diagnostic_segment: crate::diagnostics::status().segment,
         display_preview: None,
         process_epoch: format!("{}-{}", model::now_ms(), std::process::id()),
         revision: 0,
@@ -445,6 +465,10 @@ pub fn start(
                 }
             }
             if model::freshness_deadline(&state.usage, interval).is_some_and(|at| wall >= at) {
+                crate::diagnostics::event(
+                    "freshness_expired",
+                    || serde_json::json!({"interval_ms":interval}),
+                );
                 state.usage.freshness = "stale".into();
                 reminders.mark_stale();
                 publish(&app, &mut state);
@@ -462,6 +486,10 @@ pub fn start(
                 let elapsed_wall = wall - last_wall;
                 let elapsed_monotonic = now.saturating_sub(last_monotonic) as i64;
                 if (elapsed_wall - elapsed_monotonic).abs() > 60000 {
+                    crate::diagnostics::event(
+                        "clock_change",
+                        || serde_json::json!({"delta_ms":elapsed_wall-elapsed_monotonic}),
+                    );
                     scheduler.reconcile_clock(wall, now);
                     reminders.mark_stale();
                     if state.usage.last_success_at_ms.is_some() {
@@ -501,6 +529,11 @@ pub fn start(
                 if synthetic {
                     scheduler.finish(now, true, true, interval, false);
                 } else {
+                    let read_id = crate::diagnostics::next_read_id();
+                    crate::diagnostics::event(
+                        "refresh_start",
+                        || serde_json::json!({"read_id":read_id,"generation":generation,"interval_ms":interval}),
+                    );
                     state.usage.refresh_in_flight = true;
                     state.usage.last_attempt_at_ms = Some(wall);
                     let path = state.settings.codex_path.clone();
@@ -512,14 +545,23 @@ pub fn start(
                     let stop = stop_rx.clone();
                     let request_generation = generation;
                     worker = Some(tauri::async_runtime::spawn(async move {
+                        let read_started = std::time::Instant::now();
                         let outcome = protocol::read_cycle(
                             path.as_deref(),
                             proxy_url.as_deref(),
                             &epoch,
                             stop,
+                            read_id,
                         )
                         .await;
-                        let _ = tx.send((request_generation, outcome)).await;
+                        let _ = tx
+                            .send((
+                                request_generation,
+                                read_id,
+                                read_started.elapsed().as_millis() as u64,
+                                outcome,
+                            ))
+                            .await;
                     }));
                     publish(&app, &mut state);
                 }
@@ -548,18 +590,20 @@ pub fn start(
                 .max(1);
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_millis(wait)) => {},
-                Some((request_generation, outcome)) = results.recv() => {
+                Some((request_generation, read_id, duration_ms, outcome)) = results.recv() => {
                     worker = None;
                     let now = started.elapsed().as_millis() as u64;
                     let at = model::now_ms();
                     state.usage.refresh_in_flight = false;
+                    crate::diagnostics::event("refresh_result",||serde_json::json!({"duration_ms":duration_ms,"read_id":read_id,"generation":request_generation,"current_generation":generation,"success":outcome.is_ok(),"error":outcome.as_ref().err().map(|e|e.code),"child_exited":outcome.as_ref().err().is_some_and(|e|e.child_exited)}));
                     if request_generation != generation {
+                        crate::diagnostics::event("result_discarded",||serde_json::json!({"reason":"generation"}));
                         scheduler.finish(now, true, false, interval, true);
                     } else {
                         match outcome {
                             Ok(observation) => {
                                 let context_changed = state.usage.account_context_key.as_deref() != Some(&observation.context);
-                                if context_changed { generation += 1;reminders.invalidate_context();scheduler.rebind_reset_context(); }
+                                if context_changed { crate::diagnostics::event("context_rebound",||serde_json::json!({"stable":observation.stable_identity})); generation += 1;reminders.invalidate_context();scheduler.rebind_reset_context(); }
                                 let previous = if context_changed { Usage::default() } else { state.usage.clone() };
                                 let last_attempt = state.usage.last_attempt_at_ms;
                                 state.usage = model::normalize(&observation.raw, at, &previous);
@@ -596,6 +640,7 @@ pub fn start(
                         }
                     }
                     state.usage.next_refresh_at_ms = scheduler.next_deadline().map(|n| at + n.saturating_sub(now) as i64);
+                    crate::diagnostics::event("refresh_schedule",||serde_json::json!({"next_in_ms":scheduler.next_deadline().map(|n|n.saturating_sub(now)),"generation":generation,"error":state.usage.error_code}));
                     state.reminders=reminders.snapshot(notification.diagnostic());
                     publish(&app, &mut state);
                 },
@@ -632,7 +677,9 @@ pub fn start(
                         Action::ShellContentSize(reply) => { let _ = reply.send(windows.shell_content_size()); },
                         Action::PreviewContentSize(reply) => { let _ = reply.send(windows.preview_content_size()); },
                         Action::DashboardSettled(reply) => { let _ = reply.send(windows.dashboard_settled()); },
-                        Action::Refresh => { scheduler.retry(now); },
+                        #[cfg(debug_assertions)]
+                        Action::DiagnosticFixture(usage) => {if crate::native_check::diagnostics_requested(){state.usage = *usage;publish(&app,&mut state);}},
+                        Action::Refresh => { crate::diagnostics::event("refresh_request",||serde_json::json!({"trigger":"manual","coalesced":scheduler.in_flight})); scheduler.retry(now); },
                         Action::Autostart(reply) => {
                             let mut settings=state.settings.clone();settings.autostart.pending=true;settings.revision+=1;
                             let result=match store.save(&settings,&reminders.data) {
@@ -663,8 +710,8 @@ pub fn start(
                             }
                             if render || before != windows.interaction.state.generation { coordinate(&app, &mut state, &mut windows, &actor_service, focus); }
                             scheduler.set_cadence(now, windows.cadence(&state.settings));
-                            if reconcile { scheduler.reconcile_clock(wall,now);reminders.mark_stale();generation += 1; state.usage.freshness = if state.usage.windows.is_empty() { "empty" } else { "stale" }.into(); scheduler.request(now); }
-                            if (explicit_open || !was_expanded) && windows.expanded_visible() && wall - state.usage.last_success_at_ms.unwrap_or(0) > 15000 { scheduler.request(now); }
+                            if reconcile { crate::diagnostics::event("resume_reconcile",||serde_json::json!({})); scheduler.reconcile_clock(wall,now);reminders.mark_stale();generation += 1; state.usage.freshness = if state.usage.windows.is_empty() { "empty" } else { "stale" }.into(); scheduler.request(now); }
+                            if (explicit_open || !was_expanded) && windows.expanded_visible() && wall - state.usage.last_success_at_ms.unwrap_or(0) > 15000 { crate::diagnostics::event("refresh_request",||serde_json::json!({"trigger":"detail_open","coalesced":scheduler.in_flight})); scheduler.request(now); }
                         },
                         Action::SetMode(mode) => {
                             state.display_preview=None;
@@ -721,6 +768,9 @@ pub fn start(
                                         windows.settings_changed(&state.settings, &settings);
                                         state.display_preview=None;
                                         state.settings = settings;
+                                        let log_directory=PathBuf::from(store.status().active_directory);
+                                        if state.settings.diagnostic_logging_enabled && crate::diagnostics::status().error.is_some() {crate::diagnostics::global().configure(true,log_directory);} else {crate::diagnostics::global().follow_storage(state.settings.diagnostic_logging_enabled,log_directory);}
+                                        crate::diagnostics::event("settings_saved",||serde_json::json!({"connection_reset":replaced_profile || state.usage.connection=="starting"}));
                                         state.storage_diagnostic = None;
                                         reconcile_autostart(&app,&mut state,&store,&reminders.data,true);
                                         state.appearance = platform::appearance(effective_settings(&state).theme_preference);
@@ -779,6 +829,9 @@ pub fn start(
                             if let Some(mut task) = worker.take() {
                                 if tokio::time::timeout(Duration::from_millis(2200), &mut task).await.is_err() { task.abort(); }
                             }
+                            crate::diagnostics::event("shutdown",||serde_json::json!({}));
+                            let recorder=crate::diagnostics::global().clone();
+                            let _=tokio::time::timeout(Duration::from_millis(600),tauri::async_runtime::spawn_blocking(move||recorder.flush(Duration::from_millis(500)))).await;
                             app.exit(0);
                             break;
                         }
@@ -800,6 +853,7 @@ fn reconcile_timezone(
     now: u64,
 ) {
     if timezone_changed(previous, platform::timezone_signature()) {
+        crate::diagnostics::event("timezone_change", || serde_json::json!({}));
         *generation += 1;
         reminders.mark_stale();
         state.usage.freshness = if state.usage.windows.is_empty() {

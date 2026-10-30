@@ -2,6 +2,7 @@ import type { WidgetAppearanceSettings, EffectiveWidgetAppearance } from "./widg
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
+import { diagnosticEvent, setDiagnosticsEnabled } from "./useDiagnostics";
 import { Replica } from "./replica";
 export { percent, countdown } from "./format";
 
@@ -20,7 +21,7 @@ export interface ReminderEvent { ruleKey:string; category:string; label:string; 
 export interface ReminderDelivery { id:number; atMs:number; status:string; reason:string|null; attempts:number; events:ReminderEvent[] }
 export const defaultReminders = ():ReminderPreferences => ({enabled:false,defaults:{low:true,thresholds:[20,10,0],approaching:false,leadMinutes:5,recovery:true},windowRules:{},quietHours:{enabled:false,startMinute:1320,endMinute:420,weekdays:[0,1,2,3,4,5,6]},schedules:[],silent:true,detailed:false,suppressFullscreen:true});
 export interface Settings {
-  schemaVersion: number; revision: number; themePreference: ThemePreference;
+  schemaVersion: number; diagnosticLoggingEnabled: boolean; revision: number; themePreference: ThemePreference;
   mode: DisplayMode; codexPath: string | null; proxyUrl: string | null; storageLocation: StorageLocation;
   foregroundSeconds: number; compactSeconds: number; backgroundSeconds: number;
   widgetAppearance: WidgetAppearanceSettings;
@@ -49,6 +50,7 @@ export interface Usage {
   missingWindowReads: Record<string, number>;
 }
 export interface AppState {
+  diagnosticSegment: number;
   processEpoch: string; revision: number; settings: Settings;
   dashboardRequest:{sequence:number;page:"overview"|"settings"}|null;
   firstLaunch:boolean;
@@ -93,32 +95,41 @@ export function useSharedState() {
     let reconciling = false;
     const accept = (next: AppState) => {
       if (disposed) return { accepted: false, gap: false };
+      const old=replica.current.current;
       const result = replica.current.apply(next);
+      if(result.accepted)setDiagnosticsEnabled(next.settings.diagnosticLoggingEnabled,next.diagnosticSegment);
+      if(result.gap)diagnosticEvent("gap",{revision:next.revision});
+      if(!result.accepted)diagnosticEvent("rejected",{revision:next.revision});
+      if(old&&old.processEpoch!==next.processEpoch)diagnosticEvent("epoch_changed",{revision:next.revision});
       if (result.accepted) setState(next);
       return result;
     };
-    const reconcile = async () => {
+    const reconcile = async (reason:"initial"|"gap"|"focus"|"visible"="initial") => {
       if (reconciling || disposed) return;
       reconciling = true;
-      try { accept(await command<AppState>("get_state")); if (!disposed) setError(null); }
-      catch { if (!disposed) setError("Shared state is unavailable. Reopen the dashboard from the tray."); }
+      const began=performance.now();
+      diagnosticEvent("snapshot_start",{reason});
+      try { accept(await command<AppState>("get_state")); diagnosticEvent("snapshot_end",{reason,durationMs:Math.round(performance.now()-began)}); if (!disposed) setError(null); }
+      catch { diagnosticEvent("snapshot_failed",{reason,durationMs:Math.round(performance.now()-began)}); if (!disposed) setError("Shared state is unavailable. Reopen the dashboard from the tray."); }
       finally { reconciling = false; }
     };
     // Subscribe before snapshot. Events received during snapshot win by epoch/revision.
     void (async () => {
       try {
         const remove = await listen<AppState>("widget-state", event => {
-          if (accept(event.payload).gap) void reconcile();
+          if (accept(event.payload).gap) void reconcile("gap");
         });
         if (disposed) { remove(); return; }
         unlisten = remove;
+        diagnosticEvent("listen_ready");
         await reconcile();
-      } catch { if (!disposed) setError("Cannot connect to the native state service."); }
+      } catch { diagnosticEvent("listen_failed"); if (!disposed) setError("Cannot connect to the native state service."); }
     })();
-    const resume = () => { if (!document.hidden) void reconcile(); };
+    const resume = () => { if (!document.hidden) void reconcile("visible"); };
+    const focus = () => { if (!document.hidden) void reconcile("focus"); };
     document.addEventListener("visibilitychange", resume);
-    window.addEventListener("focus", resume);
-    return () => { disposed = true; unlisten?.(); document.removeEventListener("visibilitychange", resume); window.removeEventListener("focus", resume); };
+    window.addEventListener("focus", focus);
+    return () => { disposed = true; unlisten?.(); document.removeEventListener("visibilitychange", resume); window.removeEventListener("focus", focus); };
   }, []);
   return { state, error };
 }

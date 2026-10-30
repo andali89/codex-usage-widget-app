@@ -55,7 +55,8 @@ async fn frontend_assert(
     Err(format!("timeout-{name}"))
 }
 pub fn requested() -> bool {
-    appearance_requested()
+    diagnostics_requested()
+        || appearance_requested()
         || sizing_requested()
         || cfg!(debug_assertions)
             && std::env::args().any(|arg| {
@@ -75,7 +76,9 @@ pub fn validation_directory() -> std::path::PathBuf {
         .parent()
         .expect("executable directory")
         .join("../validation")
-        .join(if compact_options_requested() {
+        .join(if diagnostics_requested() {
+            "native-diagnostics"
+        } else if compact_options_requested() {
             "native-compact-options"
         } else if appearance_requested() {
             "native-appearance"
@@ -101,8 +104,11 @@ pub fn appearance_requested() -> bool {
 fn composition_probe_requested() -> bool {
     appearance_requested() && std::env::args().any(|arg| arg == "--probe-native-composition")
 }
+pub fn diagnostics_requested() -> bool {
+    cfg!(debug_assertions) && std::env::args().any(|arg| arg == "--check-native-diagnostics")
+}
 pub fn presentation_requested() -> bool {
-    appearance_requested() || sizing_requested()
+    diagnostics_requested() || appearance_requested() || sizing_requested()
 }
 pub fn fixture_usage() -> crate::model::Usage {
     let now = crate::model::now_ms();
@@ -239,7 +245,9 @@ pub fn start(app: AppHandle, service: Service) {
         let _ = std::fs::write(directory.join("result.log"), "native-check result=running");
     }
     tauri::async_runtime::spawn(async move {
-        let mut result = if compact_options_requested() {
+        let mut result = if diagnostics_requested() {
+            diagnostics_check(&app, &service).await
+        } else if compact_options_requested() {
             compact_options_check(&app, &service).await
         } else if appearance_requested() {
             appearance_check(&app, &service).await
@@ -284,6 +292,119 @@ pub fn start(app: AppHandle, service: Service) {
         }
         service.dispatch(Action::Quit);
     });
+}
+
+async fn diagnostics_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        let mut settings = service.snapshot().await?.settings;
+        settings.diagnostic_logging_enabled = true;
+        settings.windows.suppress_fullscreen = false;
+        settings.mode = DisplayMode::CompactHud;
+        save_settings(service, settings).await?;
+        wait(app, service, "diagnostic-hud", |_| visible(app, "shell")).await?;
+        frontend_assert(
+            app,
+            "shell",
+            "document.querySelector('.hud-quota strong')?.textContent==='68%'",
+            "diagnostic-fresh",
+        )
+        .await?;
+        let fresh = service.snapshot().await?.usage;
+        let loading = crate::model::Usage {
+            connection: "starting".into(),
+            freshness: "empty".into(),
+            refresh_in_flight: true,
+            ..Default::default()
+        };
+        service.dispatch_reliable(Action::DiagnosticFixture(Box::new(loading)));
+        frontend_assert(
+            app,
+            "shell",
+            "document.querySelector('.hud-quota strong')?.textContent==='—'",
+            "diagnostic-loading",
+        )
+        .await?;
+        let mut stale = fresh.clone();
+        stale.freshness = "stale".into();
+        stale.connection = "offline".into();
+        stale.error_code = Some("protocol-timeout".into());
+        service.dispatch_reliable(Action::DiagnosticFixture(Box::new(stale)));
+        frontend_assert(app,"shell","document.querySelector('.status-warning')?.getAttribute('title')==='Last known · out of date'","diagnostic-stale").await?;
+        service.dispatch_reliable(Action::DiagnosticFixture(Box::new(fresh)));
+        frontend_assert(app,"shell","document.querySelector('.hud-quota strong')?.textContent==='68%'&&!document.querySelector('.status-warning')","diagnostic-recovery").await?;
+        let recorder = crate::diagnostics::global().clone();
+        tauri::async_runtime::spawn_blocking(move || recorder.flush(Duration::from_secs(2)))
+            .await
+            .map_err(|_| "diagnostic-flush")?;
+        let status = crate::diagnostics::status();
+        require(
+            status.recording && status.error.is_none(),
+            "diagnostic-recording",
+        )?;
+        let log =
+            std::fs::read_to_string(std::path::Path::new(&status.directory).join("widget.jsonl"))
+                .map_err(|_| "diagnostic-log-read")?;
+        require(
+            log.contains("state_enter")
+                && log.contains("state_exit")
+                && log.contains("frontend")
+                && log.contains("runtime"),
+            "diagnostic-native-and-frontend",
+        )?;
+        require(
+            !log.contains("remainingPercent") && !log.contains("accountContextKey"),
+            "diagnostic-no-usage-payload",
+        )?;
+        service.dispatch_reliable(Action::Window(Input::Open {
+            standard: true,
+            settings: true,
+        }));
+        wait(app, service, "diagnostic-settings", |_| {
+            visible(app, "main")
+        })
+        .await?;
+        frontend_assert(app,"main","[...document.querySelectorAll('label')].some(e=>e.textContent.includes('Enable local diagnostic logging')&&e.querySelector('input')?.checked)","diagnostic-settings-control").await?;
+        let before = service.snapshot().await?.usage;
+        let mut settings = service.snapshot().await?.settings;
+        settings.diagnostic_logging_enabled = false;
+        save_settings(service, settings).await?;
+        let after = service.snapshot().await?.usage;
+        require(
+            before.last_success_at_ms == after.last_success_at_ms
+                && before.freshness == after.freshness,
+            "diagnostic-toggle-preserves-usage",
+        )?;
+        let recorder = crate::diagnostics::global().clone();
+        tauri::async_runtime::spawn_blocking(move || recorder.flush(Duration::from_secs(2)))
+            .await
+            .map_err(|_| "diagnostic-flush")?;
+        require(
+            !crate::diagnostics::status().recording,
+            "diagnostic-disabled",
+        )?;
+        // Exercise expected recreation without waiting for the idle lease.
+        let shell = app.get_webview_window("shell").ok_or("diagnostic-shell")?;
+        shell.destroy().map_err(|_| "diagnostic-destroy")?;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        mode(service, DisplayMode::ScreenEdge).await?;
+        wait(app, service, "diagnostic-recreated", |_| {
+            visible(app, "shell")
+        })
+        .await?;
+        frontend_assert(
+            app,
+            "shell",
+            "!!document.querySelector('.edge-values')",
+            "diagnostic-recreated",
+        )
+        .await?;
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = (app, service);
+    }
+    Ok(())
 }
 
 // Independent of foreground activation: compare React's generation-matched

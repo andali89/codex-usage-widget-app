@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties, type MouseEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { applyAppearance, command, useSharedState, useVisibleClock } from "./state";
+import { useDiagnostics } from "./useDiagnostics";
 import WidgetBackground from "./WidgetBackground";
 import WidgetContents from "./WidgetContents";
 import { widgetStyle } from "./widgetAppearance";
@@ -14,6 +15,7 @@ export default function SurfaceView({ surface }: { surface: "shell" | "preview" 
   const { state, error } = useSharedState();
   const visible = !!state && (surface === "shell" ? !state.presentation.suppressed && !state.presentation.hidden && state.settings.mode !== "system-tray" : !(state.presentation.previewSource === "tray" ? state.presentation.traySuppressed : state.presentation.suppressed) && state.presentation.shell !== "compact");
   const now = useVisibleClock(visible);
+  useDiagnostics(state,surface,now,visible);
   const root = useRef<HTMLDivElement>(null);
   const compactMode = state?.settings.mode === "screen-edge" || state?.settings.mode === "compact-hud" ? state.settings.mode : undefined;
   const widgetScale = surface === "shell" && compactMode ? (state?.appearance.compactSizing?.[compactMode]?.effectivePercent ?? 100) / 100 : 1;

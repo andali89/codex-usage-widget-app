@@ -1,11 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { startDiagnostics } from "./useDiagnostics";
 import App from "./App";
 import SurfaceView from "./SurfaceView";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauri } from "@tauri-apps/api/core";
 import "./styles.css";
 
+startDiagnostics();
 const root = document.getElementById("root");
 
 if (!root) {

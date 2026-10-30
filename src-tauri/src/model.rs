@@ -192,6 +192,7 @@ impl DisplayMode {
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct Settings {
     pub schema_version: u32,
+    pub diagnostic_logging_enabled: bool,
     pub revision: u64,
     pub theme_preference: ThemePreference,
     pub mode: DisplayMode,
@@ -210,7 +211,8 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            schema_version: 12,
+            schema_version: 13,
+            diagnostic_logging_enabled: false,
             revision: 0,
             theme_preference: ThemePreference::System,
             mode: DisplayMode::SystemTray,
@@ -233,7 +235,7 @@ impl Default for Settings {
 
 impl Settings {
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.schema_version != 12 {
+        if self.schema_version != 13 {
             return Err("settings-version");
         }
         self.storage_location.validate()?;
@@ -397,6 +399,7 @@ pub fn freshness_deadline(usage: &Usage, interval_ms: u64) -> Option<i64> {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppState {
+    pub diagnostic_segment: u64,
     #[serde(skip)]
     pub display_preview: Option<crate::display_preview::Session>,
     pub process_epoch: String,
@@ -720,7 +723,7 @@ mod tests {
     #[test]
     fn quota_label_style_defaults_and_round_trips_in_current_schema() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":12,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":13,"windows":{}})).unwrap();
         assert_eq!(old.windows.quota_label_style, QuotaLabelStyle::Words);
         for style in [QuotaLabelStyle::Words, QuotaLabelStyle::Badges] {
             let mut settings = old.clone();
@@ -738,7 +741,7 @@ mod tests {
     #[test]
     fn countdown_options_default_for_old_settings_and_round_trip_per_mode() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":12,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":13,"windows":{}})).unwrap();
         assert!(old.windows.reset_countdowns.is_empty());
         let mut next = old;
         next.windows.reset_countdowns.insert(

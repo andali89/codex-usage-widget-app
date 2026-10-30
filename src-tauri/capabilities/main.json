@@ -8,7 +8,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "allow-get-state",
+    "allow-get-state", "allow-diagnostics-status", "allow-diagnostics-report", "allow-open-diagnostics-folder",
     "allow-refresh",
     "allow-save-settings",
     "allow-view-ready",
