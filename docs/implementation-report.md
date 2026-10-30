@@ -10,6 +10,16 @@ The draft distinguishes implemented [optional diagnostics](diagnostic-logging-im
 
 Validation: `npm.cmd run build` and `npm.cmd run rust:check` passed on version 0.1.5. Manifest/lockfile and packaging-default consistency, unchanged dependency metadata, local documentation links and `git diff --check` were checked. No test suites, executable launch, installer build/installation, tag, push or release publication were performed for this metadata/documentation change. Earlier diagnostic validation remains recorded against its preceding development baseline; planned experience fixes and packaged 0.1.5 validation remain outstanding.
 
+### Local portable build — 2026-10-30
+
+`npm.cmd run build` passed, followed by `cargo build --manifest-path src-tauri/Cargo.toml --release --locked --offline --bin Usage --features tauri/custom-protocol --target-dir src-tauri/target/publication-remapped`. This direct Cargo path bypasses the previously recorded installed Tauri CLI binding problem. Process-local `CARGO_ENCODED_RUSTFLAGS` remapped the user-profile source prefix to `/builder` and repository source prefix to `/workspace/codex-usage-widget`, and set `-C link-arg=/PDBALTPATH:%_PDB%`; the previous environment value was restored afterward. Installed dependencies and lockfiles were reused without upgrades.
+
+- Executable: `src-tauri/target/publication-remapped/release/Usage.exe`, **Windows x64**, product version **0.1.5**, **14,058,496 bytes**. SHA-256: `a0c8242c89f1b942789b5180138d4ec37eb8d74a9198ab8085ed4bc3077e5c76`.
+- Portable ZIP: `src-tauri/target/release-assets/v0.1.5/Codex Usage Widget_0.1.5_x64-portable.zip`, **4,685,164 bytes**. SHA-256: `0bd4d3a2955d8bd75d499197cbfcf7e6bc89e2b1542f022551af710c4e512940`. `SHA256SUMS.txt` is in the same directory.
+- Packaging used a fresh staging directory and the release workflow's explicit three-file allowlist: `Usage.exe`, `notification.png`, and `LICENSE`. ZIP entry names and each archived file's SHA-256 were verified against the staging inputs. No settings, logs, credentials or usage data were included. Executable scanning found neither local user-profile nor repository source paths in UTF-8/UTF-16 or the checked slash variants.
+
+This verifies compilation, Windows version/architecture metadata, archive contents and file integrity. The portable executable was **not launched**, and no installer, installation, live Codex probe, tag, push or public release was performed. Users must extract all ZIP files into a writable folder and run `Usage.exe`; WebView2 Runtime and a separately installed signed-in native Codex CLI remain prerequisites. The planned reduction in unintended empty loading states is still pending implementation and validation.
+
 ## Compact countdown readability and widget sizing — 2026-10-28
 
 Added shared Edge/HUD bold and higher contrast countdown options plus independent 80–300% uniform size controls, with native fitting limits, temporary preview/Save/Cancel, persisted defaults, and schema-11 → 12 migration. Existing 0.1.3 layout refinements, configurable reset bars, and Usage.exe are preserved. See the [appearance implementation report](widget-appearance-and-snap-implementation-report.md) for behavior, commands, results and manual limitations.
