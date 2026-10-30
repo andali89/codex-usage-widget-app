@@ -1,6 +1,6 @@
 # Optional diagnostic logging
 
-Implemented 2026-10-30 for investigating intermittent loading and stale displays. This change instruments existing behavior; it does not alter loading policy, quota normalization, refresh timing, or widget geometry. No root cause for the original intermittent issue has been established.
+Implemented 2026-10-30 for investigating intermittent loading and stale displays. This change instruments existing behavior; it does not alter loading policy, quota normalization, refresh timing, or widget geometry. The subsequent [account-update investigation](account-update-empty-quota-investigation.md) confirms quota clearing in a supplied 0.1.5 log and strongly supports a notification timing race; the correction remains unimplemented.
 
 ## Enable and collect
 
@@ -70,4 +70,4 @@ Commands run from the repository root during implementation:
 
 Initial native attempts timed out before hydration because the sandbox-started development server was unreachable from the validation process. Running both outside that restriction passed. WebView2 printed an unregister-class teardown message after the successful check; no quota behavior change was made in response.
 
-Not established: a packaged/installed runtime test, Explorer opening via the new button, long-running CPU/memory comparison, real sleep/resume and mixed-DPI behavior, or reproduction/root cause of the user's intermittent issue. The native test exercises explicit recreation rather than waiting five minutes for the unchanged idle lease. Live Codex probing was intentionally not performed.
+Not established during the diagnostic implementation: a packaged/installed runtime test, Explorer opening via the new button, long-running CPU/memory comparison, real sleep/resume and mixed-DPI behavior, or reproduction/root cause of the user's intermittent issue. The later [supplied-log investigation](account-update-empty-quota-investigation.md) establishes the quota-clearing path; the notification source, account continuity and correction still require validation. The native test exercises explicit recreation rather than waiting five minutes for the unchanged idle lease. Live Codex probing was intentionally not performed.

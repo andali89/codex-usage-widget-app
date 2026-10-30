@@ -4,7 +4,7 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 ## Current references
 
-- [Potential account-update quota clearing](account-update-empty-quota-investigation.md): reported Overview retry wording with empty Edge/HUD values, suspected account-notification handling, and deferred fix/validation directions; runtime cause remains unconfirmed.
+- [Account-update quota clearing](account-update-empty-quota-investigation.md): supplied 0.1.5 log confirms nine runtime empty-data episodes following account-change rejection, with a 63-before/10-after notification timing split; correction and account-continuity validation remain pending.
 - [Optional diagnostic logging](diagnostic-logging-implementation-report.md): opt-in loading/stale/refresh and webview evidence, local rotation/privacy limits, summary commands, validation and remaining limitations.
 
 - [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
