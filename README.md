@@ -6,7 +6,7 @@ Keep Codex remaining quota and expected reset times in view on your Windows desk
 
 An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.2 is a public preview; see [known limitations](#known-limitations).
 
-Development version: **0.1.3 (unreleased)**. See the [0.1.3 release notes](docs/v0.1.3-release-notes.md) for the current widget sizing and spacing changes.
+Development version: **0.1.5 (unreleased)**. See the [draft 0.1.5 release notes](docs/v0.1.5-release-notes.md) for diagnostic logging and the planned improvements to quota checking and unintended empty loading states.
 
 ## Download and install
 

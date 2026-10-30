@@ -9,7 +9,8 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 - [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
 - [Publication audit](publication-audit.md): tracked-file/history review, privacy findings, release artifacts, and verification limits.
-- [Version 0.1.3 release notes](v0.1.3-release-notes.md): unreleased local version with compact widget sizing and warning-spacing improvements.
+- [Version 0.1.5 release notes](v0.1.5-release-notes.md): current unreleased draft covering implemented optional diagnostics and planned improvements to unintended empty loading states.
+- [Version 0.1.3 release notes](v0.1.3-release-notes.md): earlier unreleased draft with compact widget sizing and warning-spacing improvements, carried forward into the current development version.
 - [Version 0.1.2 release notes](v0.1.2-release-notes.md): published public preview with widget presets, temporary display edits and shared snapping; local validation is in the appearance report.
 - [Version 0.1.1 release notes](v0.1.1-release-notes.md): published defaults update; local Rust checks are recorded in the implementation report.
 - [Version 0.1.0 release notes](v0.1.0-release-notes.md): prepared public-preview description and known limitations.
