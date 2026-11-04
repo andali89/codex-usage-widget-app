@@ -2,21 +2,21 @@
 
 Keep Codex remaining quota and expected reset times in view on your Windows desktop. Choose a floating card, screen-edge widget, compact HUD, or system tray summary, with usage read through your local Codex CLI.
 
-**[Download v0.1.2 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.2)** · [Release notes](docs/v0.1.2-release-notes.md) · [Documentation](docs/README.md)
+**[Download v0.1.5 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.5)** · [Release notes](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.5) · [Documentation](docs/README.md)
 
-An unofficial project, not affiliated with or endorsed by OpenAI. Version 0.1.2 is a public preview; see [known limitations](#known-limitations).
+An unofficial project, not affiliated with or endorsed by OpenAI. Version **0.1.5** is a public preview; see [known limitations](#known-limitations).
 
-Development version: **0.1.5 (unreleased)**. See the [draft 0.1.5 release notes](docs/v0.1.5-release-notes.md) for diagnostic logging and the bounded account recheck that reduces unintended empty loading states. Previously built portable archives predate this correction.
+**New in v0.1.5:** optional local diagnostics, a bounded account recheck to reduce unintended empty quota views, and clearer verification/retry messages. Includes the earlier Edge/HUD sizing and countdown-readability improvements.
 
 ## Download and install
 
-Choose a download from the [v0.1.2 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.2):
+Choose a download from the [v0.1.5 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.5):
 
 | Download | Use |
 | --- | --- |
-| [Windows installer](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.2/Codex.Usage.Widget_0.1.2_x64-setup.exe) | Run the setup executable to install for your Windows account. |
-| [Portable ZIP](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.2/Codex.Usage.Widget_0.1.2_x64-portable.zip) | Extract the entire ZIP into a writable folder and run `codex-usage-widget.exe`. |
-| [SHA-256 checksums](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.2/SHA256SUMS.txt) | Verify the installer and portable archive. |
+| [Windows installer](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.5/Codex.Usage.Widget_0.1.5_x64-setup.exe) | Run the setup executable to install for your Windows account. |
+| [Portable ZIP](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.5/Codex.Usage.Widget_0.1.5_x64-portable.zip) | Extract the entire ZIP into a writable folder and run `Usage.exe`. |
+| [SHA-256 checksums](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.5/SHA256SUMS.txt) | Verify the installer and portable archive. |
 
 Requirements:
 
@@ -71,6 +71,8 @@ These screenshots use synthetic example data; they do not show a real account.
 
 Missing or stale data is labeled explicitly. A countdown reaching zero does not confirm quota recovery; fresh usage data is required.
 
+Late account notifications trigger one bounded recheck before replacing validated quota values. Verified ordinary transport failures retain values marked out of date; account/workspace changes, sign-out or unresolved verification hide previous-account data. Overview and compact warnings distinguish account verification from waiting for a retry. See the [account-update report](docs/account-update-empty-quota-investigation.md) for details and validation.
+
 ## Privacy and local data
 
 Usage reads go through the local Codex app-server. The widget does not copy credential files, issue inference requests, or redeem reset credits. It adds no cloud telemetry or quota-upload service; Codex communicates with its own services as needed.
@@ -85,6 +87,7 @@ Optional local diagnostic logging is **off by default**. Enable it in **Settings
 - Builds are unsigned and may trigger Windows SmartScreen warnings.
 - Windows 10, accessibility, mixed-DPI monitors, Explorer recovery, real pointer/focus behavior, and installation without WebView2 remain incompletely verified.
 - Proxy settings reach the owned Codex process; actual traffic routing remains independently unverified.
+- The account-notification correction passed synthetic protocol/service tests and isolated Windows checks. Long-running live comparison, real account/workspace changes and sleep/resume checks remain pending.
 
 The [implementation report](docs/implementation-report.md) records validation evidence and remaining work. The [design report](docs/codex-widget-design-report.md) describes intended behavior, including requirements still awaiting validation.
 
@@ -116,11 +119,11 @@ npm.cmd run rust:clippy
 npm.cmd run desktop:build
 ```
 
-`build` includes frontend type checking. `desktop:build` produces `src-tauri/target/release/Usage.exe` without an installer. The default main binary is `Usage.exe` for debug, release and future packages; published v0.1.2 archives keep their original filename. To build the per-user NSIS installer, run `npm.cmd run desktop:package`; output is under `src-tauri/target/release/bundle/nsis/`.
+`build` includes frontend type checking. `desktop:build` produces `src-tauri/target/release/Usage.exe` without an installer. The default main binary is `Usage.exe` for debug, release and packaged builds. To build the per-user NSIS installer, run `npm.cmd run desktop:package`; output is under `src-tauri/target/release/bundle/nsis/`.
 
 Regular tests skip live Codex access. Run `npm.cmd run protocol:probe` explicitly for a live read-only check against the local signed-in CLI. Native tray, focus, DPI, notification, and accessibility behavior require Windows runtime checks; successful builds alone do not validate them.
 
-The [Windows release workflow](.github/workflows/release.yml) builds an installer, portable ZIP, and checksums on pushes to `release`, then creates a draft prerelease for review. See the [release guide](docs/github-release-guide.md) for packaging and publication, and the [versioned protocol reference](schemas/codex/README.md) for schema provenance.
+The [Windows release workflow](.github/workflows/release.yml) builds an installer, portable ZIP, and checksums on pushes to `release`, automatically converts release-note document links to URLs pinned to the release tag, then creates a draft prerelease for review. See the [release guide](docs/github-release-guide.md) for packaging and publication, and the [versioned protocol reference](schemas/codex/README.md) for schema provenance.
 
 ## Reporting issues
 
