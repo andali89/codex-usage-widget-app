@@ -14,9 +14,32 @@ Portable users extract the entire ZIP into a writable folder and run the executa
 
 The workflow uses the Tauri version for `v<VERSION>`, requires matching npm/Cargo manifest versions and npm lockfile versions, checks that build commands leave lockfiles unchanged, and requires `docs/v<VERSION>-release-notes.md`. An existing version tag stops the workflow. The GitHub CLI targets the triggering commit when creating the draft/tag; existing releases and assets are never replaced. Update all version manifests and lockfiles together for each new release. A repeated run for an existing draft may fail rather than overwrite it; inspect any partial draft/assets before retrying.
 
+After Node setup and before Rust setup/building, the workflow runs [the release-note helper](../scripts/prepare-release-notes.mjs). Keep document links relative to the source notes file: `implementation-report.md` resolves under `docs/`, while `../README.md` resolves at the repository root. The helper validates file targets against the checkout and writes a separate body under `RUNNER_TEMP`, converting those links to `https://github.com/<owner>/<repo>/blob/<release-tag>/<repository-path>` and preserving queries/heading anchors. The repository and tag come from the workflow, so v0.1.5 and later versions need no manual URL update after publication. A tag need not exist during preparation; the release/tag creation makes its URLs available.
+
+`gh release create --notes-file` receives only the generated file, not the original Markdown. Tracked notes and older published releases remain untouched. Standard inline Markdown links and single-line reference definitions are supported; use inline or fenced code for examples, which are preserved verbatim. External URLs and heading-only links remain unchanged. Raw HTML links and a full Markdown/GitHub heading-anchor validation are outside this helper's scope.
+
 The job has `contents: write` to create the draft with the automatic `GITHUB_TOKEN`; no personal access token or Codex authentication is needed. Repository or organization rules can restrict tag/release creation. The workflow leaves the release as a **draft prerelease** for you to review and publish. It does not run live protocol reads, installation smoke checks, or interactive Windows checks, and builds remain unsigned.
 
 Configuration was added on 2026-10-24. The first GitHub-hosted build completed and [v0.1.0 was published as a public preview](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.0), with installer, portable ZIP, and checksum assets confirmed through the GitHub release API. Local syntax/packaging validation is recorded below. Publication does not establish installer or portable runtime compatibility.
+
+### Automatic release-note links — 2026-11-04
+
+For a local preview, run from the repository root using the installed Node toolchain:
+
+```powershell
+node scripts/prepare-release-notes.mjs --input docs/v0.1.5-release-notes.md --output src-tauri/target/validation/release-notes/preview.md --repository andali89/codex-usage-widget-app --tag v0.1.5
+```
+
+No dependency or permission was added. The helper refuses to overwrite its input, fails on missing/non-file targets or paths escaping the repository, and writes output only after conversion succeeds. Review the generated body before publishing the draft. No historical release body is updated automatically.
+
+Validation for this change:
+
+- `node --test tests/release-notes.test.mjs` — passed, 7 tests for relative/parent/root paths, queries/anchors, spaces/escaped parentheses, titles, nested labels, reference definitions, external URLs, code examples, invalid targets, CLI source protection and workflow wiring.
+- `npm.cmd test` — passed, 165 tests including the new release-note tests.
+- Extracted and parsed all **12** workflow PowerShell `run` blocks with `System.Management.Automation.Language.Parser` — passed. Executed the actual preparation block locally with version `0.1.5`, an ignored runner-temp fixture and a local `GITHUB_OUTPUT` file — passed; generated all **7** document URLs pinned to `v0.1.5` and emitted the expected output path. The source notes were unchanged.
+- Local documentation link checks and `git diff --check` — passed.
+
+The previously used Python/PyYAML executable is no longer available in this environment (the `python.exe` entry is an inaccessible WindowsApps alias); no YAML parser module or `actionlint` was available. Workflow structure was reviewed and covered by the Node wiring test, but a full YAML/schema validator and GitHub-hosted run remain unverified. No tools were installed, and no application rebuild, push, tag/release creation or existing-release edit was performed.
 
 ### Local validation — 2026-10-24
 

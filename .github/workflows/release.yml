@@ -71,6 +71,19 @@ jobs:
           node-version-file: .node-version
           cache: npm
 
+      - name: Prepare tag-pinned release notes
+        id: notes
+        env:
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $notes = Join-Path $env:RUNNER_TEMP 'widget-release-notes.md'
+          node scripts/prepare-release-notes.mjs --input "docs/v$env:RELEASE_VERSION-release-notes.md" --output $notes --repository $env:GH_REPO --tag $env:RELEASE_TAG
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare release-note links.' }
+          "path=$notes" >> $env:GITHUB_OUTPUT
+
       - name: Set up Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt
 
@@ -123,13 +136,14 @@ jobs:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
           RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_NOTES_FILE: ${{ steps.notes.outputs.path }}
         run: |
           $version = $env:RELEASE_VERSION
           $assets = "src-tauri/target/release-assets/v$version"
           gh release create $env:RELEASE_TAG `
             --target $env:RELEASE_COMMIT `
             --title "$env:RELEASE_TAG — Windows x64 public preview" `
-            --notes-file "docs/v$version-release-notes.md" `
+            --notes-file $env:RELEASE_NOTES_FILE `
             --draft --prerelease `
             "$assets/Codex Usage Widget_${version}_x64-setup.exe" `
             "$assets/Codex Usage Widget_${version}_x64-portable.zip" `
