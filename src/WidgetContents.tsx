@@ -13,7 +13,7 @@ export default function WidgetContents({state,surface,now,onAction=()=>{}}:{stat
   const summary = usageSummary(u, now);
   const retained = u.freshness === "stale" || u.windows.some(w => w.lastKnown);
   const incomplete = u.windows.some(w => w.quality !== "valid" || w.remainingPercent === null);
-  const status = u.ordinaryUsageAllowed === false ? `${retained ? "Last known: " : ""}Ordinary usage blocked` : retained ? "Last known · out of date" : u.refreshInFlight ? "Checking usage…" : incomplete ? u.windows.some(w => quotaPending(u, w.key)) ? "Confirming quota data…" : "Some quota data unavailable" : u.windows.some(w => w.remainingPercent !== null) ? "Latest local read" : summary.first;
+  const status = u.connection === "verifying" ? summary.first : u.ordinaryUsageAllowed === false ? `${retained ? "Last known: " : ""}Ordinary usage blocked` : retained ? "Last known · out of date" : u.refreshInFlight ? "Checking usage…" : incomplete ? u.windows.some(w => quotaPending(u, w.key)) ? "Confirming quota data…" : "Some quota data unavailable" : u.windows.some(w => w.remainingPercent !== null) ? "Latest local read" : summary.first;
   const warning = retained || incomplete || u.ordinaryUsageAllowed === false || !u.windows.some(w => w.remainingPercent !== null);
   const savedResets = state.settings.windows.resetCountdowns[mode];
   const resets = filtered ? effectiveResets(selection,savedResets) : savedResets;

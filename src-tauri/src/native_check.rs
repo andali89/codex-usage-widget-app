@@ -333,6 +333,61 @@ async fn diagnostics_check(app: &AppHandle, service: &Service) -> Result<(), Str
         frontend_assert(app,"shell","document.querySelector('.status-warning')?.getAttribute('title')==='Last known · out of date'","diagnostic-stale").await?;
         service.dispatch_reliable(Action::DiagnosticFixture(Box::new(fresh)));
         frontend_assert(app,"shell","document.querySelector('.hud-quota strong')?.textContent==='68%'&&!document.querySelector('.status-warning')","diagnostic-recovery").await?;
+        let fresh = service.snapshot().await?.usage;
+        for display_mode in [DisplayMode::CompactHud, DisplayMode::ScreenEdge] {
+            mode(service, display_mode).await?;
+            let values = if display_mode == DisplayMode::CompactHud {
+                ".hud-values"
+            } else {
+                ".edge-values"
+            };
+            let mut verifying = fresh.clone();
+            let mut generation = verifying.connection_generation;
+            crate::service::apply_read_failure(
+                &mut verifying,
+                &mut generation,
+                crate::protocol::Failure::new_unverified("protocol-timeout"),
+                crate::model::now_ms(),
+            );
+            verifying.next_refresh_at_ms = Some(crate::model::now_ms() + 5000);
+            service.dispatch_reliable(Action::DiagnosticFixture(Box::new(verifying.clone())));
+            frontend_assert(app,"shell",&format!("!document.querySelector('{values}')?.textContent.includes('68%')&&document.querySelector('.status-warning')?.getAttribute('title')==='Account verification pending'"),"diagnostic-account-pending").await?;
+            verifying.refresh_in_flight = true;
+            service.dispatch_reliable(Action::DiagnosticFixture(Box::new(verifying)));
+            frontend_assert(app,"shell","document.querySelector('.status-warning')?.getAttribute('title')==='Verifying account…'","diagnostic-account-active").await?;
+            service.dispatch_reliable(Action::DiagnosticFixture(Box::new(fresh.clone())));
+            frontend_assert(app,"shell",&format!("document.querySelector('{values}')?.textContent.includes('68%')&&!document.querySelector('.status-warning')"),"diagnostic-account-recovered").await?;
+        }
+        service.dispatch_reliable(Action::Window(Input::Open {
+            standard: true,
+            settings: false,
+        }));
+        wait(app, service, "diagnostic-overview", |_| {
+            visible(app, "main")
+        })
+        .await?;
+        let mut verifying = fresh.clone();
+        let mut generation = verifying.connection_generation;
+        crate::service::apply_read_failure(
+            &mut verifying,
+            &mut generation,
+            crate::protocol::Failure::new_unverified("protocol-timeout"),
+            crate::model::now_ms(),
+        );
+        verifying.next_refresh_at_ms = Some(crate::model::now_ms() + 5000);
+        service.dispatch_reliable(Action::DiagnosticFixture(Box::new(verifying.clone())));
+        frontend_assert(app,"main","document.querySelector('.empty-state h2')?.textContent==='Account verification pending'&&!document.querySelector('.quota-grid')&&document.querySelector('.connection-line')?.textContent.includes('waiting to retry')","diagnostic-overview-pending").await?;
+        verifying.refresh_in_flight = true;
+        service.dispatch_reliable(Action::DiagnosticFixture(Box::new(verifying)));
+        frontend_assert(app,"main","document.querySelector('.connection-line')?.textContent.includes('Verifying account…')","diagnostic-overview-verifying").await?;
+        service.dispatch_reliable(Action::DiagnosticFixture(Box::new(fresh)));
+        frontend_assert(
+            app,
+            "main",
+            "!!document.querySelector('.quota-grid')&&!document.querySelector('.empty-state')",
+            "diagnostic-overview-recovered",
+        )
+        .await?;
         let recorder = crate::diagnostics::global().clone();
         tauri::async_runtime::spawn_blocking(move || recorder.flush(Duration::from_secs(2)))
             .await

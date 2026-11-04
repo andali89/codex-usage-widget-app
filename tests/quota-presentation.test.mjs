@@ -4,7 +4,7 @@ import { createServer } from "vite";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-let server, QuotaCard, ResetCreditsCard, UsagePage, CompactQuotaReadings, PeriodSettings, StorageSettings, WidgetAppearanceSettings;
+let server, QuotaCard, ResetCreditsCard, UsagePage, CompactQuotaReadings, PeriodSettings, StorageSettings, WidgetAppearanceSettings, WidgetContents;
 before(async () => {
   server = await createServer({server:{middlewareMode:true,hmr:false},appType:"custom"});
   QuotaCard = (await server.ssrLoadModule("/src/QuotaCard.tsx")).default;
@@ -14,10 +14,34 @@ before(async () => {
   PeriodSettings = (await server.ssrLoadModule("/src/PeriodSettings.tsx")).default;
   StorageSettings = (await server.ssrLoadModule("/src/StorageSettings.tsx")).default;
   WidgetAppearanceSettings = (await server.ssrLoadModule("/src/WidgetAppearanceSettings.tsx")).default;
+  WidgetContents = (await server.ssrLoadModule("/src/WidgetContents.tsx")).default;
 });
 after(async () => { await server?.close(); });
 const quota = {label:"5-hour",durationMinutes:300,remainingPercent:68,usedPercent:32,resetsAtMs:3600000,lastKnown:false};
 const card = props => renderToStaticMarkup(createElement(QuotaCard,{quota,stale:false,now:0,...props}));
+
+test("account verification and retry have accurate Overview and compact status", () => {
+  const usage = {windows:[],freshness:"empty",connection:"verifying",errorCode:"account-verification-pending",resetCreditsAvailable:null,consecutiveUnavailableReads:1,nextRefreshAtMs:6000,refreshInFlight:false};
+  const state = {usage,dashboardVisible:false,firstLaunch:false,settings:{mode:"compact-hud",reminders:{enabled:false},windows:{visiblePeriods:{},resetCountdowns:{},lockPosition:false}},presentation:{},reminders:{deliveryPaused:false}};
+  const overview = () => renderToStaticMarkup(createElement(UsagePage,{state,onSettings:()=>{},onReminders:()=>{},onLayoutChange:()=>{}}));
+  assert.match(overview(),/Account verification pending/);
+  assert.match(overview(),/waiting to retry/);
+  assert.match(overview(),/Previous values are hidden/);
+  assert.doesNotMatch(overview(),/Getting things ready|Rechecking local usage|68%|0%/);
+  for (const mode of ["compact-hud","screen-edge"]) {
+    state.settings.mode=mode;
+    for(const active of [false,true]){
+      usage.refreshInFlight=active;
+      const compact=renderToStaticMarkup(createElement(WidgetContents,{state,surface:"shell",now:0}));
+      assert.match(compact,active?/Verifying account…/:/Account verification pending/);
+      assert.doesNotMatch(compact,/68%|0%/);
+      assert.match(overview(),active?/Verifying account…/:/waiting to retry/);
+    }
+  }
+  usage.connection="offline";usage.errorCode="protocol-timeout";usage.refreshInFlight=false;
+  assert.match(overview(),/Waiting to retry…/);
+  assert.doesNotMatch(overview(),/Getting things ready|Rechecking local usage/);
+});
 
 test("appearance controls show only active-theme custom quotas and no embedded previews",async()=>{
   const {defaultWidgetAppearance,resolveWidgetAppearance}=await import("../src/widgetAppearance.ts");

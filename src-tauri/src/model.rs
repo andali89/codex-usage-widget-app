@@ -355,6 +355,9 @@ pub struct ResetCredit {
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
     pub account_context_key: Option<String>,
+    // Backend-only evidence for retaining this context after an ordinary read failure.
+    #[serde(skip)]
+    pub stable_identity: bool,
     pub connection_generation: u64,
     pub selected_limit_id: Option<String>,
     pub windows: Vec<QuotaWindow>,

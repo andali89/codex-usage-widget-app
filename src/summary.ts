@@ -11,6 +11,10 @@ export function quotaPending(usage: Usage, key: string): boolean {
 }
 
 export function usageSummary(usage: Usage, now: number): { first: string; second: string | null } {
+  if (usage.connection === "verifying") return {
+    first: usage.refreshInFlight ? "Verifying account…" : "Account verification pending",
+    second: !usage.refreshInFlight && usage.nextRefreshAtMs ? "Waiting to retry…" : null,
+  };
   const usable = usage.windows.some(w => w.remainingPercent !== null);
   const stale = usage.freshness === "stale" || usage.windows.some(w => w.lastKnown);
   const first = usable ? `${stale ? "Last known: " : ""}${usage.windows.map(w => `${w.label} ${w.remainingPercent === null ? quotaPending(usage, w.key) ? "checking…" : "unavailable" : `${percent(w.remainingPercent)} left`}`).join(" · ")}` : usagePending(usage) ? "Checking usage…" : "Usage unavailable";

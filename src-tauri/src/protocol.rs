@@ -23,6 +23,7 @@ pub struct Failure {
     pub permanent: bool,
     pub child_exited: bool,
     pub codex_cli_version: Option<String>,
+    pub account_unverified: bool,
 }
 impl Failure {
     fn new(code: &'static str) -> Self {
@@ -31,6 +32,7 @@ impl Failure {
             permanent: false,
             child_exited: code == "codex-exited",
             codex_cli_version: None,
+            account_unverified: false,
         }
     }
     fn permanent(code: &'static str) -> Self {
@@ -39,7 +41,23 @@ impl Failure {
             permanent: true,
             child_exited: false,
             codex_cli_version: None,
+            account_unverified: false,
         }
+    }
+
+    pub(crate) fn new_unverified(code: &'static str) -> Self {
+        Self {
+            account_unverified: true,
+            ..Self::new(code)
+        }
+    }
+
+    pub fn invalidates_account(&self) -> bool {
+        self.permanent || self.account_unverified || self.code == "account-changed-during-read"
+    }
+
+    pub fn verification_pending(&self) -> bool {
+        self.account_unverified && !self.permanent && self.code != "account-changed-during-read"
     }
 
     pub fn is_incompatible(&self) -> bool {
@@ -248,7 +266,8 @@ struct Client {
     next_id: u64,
     diagnostic_read_id: u64,
     dirty: bool,
-    account_changed: bool,
+    account_updated: bool,
+    verification_pass: u8,
     #[cfg(windows)]
     _job: crate::platform::OwnedJob,
 }
@@ -314,7 +333,8 @@ impl Client {
             next_id: 1,
             diagnostic_read_id: 0,
             dirty: false,
-            account_changed: false,
+            account_updated: false,
+            verification_pass: 0,
             #[cfg(windows)]
             _job: job,
         })
@@ -331,7 +351,12 @@ impl Client {
             .map_err(|_| Failure::new("protocol-write"))
     }
 
-    async fn request(&mut self, method: &str, params: Value) -> Result<Value, Failure> {
+    async fn request(
+        &mut self,
+        method: &str,
+        params: Value,
+        stage: &'static str,
+    ) -> Result<Value, Failure> {
         // All callers are private to this module; this whitelist also makes that boundary testable.
         if !["initialize", "account/read", "account/rateLimits/read"].contains(&method) {
             return Err(Failure::permanent("method-forbidden"));
@@ -348,7 +373,7 @@ impl Client {
                         return Err(Failure::permanent("protocol-invalid-response"));
                     }
                     match frame.get("method").and_then(Value::as_str) {
-                        Some("account/updated") => { self.account_changed = true;crate::diagnostics::event("protocol_hint",||json!({"read_id":self.diagnostic_read_id,"trigger":"account_updated"})); },
+                        Some("account/updated") => { self.account_updated = true;crate::diagnostics::event("protocol_hint",||json!({"read_id":self.diagnostic_read_id,"pass":self.verification_pass,"trigger":"account_updated"})); },
                         Some("account/rateLimits/updated") => { self.dirty = true;crate::diagnostics::event("protocol_hint",||json!({"read_id":self.diagnostic_read_id,"trigger":"quota_updated"})); },
                         _ => {}
                     }
@@ -363,27 +388,84 @@ impl Client {
         }).await.unwrap_or_else(|_| Err(Failure::new("protocol-timeout")));
         crate::diagnostics::event(
             "protocol_stage",
-            || json!({"read_id":self.diagnostic_read_id,"stage":match method {"initialize"=>"initialize","account/rateLimits/read"=>"quota_read",_ if id<4=>"account_before",_=>"account_after"},"duration_ms":started.elapsed().as_millis() as u64,"error":result.as_ref().err().map(|e|e.code)}),
+            || json!({"read_id":self.diagnostic_read_id,"pass":self.verification_pass,"stage":stage,"duration_ms":started.elapsed().as_millis() as u64,"error":result.as_ref().err().map(|e|e.code)}),
         );
         result
     }
 
     async fn transaction(&mut self, salt: &str) -> Result<Observation, Failure> {
-        self.request("initialize", json!({"clientInfo":{"name":"codex_usage_widget","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":false,"explicitGatewayOauth":true}})).await?;
+        self.transaction_with_reconciliation_timeout(salt, TIMEOUT)
+            .await
+    }
+
+    async fn transaction_with_reconciliation_timeout(
+        &mut self,
+        salt: &str,
+        timeout: Duration,
+    ) -> Result<Observation, Failure> {
+        self.request("initialize", json!({"clientInfo":{"name":"codex_usage_widget","version":env!("CARGO_PKG_VERSION")},"capabilities":{"experimentalApi":false,"explicitGatewayOauth":true}}), "initialize").await?;
         self.send(json!({"method":"initialized"})).await?;
+        self.verification_pass = 1;
+        let first = self.read_pass(salt, false).await;
+        let result = match first {
+            Err(error) if error.code == "account-verification-pending" => {
+                // A notification is a hint, not an identity. Discard the candidate and
+                // recheck in the SAME process, once, without another startup notification.
+                self.verification_pass = 2;
+                self.account_updated = false;
+                tokio::time::timeout(timeout, self.read_pass(salt, true))
+                    .await
+                    .unwrap_or_else(|_| Err(Failure::new_unverified("protocol-timeout")))
+                    .map_err(|mut error| {
+                        error.account_unverified = true;
+                        error
+                    })
+            }
+            other => other,
+        };
+        result.map_err(|mut error| {
+            error.account_unverified |= self.account_updated;
+            crate::diagnostics::event("account_verification_failed", || json!({"read_id":self.diagnostic_read_id,"pass":self.verification_pass,"account_unverified":error.account_unverified,"error":error.code}));
+            error
+        })
+    }
+
+    async fn read_pass(&mut self, salt: &str, reconciling: bool) -> Result<Observation, Failure> {
         let before = self
-            .request("account/read", json!({"refreshToken":false}))
+            .request(
+                "account/read",
+                json!({"refreshToken":false}),
+                "account_before",
+            )
             .await?;
         let identity = account_identity(&before)?;
-        self.account_changed = false;
+        // The initial account response establishes a baseline for earlier startup
+        // hints. A reconciliation pass must be notification-free from its start.
+        if !reconciling {
+            self.account_updated = false;
+        }
         self.dirty = false;
-        let raw = self.request("account/rateLimits/read", Value::Null).await?;
+        let raw = self
+            .request("account/rateLimits/read", Value::Null, "quota_read")
+            .await?;
         validate_usage_response(&raw)?;
         let after = self
-            .request("account/read", json!({"refreshToken":false}))
+            .request(
+                "account/read",
+                json!({"refreshToken":false}),
+                "account_after",
+            )
             .await?;
-        if identity != account_identity(&after)? || self.account_changed {
+        let matches = identity == account_identity(&after)?;
+        crate::diagnostics::event(
+            "account_verification",
+            || json!({"read_id":self.diagnostic_read_id,"pass":self.verification_pass,"account_update_seen":self.account_updated,"comparison":if matches {"matched"} else {"mismatched"}}),
+        );
+        if !matches {
             return Err(Failure::new("account-changed-during-read"));
+        }
+        if self.account_updated {
+            return Err(Failure::new_unverified("account-verification-pending"));
         }
         let account_id = raw
             .get("accountId")
@@ -725,6 +807,204 @@ mod tests {
         ] {
             assert!(read_frame(&mut bytes.as_slice()).await.is_err());
         }
+    }
+
+    #[cfg(windows)]
+    async fn account_fixture(scenario: &str, timeout: Duration) -> Result<Observation, Failure> {
+        // Only synthetic values. The fixture refuses new handshakes and a third
+        // quota request, proving reconciliation stays in this child and is bounded.
+        let script = r#"
+            $ErrorActionPreference = 'Stop'
+            $scenario = 'FIXTURE_SCENARIO'
+            $accounts = 0; $quotas = 0; $initializations = 0
+            function Hint { [Console]::WriteLine('{"method":"account/updated","params":{"authMode":"chatgpt","planType":"plus"}}') }
+            :requests while ($null -ne ($line = [Console]::ReadLine())) {
+                $request = ConvertFrom-Json -InputObject $line
+                switch ($request.method) {
+                    'initialize' {
+                        $initializations++; if ($initializations -ne 1) { exit 3 }
+                        $result = @{}
+                    }
+                    'initialized' { continue requests }
+                    'account/read' {
+                        $accounts++
+                        if (($accounts -eq 1 -and $scenario -eq 'early') -or
+                            ($accounts -eq 2 -and $scenario -eq 'late_after') -or
+                            ($accounts -eq 3 -and $scenario -eq 'recheck_before')) { Hint }
+                        $email = if ($scenario -eq 'changed_email' -and $accounts -ge 2) { 'other-synthetic' } elseif ($scenario -eq 'missing_email') { $null } else { 'synthetic' }
+                        $account = @{ type = 'chatgpt'; email = $email; planType = 'plus' }
+                        if ($accounts -ge 2 -and $scenario -eq 'signout') { $account = $null }
+                        if ($accounts -ge 2 -and $scenario -eq 'unsupported') { $account = @{ type = 'apiKey' } }
+                        $result = @{ account = $account; requiresOpenaiAuth = $true }
+                    }
+                    'account/rateLimits/read' {
+                        $quotas++; if ($quotas -gt 2) { exit 4 }
+                        if (($quotas -eq 1 -and $scenario -notin @('clean','early','late_after','changed_email')) -or $scenario -eq 'repeated') { Hint; Hint }
+                        if ($quotas -eq 2 -and $scenario -eq 'hang') { Start-Sleep -Seconds 3 }
+                        if ($quotas -eq 2 -and $scenario -eq 'failed_recheck') {
+                            [Console]::WriteLine((@{ id = $request.id; error = @{ code = -32000; message = 'synthetic' } } | ConvertTo-Json -Compress)); continue requests
+                        }
+                        $binding = if ($quotas -eq 2 -and $scenario -eq 'workspace_change') { 'other-workspace' } elseif ($scenario -eq 'missing_id') { $null } else { 'synthetic-workspace' }
+                        $used = if ($quotas -eq 1) { 32 } else { 45 }
+                        $family = @{ primary = @{ usedPercent = $used; windowDurationMins = 300 } }
+                        if ($scenario -eq 'malformed') { $family = $false }
+                        $result = @{ rateLimits = $family; accountId = $binding; fixtureQuotaReads = $quotas }
+                        if ($scenario -eq 'quota_hint' -and $quotas -eq 2) {
+                            [Console]::WriteLine('{"method":"account/rateLimits/updated","params":{}}')
+                        }
+                    }
+                    default { exit 5 }
+                }
+                [Console]::WriteLine((@{ id = $request.id; result = $result } | ConvertTo-Json -Depth 8 -Compress))
+            }
+        "#.replace("FIXTURE_SCENARIO", scenario);
+        let mut client = Client::from_command(powershell(&script)).await.unwrap();
+        let result = client
+            .transaction_with_reconciliation_timeout("synthetic-salt", timeout)
+            .await;
+        client.shutdown().await;
+        assert!(client.child.try_wait().unwrap().is_some());
+        result
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn account_notification_orders_preserve_verified_usage_without_empty_publication() {
+        use crate::{model::Usage, service::apply_observation};
+        let clean = account_fixture("clean", TIMEOUT).await.unwrap();
+        let mut usage = Usage::default();
+        let mut generation = 0;
+        assert!(apply_observation(&mut usage, &mut generation, &clean, 100));
+        let original_generation = generation;
+        for (scenario, reads, remaining) in [
+            ("early", 1, 68.0),
+            ("late_quota", 2, 55.0),
+            ("late_after", 2, 55.0),
+        ] {
+            let observation = account_fixture(scenario, TIMEOUT).await.unwrap();
+            assert_eq!(observation.raw["fixtureQuotaReads"], reads);
+            assert!(!observation.dirty);
+            assert!(observation.stable_identity);
+            assert!(!apply_observation(
+                &mut usage,
+                &mut generation,
+                &observation,
+                200
+            ));
+            assert_eq!(generation, original_generation);
+            assert_eq!(usage.windows[0].remaining_percent, Some(remaining));
+            assert_eq!(usage.freshness, "fresh");
+            assert_eq!(usage.error_code, None);
+            assert_eq!(usage.consecutive_unavailable_reads, 0);
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn reconciliation_rebinds_same_email_workspace_without_retaining_old_windows() {
+        use crate::{model::Usage, service::apply_observation};
+        let mut clean = account_fixture("clean", TIMEOUT).await.unwrap();
+        clean.raw["rateLimits"]["secondary"] = json!({"usedPercent":58,"windowDurationMins":10080});
+        let mut usage = Usage::default();
+        let mut generation = 0;
+        apply_observation(&mut usage, &mut generation, &clean, 100);
+        let observation = account_fixture("workspace_change", TIMEOUT).await.unwrap();
+        assert_ne!(clean.context, observation.context);
+        assert!(apply_observation(
+            &mut usage,
+            &mut generation,
+            &observation,
+            200
+        ));
+        assert!(usage
+            .windows
+            .iter()
+            .filter(|w| w.duration_minutes == Some(10080))
+            .all(|w| w.remaining_percent.is_none()));
+        assert_eq!(usage.windows[0].remaining_percent, Some(55.0));
+        assert_eq!(generation, 2);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn repeated_hints_and_failed_reconciliation_hide_unverified_account_usage() {
+        use crate::{
+            model::Usage,
+            service::{apply_observation, apply_read_failure},
+        };
+        let clean = account_fixture("clean", TIMEOUT).await.unwrap();
+        for (scenario, code) in [
+            ("repeated", "account-verification-pending"),
+            ("recheck_before", "account-verification-pending"),
+            ("failed_recheck", "usage-read-failed"),
+            ("hang", "protocol-timeout"),
+        ] {
+            let mut usage = Usage::default();
+            let mut generation = 0;
+            apply_observation(&mut usage, &mut generation, &clean, 100);
+            let timeout = if scenario == "hang" {
+                Duration::from_millis(50)
+            } else {
+                TIMEOUT
+            };
+            let error = account_fixture(scenario, timeout)
+                .await
+                .err()
+                .expect("verification must fail");
+            assert_eq!(error.code, code);
+            assert!(error.account_unverified);
+            assert!(!error.permanent);
+            assert!(apply_read_failure(&mut usage, &mut generation, error, 200));
+            assert!(usage.windows.is_empty());
+            assert!(usage.account_context_key.is_none());
+            assert_eq!(usage.connection, "verifying");
+            assert_eq!(
+                usage.error_code.as_deref(),
+                Some("account-verification-pending")
+            );
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn real_account_changes_and_malformed_responses_still_invalidate_binding() {
+        for (scenario, code) in [
+            ("changed_email", "account-changed-during-read"),
+            ("signout", "auth-required"),
+            ("unsupported", "unsupported-auth-mode"),
+            ("malformed", "protocol-invalid-response"),
+        ] {
+            let error = account_fixture(scenario, TIMEOUT)
+                .await
+                .err()
+                .expect("must reject unsafe account");
+            assert_eq!(error.code, code);
+            assert!(error.invalidates_account());
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn missing_identity_and_quota_hints_do_not_enable_retention_or_reminders() {
+        let missing = account_fixture("missing_id", TIMEOUT).await.unwrap();
+        assert!(!missing.stable_identity);
+        assert_ne!(
+            missing.context,
+            account_fixture("missing_id", TIMEOUT)
+                .await
+                .unwrap()
+                .context
+        );
+        let no_email = account_fixture("missing_email", TIMEOUT).await.unwrap();
+        assert!(
+            no_email.stable_identity,
+            "the quota accountId supplies the binding, not the email"
+        );
+        let dirty = account_fixture("quota_hint", TIMEOUT).await.unwrap();
+        assert!(
+            dirty.dirty,
+            "quota push still suppresses fresh reminder evaluation"
+        );
     }
     #[test]
     fn unsupported_auth_never_exposes_chatgpt_quotas() {

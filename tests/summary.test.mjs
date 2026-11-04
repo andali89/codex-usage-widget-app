@@ -4,6 +4,11 @@ import { usageSummary } from "../src/summary.ts";
 
 const window = (label, remaining, resetsAtMs, durationMinutes = 300) => ({ key: label, label, remainingPercent:remaining, resetsAtMs, durationMinutes, quality: remaining === null ? "missing" : "valid", lastKnown:false });
 const usage = windows => ({ windows, freshness:"fresh", connection:"ready", ordinaryUsageAllowed:null });
+test("account verification is distinct from transport status and quota estimates", () => {
+  const pending = {...usage([]),connection:"verifying",nextRefreshAtMs:6000};
+  assert.deepEqual(usageSummary(pending,0),{first:"Account verification pending",second:"Waiting to retry…"});
+  assert.deepEqual(usageSummary({...pending,refreshInFlight:true},0),{first:"Verifying account…",second:null});
+});
 test("compact summary labels missing windows and omits absent reset rows", () => {
   const result = usageSummary(usage([window("5-hour",68,null),window("Weekly",null,null,10080)]),0);
   assert.match(result.first,/5-hour 68% left/); assert.match(result.first,/Weekly unavailable/); assert.equal(result.second,null);

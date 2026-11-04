@@ -14,6 +14,86 @@ fn close_to_tray_allowed(source: Surface, mode: model::DisplayMode, tray_availab
     source == Surface::Shell && mode == model::DisplayMode::Floating && tray_available
 }
 
+// Returns whether account-bound reminder/reset context must be invalidated.
+pub(crate) fn apply_read_failure(
+    usage: &mut Usage,
+    generation: &mut u64,
+    error: protocol::Failure,
+    at: i64,
+) -> bool {
+    let unavailable_reads = usage.consecutive_unavailable_reads.saturating_add(1);
+    let clear = error.invalidates_account() || !usage.stable_identity;
+    if clear {
+        *generation += 1;
+        *usage = Usage {
+            connection_generation: *generation,
+            ..Usage::default()
+        };
+    }
+    usage.refresh_in_flight = false;
+    usage.connection = match error.code {
+        "auth-required" => "auth-required",
+        _ if error.permanent => "unsupported",
+        _ if error.verification_pending() => "verifying",
+        _ => "offline",
+    }
+    .into();
+    usage.consecutive_unavailable_reads = unavailable_reads;
+    usage.freshness = if usage.windows.is_empty() {
+        "empty"
+    } else {
+        "stale"
+    }
+    .into();
+    usage.error_code = Some(
+        if error.is_incompatible() {
+            "incompatible-codex-protocol"
+        } else if error.verification_pending() {
+            "account-verification-pending"
+        } else {
+            error.code
+        }
+        .into(),
+    );
+    usage.codex_cli_version = error.codex_cli_version;
+    usage.last_attempt_at_ms = Some(at);
+    clear
+}
+
+// Publish one complete, verified observation; never merge windows across bindings.
+pub(crate) fn apply_observation(
+    usage: &mut Usage,
+    generation: &mut u64,
+    observation: &protocol::Observation,
+    at: i64,
+) -> bool {
+    let changed = usage.account_context_key.as_deref() != Some(&observation.context);
+    if changed {
+        *generation += 1;
+    }
+    let previous = if changed {
+        Usage::default()
+    } else {
+        usage.clone()
+    };
+    let last_attempt = usage.last_attempt_at_ms;
+    *usage = model::normalize(&observation.raw, at, &previous);
+    usage.account_context_key = Some(observation.context.clone());
+    usage.stable_identity = observation.stable_identity;
+    usage.connection_generation = *generation;
+    usage.last_attempt_at_ms = last_attempt;
+    if observation.dirty {
+        usage.freshness = "stale".into();
+        usage.error_code = Some("reconciliation-pending".into());
+    }
+    if !observation.stable_identity {
+        usage
+            .error_code
+            .get_or_insert("session-scoped-identity".into());
+    }
+    changed
+}
+
 pub enum Action {
     BeginPreview {
         session: String,
@@ -195,6 +275,14 @@ fn publish(app: &AppHandle, state: &mut AppState) {
 }
 
 fn tooltip(usage: &Usage) -> String {
+    if usage.connection == "verifying" {
+        return if usage.refresh_in_flight {
+            "Verifying account…"
+        } else {
+            "Account verification pending\nWaiting to retry…"
+        }
+        .into();
+    }
     if usage.windows.is_empty() {
         return format!(
             "{}\n{}",
@@ -602,16 +690,8 @@ pub fn start(
                     } else {
                         match outcome {
                             Ok(observation) => {
-                                let context_changed = state.usage.account_context_key.as_deref() != Some(&observation.context);
-                                if context_changed { crate::diagnostics::event("context_rebound",||serde_json::json!({"stable":observation.stable_identity})); generation += 1;reminders.invalidate_context();scheduler.rebind_reset_context(); }
-                                let previous = if context_changed { Usage::default() } else { state.usage.clone() };
-                                let last_attempt = state.usage.last_attempt_at_ms;
-                                state.usage = model::normalize(&observation.raw, at, &previous);
-                                state.usage.account_context_key = Some(observation.context);
-                                state.usage.connection_generation = generation;
-                                state.usage.last_attempt_at_ms = last_attempt;
-                                if observation.dirty { reminders.mark_stale();state.usage.freshness = "stale".into(); state.usage.error_code = Some("reconciliation-pending".into()); }
-                                if !observation.stable_identity { state.usage.error_code.get_or_insert("session-scoped-identity".into()); }
+                                if apply_observation(&mut state.usage, &mut generation, &observation, at) { crate::diagnostics::event("context_rebound",||serde_json::json!({"stable":observation.stable_identity}));reminders.invalidate_context();scheduler.rebind_reset_context(); }
+                                if observation.dirty { reminders.mark_stale(); }
                                 reminders.observe(&state.settings.reminders,&state.usage,observation.stable_identity && durable_identity,state.revision,at);
                                 scheduler.finish(now, true, false, interval, observation.dirty);
                                 scheduler.update_deadlines(state.usage.windows.iter().filter(|w| observation.stable_identity && !observation.dirty && w.quality=="valid" && !w.last_known).map(|w| {
@@ -622,20 +702,14 @@ pub fn start(
                             },
                             Err(error) => {
                                 reminders.mark_stale();
-                                let unavailable_reads = state.usage.consecutive_unavailable_reads.saturating_add(1);
-                                if error.permanent || error.code == "account-changed-during-read" {
+                                let permanent = error.permanent;
+                                let child_exited = error.child_exited;
+                                if apply_read_failure(&mut state.usage, &mut generation, error, at) {
                                     reminders.invalidate_context();
-                                    generation += 1;
-                                    state.usage = Usage { connection_generation: generation, ..Usage::default() };
+                                    scheduler.rebind_reset_context();
                                 }
-                                state.usage.connection = match error.code { "auth-required" => "auth-required", _ if error.permanent => "unsupported", _ => "offline" }.into();
-                                state.usage.consecutive_unavailable_reads = unavailable_reads;
-                                state.usage.freshness = if state.usage.windows.is_empty() { "empty" } else { "stale" }.into();
-                                state.usage.error_code = Some(if error.is_incompatible() { "incompatible-codex-protocol" } else { error.code }.into());
-                                state.usage.codex_cli_version = error.codex_cli_version;
-                                state.usage.last_attempt_at_ms = Some(at);
-                                scheduler.finish(now, false, error.permanent, interval, false);
-                                if error.child_exited && scheduler.unexpected_exit(now) {state.usage.connection="paused".into();state.usage.error_code=Some("codex-restart-circuit-open".into());}
+                                scheduler.finish(now, false, permanent, interval, false);
+                                if child_exited && scheduler.unexpected_exit(now) {state.usage.connection="paused".into();state.usage.error_code=Some("codex-restart-circuit-open".into());}
                             }
                         }
                     }
@@ -1039,6 +1113,98 @@ fn tooltip_enabled(state: &AppState) -> bool {
 
 #[cfg(test)]
 mod tests {
+    fn transient_failure(unverified: bool) -> protocol::Failure {
+        protocol::Failure {
+            code: "protocol-timeout",
+            permanent: false,
+            child_exited: false,
+            codex_cli_version: None,
+            account_unverified: unverified,
+        }
+    }
+
+    fn verified_usage(stable_identity: bool) -> Usage {
+        let mut usage = model::normalize(
+            &json!({"rateLimits":{"primary":{"usedPercent":32,"windowDurationMins":300}}}),
+            100,
+            &Usage::default(),
+        );
+        usage.account_context_key = Some("synthetic-opaque-context".into());
+        usage.stable_identity = stable_identity;
+        usage.connection_generation = 1;
+        usage
+    }
+
+    #[test]
+    fn transport_failures_retain_only_verified_binding_and_never_refresh_its_age() {
+        let mut usage = verified_usage(true);
+        let mut generation = 1;
+        for attempt in 1..=4 {
+            assert!(!apply_read_failure(
+                &mut usage,
+                &mut generation,
+                transient_failure(false),
+                100 + attempt
+            ));
+            assert_eq!(usage.windows[0].remaining_percent, Some(68.0));
+            assert_eq!(usage.last_success_at_ms, Some(100));
+            assert_eq!(usage.freshness, "stale");
+            assert_eq!(usage.connection, "offline");
+            assert_eq!(usage.consecutive_unavailable_reads, attempt as u32);
+            assert_eq!(generation, 1);
+        }
+        let mut session_scoped = verified_usage(false);
+        assert!(apply_read_failure(
+            &mut session_scoped,
+            &mut generation,
+            transient_failure(false),
+            200
+        ));
+        assert!(session_scoped.windows.is_empty());
+        assert!(session_scoped.account_context_key.is_none());
+        assert!(serde_json::to_value(&usage)
+            .unwrap()
+            .get("stableIdentity")
+            .is_none());
+    }
+
+    #[test]
+    fn unresolved_account_verification_clears_values_and_uses_bounded_retry() {
+        let mut usage = verified_usage(true);
+        let mut generation = 1;
+        let mut scheduler = Scheduler::new(1);
+        assert!(scheduler.start_if_due(0));
+        scheduler.request(1);
+        assert!(apply_read_failure(
+            &mut usage,
+            &mut generation,
+            transient_failure(true),
+            200
+        ));
+        scheduler.rebind_reset_context();
+        scheduler.finish(200, false, false, 120_000, false);
+        assert!(usage.windows.is_empty());
+        assert_eq!(usage.last_success_at_ms, None);
+        assert_eq!(usage.connection, "verifying");
+        assert_eq!(usage.freshness, "empty");
+        assert_eq!(
+            usage.error_code.as_deref(),
+            Some("account-verification-pending")
+        );
+        assert_eq!(generation, 2);
+        assert!(!scheduler.start_if_due(4999));
+        let retry = scheduler.next_deadline().unwrap().max(5000);
+        assert!((5000..=6200).contains(&retry));
+        assert!(scheduler.start_if_due(retry));
+        assert!(!scheduler.start_if_due(retry));
+        assert_eq!(
+            tooltip(&usage),
+            "Account verification pending\nWaiting to retry…"
+        );
+        usage.refresh_in_flight = true;
+        assert_eq!(tooltip(&usage), "Verifying account…");
+    }
+
     #[test]
     fn edge_drop_persists_monitor_side_and_height_together_or_preserves_previous_settings() {
         let mut settings = crate::model::Settings {

@@ -28,6 +28,7 @@ export function diagnostic(code: string, codexCliVersion?: string | null): strin
     "unsupported-auth-mode": "This authentication mode does not expose ChatGPT quota windows. Sign in to ChatGPT using Codex, then Retry.",
     "session-scoped-identity": "Codex did not supply a stable account ID. This read is verified; quota reminders and reset-deadline retries are suspended. Regular refresh remains available.",
     "account-changed-during-read": "Account context changed during the read. Old usage was cleared; another read will reconcile it.",
+    "account-verification-pending": "The local account could not be verified. Previous values are hidden until verification succeeds. Automatic checks will retry.",
     "reconciliation-pending": "Codex reported a change during the read. Values are out of date while a follow-up read runs.",
     "settings-conflict": "Settings changed since this draft was opened. Compare the saved settings, then reload or reapply your draft.",
     "invalid-refresh-intervals": "Use 15–120 seconds for detail, 30–300 for compact, and 60–600 for background. Each interval must be at least the preceding one.",
