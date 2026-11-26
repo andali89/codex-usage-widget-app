@@ -1,14 +1,15 @@
 import type { AppState } from "./state";
-import { quotaPending, usageSummary } from "./summary";
+import { quotaPending, trayHoverSummary, usageSummary } from "./summary";
 import { showsPeriod, effectiveResets } from "./periods";
 import CompactQuotaReadings from "./CompactQuotaReadings";
+import TaskbarStripReadings from "./TaskbarStripReadings";
 import QuotaCard from "./QuotaCard";
 import { BrandMark, Icon } from "./visuals";
 
 export default function WidgetContents({state,surface,now,onAction=()=>{}}:{state:AppState;surface:"shell"|"preview";now:number;onAction?:(request:Record<string,unknown>)=>void}) {
   const sourceUsage = state.usage, mode = state.settings.mode;
-  const selection = (mode === "screen-edge" || mode === "compact-hud") ? state.settings.windows.visiblePeriods?.[mode] ?? "both" : "both";
-  const filtered = surface === "shell" && (mode === "screen-edge" || mode === "compact-hud");
+  const selection = (mode === "screen-edge" || mode === "compact-hud" || mode === "taskbar-strip") ? state.settings.windows.visiblePeriods?.[mode] ?? "both" : "both";
+  const filtered = surface === "shell" && (mode === "screen-edge" || mode === "compact-hud" || (mode === "taskbar-strip" && selection !== "both"));
   const u = filtered ? {...sourceUsage, windows:sourceUsage.windows.filter(w => showsPeriod(selection,w.durationMinutes))} : sourceUsage;
   const summary = usageSummary(u, now);
   const retained = u.freshness === "stale" || u.windows.some(w => w.lastKnown);
@@ -19,10 +20,15 @@ export default function WidgetContents({state,surface,now,onAction=()=>{}}:{stat
   const resets = filtered ? effectiveResets(selection,savedResets) : savedResets;
   const trayPreview = surface === "preview" && state.presentation.previewSource === "tray";
   const labelStyle = state.settings.windows.quotaLabelStyle;
+  const showBars = state.appearance?.taskbarWidget?.taskbarStripShowBars ?? state.appearance?.widget?.taskbarStripShowBars ?? state.settings.widgetAppearance?.taskbarStripShowBars ?? true;
   const activationLabel = `${summary.first}. ${status}. ${state.settings.windows.lockPosition ? "Position locked." : "Drag to move."} Click for Overview; double-click for the app window.`;
   const settingsButton = <button type="button" data-widget-control className="icon-button" aria-label="Widget settings" title="Settings" onClick={() => onAction({ type: "settings" })}><Icon name="settings" /></button>;
   const credits = u.resetCreditsAvailable !== null && <div className="widget-credits"><Icon name="credits" /><span>{retained ? "Last known credits" : "Reset credits"}</span><strong>{u.resetCreditsAvailable}</strong><Icon name="chevron" /></div>;
   const warningMark = warning && <span className="status-warning" title={status} aria-label={status}><Icon name="warning" /></span>;
+  const taskbarWarningMark = u.ordinaryUsageAllowed === false
+    ? <span className="status-warning critical" title={status} aria-label={status}>!</span>
+    : warningMark;
+  const tray = trayPreview ? trayHoverSummary(u, now) : null;
   return <>
     {surface === "shell" ? mode === "floating" ? <>
       <header className="widget-header"><BrandMark /><strong>Codex</strong><span className="spacer" />{settingsButton}<button type="button" data-widget-control className="icon-button" disabled={!state.trayAvailable} title={state.trayAvailable ? "Switch to System Tray mode" : "System tray unavailable"} aria-label="Switch to System Tray mode" onClick={() => onAction({ type: "close-to-tray" })}><Icon name="close" /></button></header>
@@ -34,11 +40,15 @@ export default function WidgetContents({state,surface,now,onAction=()=>{}}:{stat
       <BrandMark small /><div className="glance-target edge-values" role="button" tabIndex={0} aria-label={activationLabel}>
         <CompactQuotaReadings mode="screen-edge" segmentCounts={state.settings.windows.resetSegmentCounts?.["screen-edge"]} windows={u.windows} selection={selection} resets={savedResets} labelStyle={labelStyle} retained={retained} now={now}/>
       </div>{warningMark}
+    </> : mode === "taskbar-strip" ? <>
+      <div className={`glance-target taskbar-strip-rows${showBars ? "" : " bars-off"}`} role="button" tabIndex={0} aria-label={activationLabel}>
+        <TaskbarStripReadings windows={u.windows} selection={selection} showBars={showBars} retained={retained} now={now} />
+      </div>{taskbarWarningMark}
     </> : <>
       <BrandMark small /><div className="glance-target hud-values" role="button" tabIndex={0} aria-label={activationLabel}>
         <CompactQuotaReadings mode="compact-hud" segmentCounts={state.settings.windows.resetSegmentCounts?.["compact-hud"]} windows={u.windows} selection={selection} resets={savedResets} labelStyle={labelStyle} retained={retained} now={now}/>
       </div>{warningMark}
-    </> : trayPreview ? <><BrandMark small /><div className="tray-summary-content"><p>{summary.first}</p>{summary.second && <p className="muted">{summary.second}</p>}</div></> : <>
+    </> : trayPreview && tray ? <><BrandMark small /><div className="tray-summary-content">{tray.fallback ? <><p>{tray.fallback.first}</p>{tray.fallback.second && <p className="muted">{tray.fallback.second}</p>}</> : <><div className="tray-summary-rows">{tray.rows.map(row => <div key={row.key} className={`tray-summary-row ${row.role === "weekly" ? "role-wk" : "role-5h"}${row.retained ? " retained" : ""}`}><span className="tray-lbl">{row.label}</span><span className={`tray-pct${row.unavailable ? " ts-unavail" : ""}`}>{row.value}</span>{row.reset && <span className={`tray-rst${row.due ? " ts-due" : ""}`}>{row.reset}</span>}</div>)}</div>{tray.status && <p className={`tray-summary-status${tray.critical ? " critical" : " muted"}`}>{tray.status}</p>}</>}</div></> : <>
       <header className="widget-header"><BrandMark /><strong>Codex <span className="muted">usage</span></strong></header>
       {u.ordinaryUsageAllowed === false && <p className="notice critical">{retained ? "Last known: " : ""}Ordinary usage blocked</p>}
       <div className="preview-quotas">{u.windows.length ? u.windows.map((quota, index) => <QuotaCard key={quota.key} quota={quota} index={index} compact showDetails stale={u.freshness === "stale"} now={now} pending={quotaPending(u, quota.key)} />) : <p className="widget-empty">{summary.first}</p>}</div>

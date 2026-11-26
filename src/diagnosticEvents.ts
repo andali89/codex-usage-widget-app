@@ -7,9 +7,10 @@ export const displayFlags = { sharedLoading:1, quotaLoading:2, refreshing:4, sta
 export function diagnosticDisplay(state:AppState|null,surface:"main"|"shell"|"preview"|"usage",visible:boolean):number {
   if(!state)return displayFlags.sharedLoading|(visible?128:0);
   const mode=state.settings.mode;
-  const selection=mode==="screen-edge"||mode==="compact-hud"?state.settings.windows.visiblePeriods[mode]??"both":"both";
+  const selection=mode==="screen-edge"||mode==="compact-hud"||mode==="taskbar-strip"?state.settings.windows.visiblePeriods[mode]??"both":"both";
   const source=state.usage;
-  const u=surface==="shell"?{...source,windows:source.windows.filter(w=>showsPeriod(selection,w.durationMinutes))}:source;
+  const filtered=surface==="shell"&&(mode==="screen-edge"||mode==="compact-hud"||(mode==="taskbar-strip"&&selection!=="both"));
+  const u=filtered?{...source,windows:source.windows.filter(w=>showsPeriod(selection,w.durationMinutes))}:source;
   const usable=u.windows.some(w=>w.remainingPercent!==null);
   return (visible?128:0)|(u.refreshInFlight?4:0)|
     (u.freshness==="stale"||u.windows.some(w=>w.lastKnown)?8:0)|

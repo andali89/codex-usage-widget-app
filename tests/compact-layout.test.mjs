@@ -13,6 +13,17 @@ test("normal compact readings keep their footprint, with space added only for a 
       }
     }
   }
+  for (const periods of ["both", "five-hour", "weekly"]) {
+    const single = periods !== "both";
+    for (const showBars of [true, false]) {
+      for (const warning of [false, true]) {
+        assert.deepEqual(
+          compactLayout("taskbar-strip", "words", { fiveHour: true, weekly: true }, warning, periods, showBars),
+          { width: 122 + (warning ? 16 : 0), height: single ? (showBars ? 28 : 24) : (showBars ? 42 : 36) },
+        );
+      }
+    }
+  }
   assert.equal(compactLayout("floating", "words"), null);
   assert.equal(compactLayout("system-tray", "badges"), null);
 });

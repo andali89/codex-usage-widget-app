@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { usageSummary } from "../src/summary.ts";
+import { trayHoverSummary, usageSummary } from "../src/summary.ts";
 
 const window = (label, remaining, resetsAtMs, durationMinutes = 300) => ({ key: label, label, remainingPercent:remaining, resetsAtMs, durationMinutes, quality: remaining === null ? "missing" : "valid", lastKnown:false });
 const usage = windows => ({ windows, freshness:"fresh", connection:"ready", ordinaryUsageAllowed:null });
@@ -44,4 +44,39 @@ test("an absent window announces checking before its third missing read", () => 
   const data = usage([window("5-hour",68,null), {...window("Weekly",null,null,10080), key:"codex/secondary/10080"}]);
   assert.match(usageSummary({...data, missingWindowReads:{"codex/secondary":2}}, 0).first, /Weekly checking/);
   assert.match(usageSummary({...data, missingWindowReads:{"codex/secondary":3}}, 0).first, /Weekly unavailable/);
+});
+
+test("trayHoverSummary returns two aligned rows with both resets and respects honest edge states", () => {
+  const hour = 3_600_000, day = 24 * hour;
+  const fresh = trayHoverSummary(usage([
+    window("5-hour", 68, 2 * hour + 17 * 60_000, 300),
+    window("Weekly", 42, 4 * day + 12 * hour, 10080),
+  ]), 0);
+  assert.equal(fresh.fallback, null);
+  assert.equal(fresh.status, null);
+  assert.equal(fresh.rows.length, 2);
+  assert.deepEqual(fresh.rows.map(r => [r.label, r.value, r.reset, r.due]), [
+    ["5-hour", "68% left", "2h17m", false],
+    ["Weekly", "42% left", "4d12h", false],
+  ]);
+
+  const due = trayHoverSummary(usage([window("5-hour", 0, 1000, 300), window("Weekly", 50, day, 10080)]), 1000);
+  assert.equal(due.rows[0].reset, "due?");
+  assert.equal(due.rows[0].due, true);
+  assert.equal(due.rows[1].reset, "1d");
+
+  const stale = trayHoverSummary({ ...usage([window("5-hour", 68, hour, 300), window("Weekly", 42, day, 10080)]), freshness: "stale", connection: "offline" }, 0);
+  assert.equal(stale.rows.every(r => r.retained && r.reset === null), true);
+  assert.match(stale.status, /Last known.*Offline/);
+
+  const blocked = trayHoverSummary({ ...usage([window("5-hour", 68, hour, 300)]), ordinaryUsageAllowed: false }, 0);
+  assert.equal(blocked.critical, true);
+  assert.equal(blocked.status, "Ordinary usage blocked");
+
+  const verifying = trayHoverSummary({ ...usage([]), connection: "verifying", refreshInFlight: true }, 0);
+  assert.equal(verifying.rows.length, 0);
+  assert.equal(verifying.fallback?.first, "Verifying account…");
+
+  const unknownDur = trayHoverSummary(usage([window("Primary window (duration unavailable)", 55, hour, null)]), 0);
+  assert.equal(unknownDur.rows[0].label, "Primary (period unknown)");
 });

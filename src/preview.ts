@@ -12,11 +12,14 @@ const { defaultReminders } = await import("./state");
 const query = new URLSearchParams(location.search);
 const at = Date.now();
 const dark = query.get("theme") === "dark";
+const systemDark = query.has("systemTheme") ? query.get("systemTheme") === "dark" : dark;
 const scenario = query.get("scenario") ?? "fresh";
+const queryMode = query.get("mode");
+const mode = queryMode === "screen-edge" || queryMode === "compact-hud" || queryMode === "floating" || queryMode === "taskbar-strip" ? queryMode : "system-tray";
 const state: AppState = {
   diagnosticSegment:0, processEpoch: "synthetic-fixture", revision: 1, dashboardRequest:null, firstLaunch:query.has("welcome"),
-  settings: { schemaVersion: 13, diagnosticLoggingEnabled:false, widgetAppearance:defaultWidgetAppearance(), autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode: query.get("mode") === "screen-edge" ? "screen-edge" : query.get("mode") === "compact-hud" ? "compact-hud" : query.get("mode") === "floating" ? "floating" : "system-tray", codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { snapGapLogicalPx:8,snapAnchors:{}, hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, resetSegmentCounts:{}, visiblePeriods:{} }, reminders:defaultReminders() },
-  appearance: { compactSizing:{}, widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
+  settings: { schemaVersion: 14, diagnosticLoggingEnabled:false, widgetAppearance:defaultWidgetAppearance(), autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode, codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { snapGapLogicalPx:8,snapAnchors:{}, hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, resetSegmentCounts:{}, visiblePeriods:{} }, reminders:defaultReminders() },
+  appearance: { compactSizing:{}, widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), taskbarWidget:systemDark!==dark?resolveWidgetAppearance(defaultWidgetAppearance(),systemDark?"dark":"light",query.has("contrast"),false):undefined, placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", systemResolvedTheme: systemDark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
   usage: {
     accountContextKey: "synthetic-only", connectionGeneration: 1, selectedLimitId: "codex",
     windows: [
@@ -59,26 +62,30 @@ if (scenario === "long-reset") state.usage.windows[1].resetsAtMs = at + 86340000
 mockWindows(query.get("surface") === "shell" ? "shell" : query.get("surface") === "preview" ? "preview" : "main");
 const fixtureSizing=(appearance:Settings["widgetAppearance"])=>{
   const draft={...state.settings,widgetAppearance:appearance};
-  for(const mode of ["screen-edge","compact-hud"] as const) {
+  for(const mode of ["screen-edge","compact-hud","taskbar-strip"] as const) {
     const requestedPercent=appearance[scaleKey(mode)],budget={requestedPercent,effectivePercent:requestedPercent,maxPercent:300,availableWidth:1920,availableHeight:1080,fallbackReason:null as string|null};
     budget.maxPercent=fittingScale(draft,mode,budget,state.appearance.textScale);
     if(requestedPercent>budget.maxPercent){budget.effectivePercent=Math.min(requestedPercent,100);budget.fallbackReason="screen-too-small";}
     state.appearance.compactSizing[mode]=budget;
   }
 };
-for(const [key,param] of [["edgeScalePercent","edgeSize"],["hudScalePercent","hudSize"]] as const) {
+for(const [key,param] of [["edgeScalePercent","edgeSize"],["hudScalePercent","hudSize"],["taskbarStripScalePercent","taskbarStripSize"]] as const) {
   const percent=Number(query.get(param));if(Number.isInteger(percent)&&percent>=80&&percent<=300)state.settings.widgetAppearance[key]=percent;
 }
+if(query.get("showBars")==="false")state.settings.widgetAppearance.taskbarStripShowBars=false;
 state.settings.widgetAppearance.compactCountdownBold=query.has("boldCountdown");
 state.settings.widgetAppearance.compactCountdownHighContrast=query.has("contrastCountdown");
 state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,false);
+state.appearance.taskbarWidget=state.appearance.systemResolvedTheme!==state.appearance.resolvedTheme?resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.systemResolvedTheme!,state.appearance.highContrast,false):undefined;
 fixtureSizing(state.settings.widgetAppearance);
 const actionHistory: string[] = [];
 let displayPreview:{session:string;sequence:number}|null=null;
 const fixturePaint=(theme:Settings["themePreference"],appearance:Settings["widgetAppearance"],gap:number)=>{
   state.appearance.themePreference=theme;
   state.appearance.resolvedTheme=theme==="system"?(dark?"dark":"light"):theme;
+  state.appearance.systemResolvedTheme=theme==="system"?(systemDark?"dark":"light"):theme;
   state.appearance.widget=resolveWidgetAppearance(appearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
+  state.appearance.taskbarWidget=state.appearance.systemResolvedTheme!==state.appearance.resolvedTheme?resolveWidgetAppearance(appearance,state.appearance.systemResolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed):undefined;
   state.appearance.placementConstraints.margins=[gap,gap,gap,gap];
   fixtureSizing(appearance);
 };
@@ -108,10 +115,7 @@ mockIPC(async (name, payload) => {
     if (args.expectedRevision !== state.settings.revision) throw "settings-conflict";
     displayPreview=null;
     state.settings = { ...args.settings, revision: state.settings.revision + 1 };
-    state.appearance.themePreference = state.settings.themePreference;
-    state.appearance.resolvedTheme = state.settings.themePreference === "system" ? dark ? "dark" : "light" : state.settings.themePreference;
-    state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
-    fixtureSizing(state.settings.widgetAppearance);
+    fixturePaint(state.settings.themePreference, state.settings.widgetAppearance, state.settings.windows.snapGapLogicalPx);
     state.revision++;
     await emit("widget-state", structuredClone(state));
     return structuredClone(state);

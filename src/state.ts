@@ -7,7 +7,7 @@ import { Replica } from "./replica";
 export { percent, countdown } from "./format";
 
 export type ThemePreference = "system" | "light" | "dark";
-export type DisplayMode = "floating" | "screen-edge" | "system-tray" | "compact-hud";
+export type DisplayMode = "floating" | "screen-edge" | "system-tray" | "compact-hud" | "taskbar-strip";
 export type QuotaLabelStyle = "words" | "badges";
 export type VisiblePeriods = "both" | "five-hour" | "weekly";
 export type StorageLocation = { kind: "executable" | "app-data" } | { kind: "custom"; directory: string };
@@ -25,7 +25,7 @@ export interface Settings {
   mode: DisplayMode; codexPath: string | null; proxyUrl: string | null; storageLocation: StorageLocation;
   foregroundSeconds: number; compactSeconds: number; backgroundSeconds: number;
   widgetAppearance: WidgetAppearanceSettings;
-  windows: { snapGapLogicalPx:number; snapAnchors:Partial<Record<DisplayMode,{horizontal:"none"|"left"|"right";vertical:"none"|"top"|"bottom"}>>; hoverEnabled: boolean; lockPosition: boolean; alwaysOnTop: boolean; suppressFullscreen: boolean; edgeSide: "left" | "right"; quotaLabelStyle: QuotaLabelStyle; placements: Partial<Record<DisplayMode, { monitor: string | null; x: number; y: number }>>; resetCountdowns: Partial<Record<DisplayMode, ResetCountdowns>>; resetSegmentCounts: Partial<Record<"screen-edge" | "compact-hud", ResetSegmentCounts>>; visiblePeriods: Partial<Record<"screen-edge" | "compact-hud", VisiblePeriods>> };
+  windows: { snapGapLogicalPx:number; snapAnchors:Partial<Record<DisplayMode,{horizontal:"none"|"left"|"right";vertical:"none"|"top"|"bottom"}>>; hoverEnabled: boolean; lockPosition: boolean; alwaysOnTop: boolean; suppressFullscreen: boolean; edgeSide: "left" | "right"; quotaLabelStyle: QuotaLabelStyle; placements: Partial<Record<DisplayMode, { monitor: string | null; x: number; y: number }>>; resetCountdowns: Partial<Record<DisplayMode, ResetCountdowns>>; resetSegmentCounts: Partial<Record<"screen-edge" | "compact-hud", ResetSegmentCounts>>; visiblePeriods: Partial<Record<"screen-edge" | "compact-hud" | "taskbar-strip", VisiblePeriods>> };
   reminders: ReminderPreferences;
   autostart: {requested:boolean;pending:boolean;effective:boolean|null;diagnostic:string|null};
 }
@@ -55,8 +55,8 @@ export interface AppState {
   dashboardRequest:{sequence:number;page:"overview"|"settings"}|null;
   firstLaunch:boolean;
   appearance: {
-    compactMonitorBudgets?:Record<string,import("./compactSizing").MonitorBudget>; compactSizing:Partial<Record<"screen-edge"|"compact-hud",import("./compactSizing").ScaleState>>; widget: EffectiveWidgetAppearance; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
-    themePreference: ThemePreference; resolvedTheme: "light" | "dark";
+    compactMonitorBudgets?:Record<string,import("./compactSizing").MonitorBudget>; compactSizing:Partial<Record<"screen-edge"|"compact-hud"|"taskbar-strip",import("./compactSizing").ScaleState>>; widget: EffectiveWidgetAppearance; taskbarWidget?: EffectiveWidgetAppearance; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
+    themePreference: ThemePreference; resolvedTheme: "light" | "dark"; systemResolvedTheme?: "light" | "dark";
     highContrast: boolean; transparencyAllowed: boolean; reducedMotion: boolean; textScale: number;
   };
   usage: Usage; storage: StorageStatus; storageDiagnostic: string | null;
@@ -67,13 +67,14 @@ export interface AppState {
   reminders:{deliveryPaused:boolean;snoozedUntil:number|null;pendingCount:number;history:ReminderDelivery[];diagnostic:string|null;identityScope:string};
 }
 
-export function applyAppearance(state: AppState) {
+export function applyAppearance(state: AppState, themeOverride?: "light" | "dark", widgetOverride?: EffectiveWidgetAppearance) {
   const root = document.documentElement;
-  root.dataset.theme = state.appearance.resolvedTheme;
-  root.style.setProperty("--quota-five-hour", state.appearance.highContrast ? "LinkText" : state.appearance.widget.palette.fiveHour);
-  root.style.setProperty("--quota-weekly", state.appearance.highContrast ? "LinkText" : state.appearance.widget.palette.weekly);
+  const widget = widgetOverride ?? state.appearance.widget;
+  root.dataset.theme = themeOverride ?? state.appearance.resolvedTheme;
+  root.style.setProperty("--quota-five-hour", state.appearance.highContrast ? "LinkText" : widget.palette.fiveHour);
+  root.style.setProperty("--quota-weekly", state.appearance.highContrast ? "LinkText" : widget.palette.weekly);
   for(const [role,token] of [["fiveHour","five-hour"],["weekly","weekly"]] as const) {
-    root.style.setProperty(`--quota-${token}-text`,state.appearance.highContrast?"LinkText":state.appearance.widget.quotaText[role]);
+    root.style.setProperty(`--quota-${token}-text`,state.appearance.highContrast?"LinkText":widget.quotaText[role]);
   }
   root.dataset.highContrast = String(state.appearance.highContrast);
   root.dataset.reducedMotion = String(state.appearance.reducedMotion);

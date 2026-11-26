@@ -30,7 +30,7 @@ export function BrandMark({ small = false }: { small?: boolean }) {
 export function EmptyArt() { return <img className="empty-art" src={empty} alt="" draggable={false} />; }
 
 export function ModePreview({ mode }: { mode: DisplayMode }) {
-  return <span className={`mode-preview mode-preview-${mode}`} aria-hidden="true"><span className="mode-mini"><BrandMark small /><span className="mode-mini-bars"><i /><i /></span></span>{mode === "system-tray" && <span className="mode-taskbar"><i /><i /><i /></span>}</span>;
+  return <span className={`mode-preview mode-preview-${mode}`} aria-hidden="true"><span className="mode-mini">{mode !== "taskbar-strip" && <BrandMark small />}<span className="mode-mini-bars"><i /><i /></span></span>{(mode === "system-tray" || mode === "taskbar-strip") && <span className="mode-taskbar"><i /><i /><i /></span>}</span>;
 }
 
 export function PeriodBadge({ weekly = false }: { weekly?: boolean }) {
