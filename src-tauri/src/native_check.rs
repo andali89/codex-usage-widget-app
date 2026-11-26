@@ -334,12 +334,16 @@ async fn diagnostics_check(app: &AppHandle, service: &Service) -> Result<(), Str
         service.dispatch_reliable(Action::DiagnosticFixture(Box::new(fresh)));
         frontend_assert(app,"shell","document.querySelector('.hud-quota strong')?.textContent==='68%'&&!document.querySelector('.status-warning')","diagnostic-recovery").await?;
         let fresh = service.snapshot().await?.usage;
-        for display_mode in [DisplayMode::CompactHud, DisplayMode::ScreenEdge] {
+        for display_mode in [
+            DisplayMode::CompactHud,
+            DisplayMode::ScreenEdge,
+            DisplayMode::TaskbarStrip,
+        ] {
             mode(service, display_mode).await?;
-            let values = if display_mode == DisplayMode::CompactHud {
-                ".hud-values"
-            } else {
-                ".edge-values"
+            let values = match display_mode {
+                DisplayMode::CompactHud => ".hud-values",
+                DisplayMode::ScreenEdge => ".edge-values",
+                _ => ".taskbar-strip-rows",
             };
             let mut verifying = fresh.clone();
             let mut generation = verifying.connection_generation;
@@ -481,8 +485,12 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                     (DisplayMode::ScreenEdge, QuotaLabelStyle::Badges),
                     (DisplayMode::CompactHud, QuotaLabelStyle::Words),
                     (DisplayMode::CompactHud, QuotaLabelStyle::Badges),
+                    (DisplayMode::TaskbarStrip, QuotaLabelStyle::Words),
                 ] {
                     if mode == DisplayMode::Floating && periods != VisiblePeriods::Both {
+                        continue;
+                    }
+                    if mode == DisplayMode::TaskbarStrip && weekly {
                         continue;
                     }
                     let mut settings = service.snapshot().await?.settings;
@@ -498,6 +506,9 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                     settings.windows.quota_label_style = label_style;
                     settings.windows.always_on_top = countdowns;
                     settings.windows.suppress_fullscreen = false;
+                    if mode == DisplayMode::TaskbarStrip {
+                        settings.widget_appearance.taskbar_strip_show_bars = five_hour;
+                    }
                     settings
                         .windows
                         .reset_countdowns
@@ -548,6 +559,20 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                                 + 58.0 * f64::from(count),
                             38.0,
                         )),
+                        DisplayMode::TaskbarStrip => Some((
+                            122.0,
+                            if single {
+                                if five_hour {
+                                    28.0
+                                } else {
+                                    24.0
+                                }
+                            } else if five_hour {
+                                42.0
+                            } else {
+                                36.0
+                            },
+                        )),
                         _ => None,
                     };
                     let mut stable = 0;
@@ -580,16 +605,19 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                                 .any(|w| w.remaining_percent.is_some());
                         let desired = expected.map(|(w, h)| {
                             let extra = if warning {
-                                if mode == DisplayMode::ScreenEdge {
-                                    18.0
-                                } else {
-                                    28.0
+                                match mode {
+                                    DisplayMode::ScreenEdge => 18.0,
+                                    DisplayMode::TaskbarStrip => 16.0,
+                                    _ => 28.0,
                                 }
                             } else {
                                 0.0
                             };
                             (
-                                (w + if mode == DisplayMode::CompactHud {
+                                (w + if matches!(
+                                    mode,
+                                    DisplayMode::CompactHud | DisplayMode::TaskbarStrip
+                                ) {
                                     extra
                                 } else {
                                     0.0
@@ -745,6 +773,7 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
         DisplayMode::Floating,
         DisplayMode::ScreenEdge,
         DisplayMode::CompactHud,
+        DisplayMode::TaskbarStrip,
     ] {
         for gap in [0, 8, 16, 48] {
             let mut settings = service.snapshot().await?.settings;
@@ -776,8 +805,9 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                 let p = shell.outer_position().map_err(|_| "gap-position")?;
                 let size = shell.outer_size().map_err(|_| "gap-size")?;
                 let m = state.appearance.placement_constraints.margins;
-                let x = if mode == DisplayMode::ScreenEdge
-                    && state.settings.windows.edge_side == crate::model::EdgeSide::Right
+                let x = if mode == DisplayMode::TaskbarStrip
+                    || (mode == DisplayMode::ScreenEdge
+                        && state.settings.windows.edge_side == crate::model::EdgeSide::Right)
                 {
                     f64::from(work.position.x) + f64::from(work.size.width)
                         - f64::from(size.width)
@@ -785,9 +815,14 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
                 } else {
                     f64::from(work.position.x) + m[0]
                 };
-                if (f64::from(p.x) - x).abs() <= 1.0
-                    && (f64::from(p.y) - f64::from(work.position.y) - m[1]).abs() <= 1.0
-                {
+                let y = if mode == DisplayMode::TaskbarStrip {
+                    f64::from(work.position.y) + f64::from(work.size.height)
+                        - f64::from(size.height)
+                        - m[3]
+                } else {
+                    f64::from(work.position.y) + m[1]
+                };
+                if (f64::from(p.x) - x).abs() <= 1.0 && (f64::from(p.y) - y).abs() <= 1.0 {
                     matched = true;
                     break;
                 }
@@ -797,12 +832,17 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
             let state = service.snapshot().await?;
             let anchors = &state.settings.windows.snap_anchors[mode.key()];
             require(
-                anchors.vertical == VerticalAnchor::Top
+                anchors.vertical
+                    == if mode == DisplayMode::TaskbarStrip {
+                        VerticalAnchor::Bottom
+                    } else {
+                        VerticalAnchor::Top
+                    }
                     && anchors.horizontal
-                        == if mode == DisplayMode::ScreenEdge {
-                            HorizontalAnchor::None
-                        } else {
-                            HorizontalAnchor::Left
+                        == match mode {
+                            DisplayMode::ScreenEdge => HorizontalAnchor::None,
+                            DisplayMode::TaskbarStrip => HorizontalAnchor::Right,
+                            _ => HorizontalAnchor::Left,
                         },
                 "reset-persists-anchor-intent",
             )?;
@@ -923,7 +963,13 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
     setup.windows.suppress_fullscreen = false;
     setup.widget_appearance.edge_scale_percent = 100;
     setup.widget_appearance.hud_scale_percent = 100;
-    for mode in [DisplayMode::ScreenEdge, DisplayMode::CompactHud] {
+    setup.widget_appearance.taskbar_strip_scale_percent = 100;
+    setup.widget_appearance.taskbar_strip_show_bars = true;
+    for mode in [
+        DisplayMode::ScreenEdge,
+        DisplayMode::CompactHud,
+        DisplayMode::TaskbarStrip,
+    ] {
         setup
             .windows
             .visible_periods
@@ -935,23 +981,31 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 weekly: true,
             },
         );
-        setup.windows.reset_segment_counts.insert(
-            mode.key().into(),
-            crate::model::ResetSegmentCounts {
-                five_hour: 2,
-                weekly: 12,
-            },
-        );
+        if mode != DisplayMode::TaskbarStrip {
+            setup.windows.reset_segment_counts.insert(
+                mode.key().into(),
+                crate::model::ResetSegmentCounts {
+                    five_hour: 2,
+                    weekly: 12,
+                },
+            );
+        }
     }
     setup.windows.quota_label_style = QuotaLabelStyle::Badges;
     save_settings(service, setup).await?;
     for theme in [ThemePreference::Light, ThemePreference::Dark] {
-        for mode in [DisplayMode::ScreenEdge, DisplayMode::CompactHud] {
+        for mode in [
+            DisplayMode::ScreenEdge,
+            DisplayMode::CompactHud,
+            DisplayMode::TaskbarStrip,
+        ] {
             let mut settings = service.snapshot().await?.settings;
             settings.mode = mode;
             settings.theme_preference = theme;
             settings.widget_appearance.edge_scale_percent = 100;
             settings.widget_appearance.hud_scale_percent = 100;
+            settings.widget_appearance.taskbar_strip_scale_percent = 100;
+            settings.widget_appearance.taskbar_strip_show_bars = true;
             save_settings(service, settings).await?;
             wait(app, service, "compact-options-hydration", |_| {
                 visible(app, "shell")
@@ -962,14 +1016,24 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 settings.widget_appearance.compact_countdown_bold = bold;
                 settings.widget_appearance.compact_countdown_high_contrast = strong;
                 save_settings(service, settings).await?;
-                let weight = if bold { "700" } else { "400" };
-                let color = if strong {
-                    "getComputedStyle(root).color"
+                let expression = if mode == DisplayMode::TaskbarStrip {
+                    let weight = if bold { "700" } else { "450" };
+                    let color = if strong {
+                        "getComputedStyle(root).color"
+                    } else {
+                        "getComputedStyle(root).getPropertyValue('--quota-five-hour-text').trim()"
+                    };
+                    format!("(()=>{{const root=document.querySelector('.native-surface.shell'),c=root?.querySelector('.ts-rst');if(!c)return false;const probe=document.createElement('span');probe.style.color={color};root.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(c).fontWeight==='{weight}'&&getComputedStyle(c).color===expected&&root.querySelectorAll('.micro-bar').length===1;}})()")
                 } else {
-                    "getComputedStyle(root).getPropertyValue('--secondary').trim()"
+                    let weight = if bold { "700" } else { "400" };
+                    let color = if strong {
+                        "getComputedStyle(root).color"
+                    } else {
+                        "getComputedStyle(root).getPropertyValue('--secondary').trim()"
+                    };
+                    // Resolve the secondary token through an element so CSS system/hex colors compare equally.
+                    format!("(()=>{{const root=document.querySelector('.native-surface.shell'),c=root?.querySelector('.reset-countdown');if(!c)return false;const probe=document.createElement('span');probe.style.color={color};root.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(c).fontWeight==='{weight}'&&getComputedStyle(c).color===expected&&root.querySelectorAll('.reset-segments i').length===2;}})()")
                 };
-                // Resolve the secondary token through an element so CSS system/hex colors compare equally.
-                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell'),c=root?.querySelector('.reset-countdown');if(!c)return false;const probe=document.createElement('span');probe.style.color={color};root.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(c).fontWeight==='{weight}'&&getComputedStyle(c).color===expected&&root.querySelectorAll('.reset-segments i').length===2;}})()");
                 frontend_assert(
                     app,
                     "shell",
@@ -977,6 +1041,21 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                     "compact-countdown-weight-color-and-retained-bars",
                 )
                 .await?;
+            }
+            if mode == DisplayMode::TaskbarStrip {
+                let mut no_bars = service.snapshot().await?.settings;
+                no_bars.widget_appearance.taskbar_strip_show_bars = false;
+                save_settings(service, no_bars).await?;
+                frontend_assert(
+                    app,
+                    "shell",
+                    "document.querySelectorAll('.native-surface.shell .micro-bar').length===0",
+                    "taskbar-strip-micro-bars-off",
+                )
+                .await?;
+                let mut restore_bars = service.snapshot().await?.settings;
+                restore_bars.widget_appearance.taskbar_strip_show_bars = true;
+                save_settings(service, restore_bars).await?;
             }
             let text = f64::from(service.snapshot().await?.appearance.text_scale) / 100.0;
             for percent in [80, 100, 125, 137, 150, 200, 300] {
@@ -987,19 +1066,28 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                     continue;
                 }
                 let mut settings = snapshot.settings;
-                if mode == DisplayMode::ScreenEdge {
-                    settings.widget_appearance.edge_scale_percent = percent;
-                } else {
-                    settings.widget_appearance.hud_scale_percent = percent;
+                match mode {
+                    DisplayMode::ScreenEdge => {
+                        settings.widget_appearance.edge_scale_percent = percent
+                    }
+                    DisplayMode::CompactHud => {
+                        settings.widget_appearance.hud_scale_percent = percent
+                    }
+                    _ => settings.widget_appearance.taskbar_strip_scale_percent = percent,
                 }
                 save_settings(service, settings).await?;
                 let factor = f64::from(percent) / 100.0;
-                let (width, height) = if mode == DisplayMode::ScreenEdge {
-                    (54.0, 124.0)
-                } else {
-                    (164.0, 38.0)
+                let (width, height) = match mode {
+                    DisplayMode::ScreenEdge => (54.0, 124.0),
+                    DisplayMode::CompactHud => (164.0, 38.0),
+                    _ => (122.0, 28.0),
                 };
-                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell');if(!root)return false;const r=root.getBoundingClientRect();return Math.abs(Number(getComputedStyle(root).zoom)-{factor})<.001&&Math.abs(r.width-{})<1&&Math.abs(r.height-{})<1&&root.querySelectorAll('.reset-segments i').length===2;}})()",width*text*factor,height*text*factor);
+                let extra_check = if mode == DisplayMode::TaskbarStrip {
+                    "root.querySelectorAll('.micro-bar').length===1"
+                } else {
+                    "root.querySelectorAll('.reset-segments i').length===2"
+                };
+                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell');if(!root)return false;const r=root.getBoundingClientRect();return Math.abs(Number(getComputedStyle(root).zoom)-{factor})<.001&&Math.abs(r.width-{})<1&&Math.abs(r.height-{})<1&&{extra_check};}})()",width*text*factor,height*text*factor);
                 frontend_assert(
                     app,
                     "shell",
@@ -1043,10 +1131,10 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
             let revision = snapshot.settings.revision;
             let mut invalid = snapshot.settings;
             let limit = snapshot.appearance.compact_sizing[mode.key()].max_percent;
-            if mode == DisplayMode::ScreenEdge {
-                invalid.widget_appearance.edge_scale_percent = limit + 1;
-            } else {
-                invalid.widget_appearance.hud_scale_percent = limit + 1;
+            match mode {
+                DisplayMode::ScreenEdge => invalid.widget_appearance.edge_scale_percent = limit + 1,
+                DisplayMode::CompactHud => invalid.widget_appearance.hud_scale_percent = limit + 1,
+                _ => invalid.widget_appearance.taskbar_strip_scale_percent = limit + 1,
             }
             require(
                 save_settings(service, invalid).await.is_err(),
@@ -2257,7 +2345,10 @@ async fn preview_sizing(app: &AppHandle, service: &Service, source: Surface) -> 
                 && (position.y as f64 + size.height as f64) <= work.bottom() + 1.0,
             "hover-stays-in-work-area",
         )?;
-        if state.settings.mode == DisplayMode::CompactHud {
+        if matches!(
+            state.settings.mode,
+            DisplayMode::CompactHud | DisplayMode::TaskbarStrip
+        ) {
             let centered = (shell_position.x as f64
                 + (shell_size.width as f64 - size.width as f64) / 2.0)
                 .clamp(work.x, work.right() - size.width as f64);

@@ -439,29 +439,38 @@ unsafe extern "system" fn subclass(
 }
 
 const CONTROL_CLASS: &str = "CodexUsageWidget.Coordinator";
+static TASKBAR_CREATED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 unsafe extern "system" fn control_proc(
     hwnd: HWND,
     message: u32,
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    let event = match message {
-        WM_SETTINGCHANGE | WM_THEMECHANGED => {
-            if let Some(hooks) = HOOKS.get().and_then(|h| h.lock().ok()) {
-                hooks.service.dispatch(Action::Appearance);
+    let taskbar_created = TASKBAR_CREATED.load(std::sync::atomic::Ordering::Relaxed);
+    let event = if taskbar_created != 0 && message == taskbar_created {
+        if let Some(hooks) = HOOKS.get().and_then(|h| h.lock().ok()) {
+            hooks.service.dispatch(Action::Appearance);
+        }
+        Some(Input::Layout)
+    } else {
+        match message {
+            WM_SETTINGCHANGE | WM_THEMECHANGED => {
+                if let Some(hooks) = HOOKS.get().and_then(|h| h.lock().ok()) {
+                    hooks.service.dispatch(Action::Appearance);
+                }
+                Some(Input::Environment)
             }
-            Some(Input::Environment)
+            WM_DISPLAYCHANGE => Some(Input::Layout),
+            WM_TIMECHANGE => {
+                CONTROL_RECONCILES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Some(Input::Reconcile)
+            }
+            WM_POWERBROADCAST if wparam == 0x12 || wparam == 7 => Some(Input::Reconcile),
+            WM_POWERBROADCAST => Some(Input::Environment),
+            WM_WTSSESSION_CHANGE if wparam == 7 => Some(Input::Lock(true)),
+            WM_WTSSESSION_CHANGE if wparam == 8 => Some(Input::Lock(false)),
+            _ => None,
         }
-        WM_DISPLAYCHANGE => Some(Input::Layout),
-        WM_TIMECHANGE => {
-            CONTROL_RECONCILES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Some(Input::Reconcile)
-        }
-        WM_POWERBROADCAST if wparam == 0x12 || wparam == 7 => Some(Input::Reconcile),
-        WM_POWERBROADCAST => Some(Input::Environment),
-        WM_WTSSESSION_CHANGE if wparam == 7 => Some(Input::Lock(true)),
-        WM_WTSSESSION_CHANGE if wparam == 8 => Some(Input::Lock(false)),
-        _ => None,
     };
     if let Some(event) = event {
         if let Some(hooks) = HOOKS.get().and_then(|h| h.lock().ok()) {
@@ -471,6 +480,11 @@ unsafe extern "system" fn control_proc(
     DefWindowProcW(hwnd, message, wparam, lparam)
 }
 pub fn initialize(service: Service) -> Result<(), &'static str> {
+    let taskbar_msg = "TaskbarCreated\0".encode_utf16().collect::<Vec<_>>();
+    TASKBAR_CREATED.store(
+        unsafe { RegisterWindowMessageW(taskbar_msg.as_ptr()) },
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let _ = HOOKS.set(Mutex::new(Hooks {
         service: service.clone(),
         regions: Regions::default(),

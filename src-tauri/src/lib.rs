@@ -326,6 +326,7 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
         (model::DisplayMode::ScreenEdge, "Screen Edge"),
         (model::DisplayMode::SystemTray, "System Tray"),
         (model::DisplayMode::CompactHud, "Compact HUD"),
+        (model::DisplayMode::TaskbarStrip, "Taskbar Strip"),
     ]
     .into_iter()
     .map(|(mode, label)| {
@@ -347,7 +348,13 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
         "display-mode",
         "Display mode",
         true,
-        &[&modes[0].1, &modes[1].1, &modes[2].1, &modes[3].1],
+        &[
+            &modes[0].1,
+            &modes[1].1,
+            &modes[2].1,
+            &modes[3].1,
+            &modes[4].1,
+        ],
     )?;
     let visibility = MenuItem::with_id(app, "visibility", "Hide widget", false, None::<&str>)?;
     let reset = MenuItem::with_id(app, "reset-position", "Reset position", false, None::<&str>)?;
@@ -439,6 +446,9 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
                 "mode-compact-hud" => app
                     .state::<Service>()
                     .dispatch(Action::SetMode(model::DisplayMode::CompactHud)),
+                "mode-taskbar-strip" => app
+                    .state::<Service>()
+                    .dispatch(Action::SetMode(model::DisplayMode::TaskbarStrip)),
                 "quit" => {
                     if let Some(window) = app
                         .get_webview_window("main")

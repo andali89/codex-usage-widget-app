@@ -94,6 +94,8 @@ mod tests {
                 compact_countdown_high_contrast: true,
                 edge_scale_percent: 80,
                 hud_scale_percent: 137,
+                taskbar_strip_show_bars: false,
+                taskbar_strip_scale_percent: 125,
                 show_border: false,
                 background_transparency_percent: 80,
                 ..Default::default()
@@ -129,10 +131,14 @@ mod tests {
         assert!(saved.widget_appearance.show_border);
         assert_eq!(effective.widget_appearance.edge_scale_percent, 80);
         assert_eq!(effective.widget_appearance.hud_scale_percent, 137);
+        assert!(!effective.widget_appearance.taskbar_strip_show_bars);
+        assert_eq!(effective.widget_appearance.taskbar_strip_scale_percent, 125);
         assert!(effective.widget_appearance.compact_countdown_bold);
         assert!(effective.widget_appearance.compact_countdown_high_contrast);
         assert_eq!(saved.widget_appearance.edge_scale_percent, 100);
         assert_eq!(saved.widget_appearance.hud_scale_percent, 100);
+        assert!(saved.widget_appearance.taskbar_strip_show_bars);
+        assert_eq!(saved.widget_appearance.taskbar_strip_scale_percent, 100);
         assert!(!saved.widget_appearance.compact_countdown_bold);
         assert_eq!(
             effective

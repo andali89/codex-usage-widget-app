@@ -30,6 +30,7 @@ pub fn requested(settings: &Settings, mode: DisplayMode) -> u16 {
     match mode {
         DisplayMode::ScreenEdge => settings.widget_appearance.edge_scale_percent,
         DisplayMode::CompactHud => settings.widget_appearance.hud_scale_percent,
+        DisplayMode::TaskbarStrip => settings.widget_appearance.taskbar_strip_scale_percent,
         _ => 100,
     }
 }
@@ -43,6 +44,23 @@ pub fn base_size(settings: &Settings, mode: DisplayMode) -> (f64, f64) {
         .copied()
         .unwrap_or_default();
     let single = periods != VisiblePeriods::Both;
+    if mode == DisplayMode::TaskbarStrip {
+        let show_bars = settings.widget_appearance.taskbar_strip_show_bars;
+        return (
+            122.0 + 16.0,
+            if single {
+                if show_bars {
+                    28.0
+                } else {
+                    24.0
+                }
+            } else if show_bars {
+                42.0
+            } else {
+                36.0
+            },
+        );
+    }
     let badges = settings.windows.quota_label_style == QuotaLabelStyle::Badges;
     let resets = settings.windows.reset_countdowns.get(mode.key());
     let count = f64::from(
@@ -164,31 +182,35 @@ pub fn resolve_with_budgets(
     text_scale: u32,
     budgets: &BTreeMap<String, MonitorBudget>,
 ) -> BTreeMap<String, ScaleState> {
-    [DisplayMode::ScreenEdge, DisplayMode::CompactHud]
-        .into_iter()
-        .map(|mode| {
-            let name = settings
-                .windows
-                .placements
-                .get(mode.key())
-                .and_then(|p| p.monitor.as_deref())
-                .unwrap_or("");
-            let available = budgets
-                .get(name)
-                .or_else(|| budgets.get(""))
-                .map_or((0.0, 0.0), |b| (b.available_width, b.available_height));
-            (
-                mode.key().into(),
-                fit(
-                    requested(settings, mode),
-                    base_size(settings, mode),
-                    available,
-                    text_scale,
-                    settings.windows.snap_gap_logical_px,
-                ),
-            )
-        })
-        .collect()
+    [
+        DisplayMode::ScreenEdge,
+        DisplayMode::CompactHud,
+        DisplayMode::TaskbarStrip,
+    ]
+    .into_iter()
+    .map(|mode| {
+        let name = settings
+            .windows
+            .placements
+            .get(mode.key())
+            .and_then(|p| p.monitor.as_deref())
+            .unwrap_or("");
+        let available = budgets
+            .get(name)
+            .or_else(|| budgets.get(""))
+            .map_or((0.0, 0.0), |b| (b.available_width, b.available_height));
+        (
+            mode.key().into(),
+            fit(
+                requested(settings, mode),
+                base_size(settings, mode),
+                available,
+                text_scale,
+                settings.windows.snap_gap_logical_px,
+            ),
+        )
+    })
+    .collect()
 }
 
 pub fn resolve(
@@ -202,18 +224,43 @@ pub fn resolve(
 /// Existing oversize preferences may survive an environment change; reject new oversize edits.
 pub fn issues(app: &AppHandle, next: &Settings, saved: &Settings, text_scale: u32) -> Vec<Issue> {
     let sizes = resolve(app, next, text_scale);
-    [DisplayMode::ScreenEdge, DisplayMode::CompactHud].into_iter().filter_map(|mode| {
+    [
+        DisplayMode::ScreenEdge,
+        DisplayMode::CompactHud,
+        DisplayMode::TaskbarStrip,
+    ]
+    .into_iter()
+    .filter_map(|mode| {
         let changed = requested(next, mode) != requested(saved, mode)
             || base_size(next, mode) != base_size(saved, mode)
             || next.windows.snap_gap_logical_px != saved.windows.snap_gap_logical_px
-            || next.windows.placements.get(mode.key()).and_then(|p|p.monitor.as_ref())
-                != saved.windows.placements.get(mode.key()).and_then(|p|p.monitor.as_ref());
+            || next
+                .windows
+                .placements
+                .get(mode.key())
+                .and_then(|p| p.monitor.as_ref())
+                != saved
+                    .windows
+                    .placements
+                    .get(mode.key())
+                    .and_then(|p| p.monitor.as_ref());
         let size = &sizes[mode.key()];
         (changed && size.requested_percent > size.max_percent).then(|| Issue {
-            field: format!("widgetAppearance.{}ScalePercent", if mode == DisplayMode::ScreenEdge {"edge"} else {"hud"}),
-            message: format!("This layout fits up to {}% on its monitor. Choose a smaller size or another monitor.", size.max_percent),
+            field: format!(
+                "widgetAppearance.{}ScalePercent",
+                match mode {
+                    DisplayMode::ScreenEdge => "edge",
+                    DisplayMode::CompactHud => "hud",
+                    _ => "taskbarStrip",
+                }
+            ),
+            message: format!(
+                "This layout fits up to {}% on its monitor. Choose a smaller size or another monitor.",
+                size.max_percent
+            ),
         })
-    }).collect()
+    })
+    .collect()
 }
 
 #[cfg(test)]
@@ -283,6 +330,9 @@ mod tests {
                 mode.key().into(),
                 serde_json::from_value(f["resets"].clone()).unwrap(),
             );
+            if let Some(show_bars) = f.get("showBars").and_then(serde_json::Value::as_bool) {
+                settings.widget_appearance.taskbar_strip_show_bars = show_bars;
+            }
             let base = base_size(&settings, mode);
             assert_eq!(
                 base,

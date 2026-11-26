@@ -18,6 +18,7 @@ pub enum DisplayMode {
     #[default]
     SystemTray,
     CompactHud,
+    TaskbarStrip,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -152,14 +153,26 @@ impl Default for WindowSettings {
             reset_segment_counts: BTreeMap::new(),
             visible_periods: BTreeMap::new(),
             snap_gap_logical_px: 8,
-            snap_anchors: ["floating", "screen-edge", "compact-hud"]
-                .into_iter()
-                .map(|mode| (mode.into(), crate::geometry::SnapAnchors::default()))
-                .collect(),
+            snap_anchors: [
+                ("floating", crate::geometry::SnapAnchors::default()),
+                ("screen-edge", crate::geometry::SnapAnchors::default()),
+                ("compact-hud", crate::geometry::SnapAnchors::default()),
+                (
+                    "taskbar-strip",
+                    crate::geometry::SnapAnchors {
+                        horizontal: crate::geometry::HorizontalAnchor::Right,
+                        vertical: crate::geometry::VerticalAnchor::Bottom,
+                    },
+                ),
+            ]
+            .into_iter()
+            .map(|(mode, anchor)| (mode.into(), anchor))
+            .collect(),
             placements: [
                 ("floating", 24.0, 120.0),
                 ("screen-edge", 0.0, 120.0),
                 ("compact-hud", 24.0, 24.0),
+                ("taskbar-strip", 0.0, 0.0),
             ]
             .into_iter()
             .map(|(key, x, y)| {
@@ -184,6 +197,7 @@ impl DisplayMode {
             Self::ScreenEdge => "screen-edge",
             Self::SystemTray => "system-tray",
             Self::CompactHud => "compact-hud",
+            Self::TaskbarStrip => "taskbar-strip",
         }
     }
 }
@@ -211,7 +225,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            schema_version: 13,
+            schema_version: 14,
             diagnostic_logging_enabled: false,
             revision: 0,
             theme_preference: ThemePreference::System,
@@ -235,16 +249,17 @@ impl Default for Settings {
 
 impl Settings {
     pub fn validate(&self) -> Result<(), &'static str> {
-        if self.schema_version != 13 {
+        if self.schema_version != 14 {
             return Err("settings-version");
         }
         self.storage_location.validate()?;
         if self.windows.snap_gap_logical_px > 48 {
             return Err("invalid-snap-gap");
         }
-        if self.windows.snap_anchors.len() > 3
+        if self.windows.snap_anchors.len() > 4
             || self.windows.snap_anchors.iter().any(|(mode, anchor)| {
-                !["floating", "screen-edge", "compact-hud"].contains(&mode.as_str())
+                !["floating", "screen-edge", "compact-hud", "taskbar-strip"]
+                    .contains(&mode.as_str())
                     || mode == "screen-edge"
                         && anchor.horizontal != crate::geometry::HorizontalAnchor::None
             })
@@ -261,16 +276,13 @@ impl Settings {
             .windows
             .visible_periods
             .keys()
-            .any(|mode| !["screen-edge", "compact-hud"].contains(&mode.as_str()))
+            .any(|mode| !["screen-edge", "compact-hud", "taskbar-strip"].contains(&mode.as_str()))
         {
             return Err("invalid-visible-periods");
         }
-        if self
-            .windows
-            .reset_countdowns
-            .keys()
-            .any(|mode| !["floating", "screen-edge", "compact-hud"].contains(&mode.as_str()))
-        {
+        if self.windows.reset_countdowns.keys().any(|mode| {
+            !["floating", "screen-edge", "compact-hud", "taskbar-strip"].contains(&mode.as_str())
+        }) {
             return Err("invalid-placement");
         }
         if self
@@ -285,9 +297,10 @@ impl Settings {
         {
             return Err("invalid-reset-segment-counts");
         }
-        if self.windows.placements.len() > 3
+        if self.windows.placements.len() > 4
             || self.windows.placements.iter().any(|(mode, p)| {
-                !["floating", "screen-edge", "compact-hud"].contains(&mode.as_str())
+                !["floating", "screen-edge", "compact-hud", "taskbar-strip"]
+                    .contains(&mode.as_str())
                     || !p.validate()
             })
         {
@@ -317,11 +330,14 @@ pub struct Appearance {
     pub preview_sequence: u64,
     pub theme_preference: ThemePreference,
     pub resolved_theme: String,
+    pub system_resolved_theme: String,
     pub high_contrast: bool,
     pub transparency_allowed: bool,
     pub reduced_motion: bool,
     pub text_scale: u32,
     pub widget: crate::widget_appearance::EffectiveAppearance,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub taskbar_widget: Option<crate::widget_appearance::EffectiveAppearance>,
     pub placement_constraints: crate::geometry::GapConstraints,
     pub compact_sizing: std::collections::BTreeMap<String, crate::compact_sizing::ScaleState>,
     pub compact_monitor_budgets:
@@ -724,9 +740,46 @@ mod tests {
         assert_eq!(settings.validate(), Err("invalid-visible-periods"));
     }
     #[test]
+    fn taskbar_strip_defaults_anchor_and_allowlists_round_trip() {
+        let mut settings = Settings::default();
+        assert_eq!(settings.schema_version, 14);
+        assert_eq!(DisplayMode::TaskbarStrip.key(), "taskbar-strip");
+        assert_eq!(
+            settings.windows.snap_anchors["taskbar-strip"],
+            crate::geometry::SnapAnchors {
+                horizontal: crate::geometry::HorizontalAnchor::Right,
+                vertical: crate::geometry::VerticalAnchor::Bottom,
+            }
+        );
+        assert!(settings.windows.placements.contains_key("taskbar-strip"));
+        settings.mode = DisplayMode::TaskbarStrip;
+        settings
+            .windows
+            .visible_periods
+            .insert("taskbar-strip".into(), VisiblePeriods::FiveHour);
+        settings.windows.reset_countdowns.insert(
+            "taskbar-strip".into(),
+            ResetCountdowns {
+                five_hour: true,
+                weekly: true,
+            },
+        );
+        let json = serde_json::to_value(&settings).unwrap();
+        assert_eq!(json["mode"], "taskbar-strip");
+        let copy: Settings = serde_json::from_value(json).unwrap();
+        assert_eq!(copy.mode, DisplayMode::TaskbarStrip);
+        copy.validate().unwrap();
+        let mut invalid = copy;
+        invalid
+            .windows
+            .reset_segment_counts
+            .insert("taskbar-strip".into(), ResetSegmentCounts::default());
+        assert_eq!(invalid.validate(), Err("invalid-reset-segment-counts"));
+    }
+    #[test]
     fn quota_label_style_defaults_and_round_trips_in_current_schema() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":13,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":14,"windows":{}})).unwrap();
         assert_eq!(old.windows.quota_label_style, QuotaLabelStyle::Words);
         for style in [QuotaLabelStyle::Words, QuotaLabelStyle::Badges] {
             let mut settings = old.clone();
@@ -744,7 +797,7 @@ mod tests {
     #[test]
     fn countdown_options_default_for_old_settings_and_round_trip_per_mode() {
         let old: Settings =
-            serde_json::from_value(serde_json::json!({"schemaVersion":13,"windows":{}})).unwrap();
+            serde_json::from_value(serde_json::json!({"schemaVersion":14,"windows":{}})).unwrap();
         assert!(old.windows.reset_countdowns.is_empty());
         let mut next = old;
         next.windows.reset_countdowns.insert(

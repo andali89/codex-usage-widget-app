@@ -206,6 +206,7 @@ fn resolve_display(app: &AppHandle, state: &mut AppState) {
         let resolved = platform::appearance(effective.theme_preference);
         state.appearance.theme_preference = resolved.theme_preference;
         state.appearance.resolved_theme = resolved.resolved_theme;
+        state.appearance.system_resolved_theme = resolved.system_resolved_theme;
         if preference_changed {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(match effective.theme_preference {
@@ -223,18 +224,28 @@ fn publish(app: &AppHandle, state: &mut AppState) {
     resolve_display(app, state);
     let composition = crate::native_windows::composition_available()
         && state.window_diagnostic.as_deref() != Some("native-composition-failed");
+    let effective = effective_settings(state);
     state.appearance.compact_monitor_budgets = crate::compact_sizing::monitor_budgets(app);
     state.appearance.compact_sizing = crate::compact_sizing::resolve_with_budgets(
-        &effective_settings(state),
+        &effective,
         state.appearance.text_scale,
         &state.appearance.compact_monitor_budgets,
     );
-    state.appearance.widget = effective_settings(state).widget_appearance.resolve(
+    state.appearance.widget = effective.widget_appearance.resolve(
         state.appearance.resolved_theme == "dark",
         state.appearance.high_contrast,
         state.appearance.transparency_allowed,
         composition,
     );
+    state.appearance.taskbar_widget =
+        (state.appearance.system_resolved_theme != state.appearance.resolved_theme).then(|| {
+            effective.widget_appearance.resolve(
+                state.appearance.system_resolved_theme == "dark",
+                state.appearance.high_contrast,
+                state.appearance.transparency_allowed,
+                composition,
+            )
+        });
     if let Some(store) = app.try_state::<std::sync::Arc<Store>>() {
         state.storage = store.status();
         crate::diagnostics::global().follow_storage(
@@ -274,7 +285,54 @@ fn publish(app: &AppHandle, state: &mut AppState) {
     }
 }
 
+fn cap_tooltip_utf16(text: String) -> String {
+    if text.encode_utf16().count() <= 127 {
+        return text;
+    }
+    let mut result = String::new();
+    let mut units = 0usize;
+    for ch in text.chars() {
+        let len = ch.len_utf16();
+        if units + len > 126 {
+            break;
+        }
+        result.push(ch);
+        units += len;
+    }
+    result.push('…');
+    result
+}
+
+fn format_tooltip_reset(resets_at_ms: i64, now_ms: i64) -> String {
+    if resets_at_ms <= now_ms {
+        return "reset due (unconfirmed)".into();
+    }
+    let mins = ((resets_at_ms - now_ms) as u64).div_ceil(60_000);
+    let days = mins / 1440;
+    let hours = (mins % 1440) / 60;
+    let rest = mins % 60;
+    if days > 0 {
+        if hours > 0 {
+            format!("{days}d {hours}h")
+        } else {
+            format!("{days}d")
+        }
+    } else if hours > 0 {
+        if rest > 0 {
+            format!("{hours}h {rest}m")
+        } else {
+            format!("{hours}h")
+        }
+    } else {
+        format!("{rest}m")
+    }
+}
+
 fn tooltip(usage: &Usage) -> String {
+    tooltip_at(usage, model::now_ms())
+}
+
+fn tooltip_at(usage: &Usage, now_ms: i64) -> String {
     if usage.connection == "verifying" {
         return if usage.refresh_in_flight {
             "Verifying account…"
@@ -284,7 +342,7 @@ fn tooltip(usage: &Usage) -> String {
         .into();
     }
     if usage.windows.is_empty() {
-        return format!(
+        return cap_tooltip_utf16(format!(
             "{}\n{}",
             if usage.consecutive_unavailable_reads < 3
                 && !["auth-required", "unsupported", "paused"].contains(&usage.connection.as_str())
@@ -298,35 +356,63 @@ fn tooltip(usage: &Usage) -> String {
             } else {
                 &usage.connection
             }
-        );
+        ));
     }
     let stale = usage.freshness != "fresh";
+    let blocked = usage.ordinary_usage_allowed == Some(false);
+    let any_last_known = usage.windows.iter().any(|w| w.last_known);
+    let window_value = |remaining: Option<f64>| match remaining {
+        Some(p) if p > 0.0 && p < 1.0 => "<1% left".into(),
+        Some(p) => format!(
+            "{}% left",
+            if p.fract() == 0.0 {
+                format!("{p:.0}")
+            } else {
+                format!("{p:.1}")
+            }
+        ),
+        None => "unavailable".into(),
+    };
+    fn window_label(index: usize, w: &model::QuotaWindow) -> &str {
+        if w.duration_minutes.is_none() {
+            if index == 0 {
+                "Primary (period unknown)"
+            } else {
+                "Secondary (period unknown)"
+            }
+        } else {
+            &w.label
+        }
+    }
+    if !stale && !blocked && !any_last_known {
+        let rows = usage
+            .windows
+            .iter()
+            .enumerate()
+            .map(|(index, w)| {
+                let label = window_label(index, w);
+                let value = window_value(w.remaining_percent);
+                if w.quality == "valid" {
+                    if let Some(reset_at) = w.resets_at_ms {
+                        return format!(
+                            "{label}: {value} · {}",
+                            format_tooltip_reset(reset_at, now_ms)
+                        );
+                    }
+                }
+                format!("{label}: {value}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return cap_tooltip_utf16(rows);
+    }
     let values = usage
         .windows
         .iter()
         .enumerate()
         .map(|(index, w)| {
-            let value = match w.remaining_percent {
-                Some(p) if p > 0.0 && p < 1.0 => "<1% left".into(),
-                Some(p) => format!(
-                    "{}% left",
-                    if p.fract() == 0.0 {
-                        format!("{p:.0}")
-                    } else {
-                        format!("{p:.1}")
-                    }
-                ),
-                None => "unavailable".into(),
-            };
-            let label = if w.duration_minutes.is_none() {
-                if index == 0 {
-                    "Primary (period unknown)"
-                } else {
-                    "Secondary (period unknown)"
-                }
-            } else {
-                &w.label
-            };
+            let value = window_value(w.remaining_percent);
+            let label = window_label(index, w);
             format!(
                 "{}{label} {value}",
                 if !stale && w.last_known {
@@ -339,36 +425,16 @@ fn tooltip(usage: &Usage) -> String {
         .collect::<Vec<_>>()
         .join(" · ");
     let status = if stale {
-        "Out of date".to_string()
-    } else if usage.ordinary_usage_allowed == Some(false) {
-        "Ordinary usage blocked".into()
-    } else if usage.windows.iter().any(|w| w.last_known) {
-        "Some data out of date".into()
-    } else if let Some(reset) = usage
-        .windows
-        .iter()
-        .filter(|w| w.quality == "valid")
-        .filter_map(|w| w.resets_at_ms.map(|n| (n, &w.label)))
-        .min_by_key(|(n, _)| *n)
-    {
-        if reset.0 <= model::now_ms() {
-            "Reset due — unconfirmed".into()
-        } else {
-            let mins = ((reset.0 - model::now_ms()).max(0) as u64).div_ceil(60000);
-            format!(
-                "Expected reset: {} in {}h {}m",
-                reset.1,
-                mins / 60,
-                mins % 60
-            )
-        }
+        "Out of date"
+    } else if blocked {
+        "Ordinary usage blocked"
     } else {
-        "Codex usage".into()
+        "Some data out of date"
     };
-    format!(
+    cap_tooltip_utf16(format!(
         "{}{values}\n{status}",
         if stale { "Last known: " } else { "" }
-    )
+    ))
 }
 
 pub fn start(
@@ -552,7 +618,10 @@ pub fn start(
                     scheduler.request(now);
                 }
             }
-            if model::freshness_deadline(&state.usage, interval).is_some_and(|at| wall >= at) {
+            let synthetic_presentation = crate::native_check::presentation_requested();
+            if !synthetic_presentation
+                && model::freshness_deadline(&state.usage, interval).is_some_and(|at| wall >= at)
+            {
                 crate::diagnostics::event(
                     "freshness_expired",
                     || serde_json::json!({"interval_ms":interval}),
@@ -613,8 +682,7 @@ pub fn start(
                 publish(&app, &mut state);
             }
             if scheduler.start_if_due(now) {
-                let synthetic = crate::native_check::presentation_requested();
-                if synthetic {
+                if synthetic_presentation {
                     scheduler.finish(now, true, true, interval, false);
                 } else {
                     let read_id = crate::diagnostics::next_read_id();
@@ -669,7 +737,9 @@ pub fn start(
                         .map_or(u64::MAX, |p| p.expires),
                 )
                 .min(
-                    model::freshness_deadline(&state.usage, interval)
+                    (!synthetic_presentation)
+                        .then(|| model::freshness_deadline(&state.usage, interval))
+                        .flatten()
                         .map(|at| now.saturating_add(at.saturating_sub(wall).max(0) as u64))
                         .unwrap_or(next_reconcile),
                 )
@@ -1265,6 +1335,7 @@ mod tests {
             model::DisplayMode::SystemTray,
             model::DisplayMode::ScreenEdge,
             model::DisplayMode::CompactHud,
+            model::DisplayMode::TaskbarStrip,
         ] {
             assert!(!close_to_tray_allowed(Surface::Shell, mode, true));
         }
@@ -1303,5 +1374,47 @@ mod tests {
         assert!(!tooltip(&u).contains("Next expected"));
         let empty = model::normalize(&json!({"ordinaryUsageAllowed":false}), 1, &Usage::default());
         assert!(tooltip(&empty).contains("Ordinary usage blocked"));
+    }
+
+    #[test]
+    fn tooltip_shows_two_rows_with_both_resets_and_caps_utf16_length() {
+        let now = 1_700_000_000_000i64;
+        let fresh = model::normalize(
+            &json!({
+                "rateLimits": {
+                    "primary": {"usedPercent": 32, "windowDurationMins": 300, "resetsAt": now / 1000 + 8220},
+                    "secondary": {"usedPercent": 58, "windowDurationMins": 10080, "resetsAt": now / 1000 + 390000}
+                }
+            }),
+            now,
+            &Usage::default(),
+        );
+        let text = tooltip_at(&fresh, now);
+        let lines = text.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], "5-hour: 68% left · 2h 17m");
+        assert_eq!(lines[1], "Weekly: 42% left · 4d 12h");
+        assert!(text.encode_utf16().count() <= 127);
+
+        let elapsed = tooltip_at(&fresh, now + 8_220_000);
+        assert!(elapsed
+            .lines()
+            .next()
+            .unwrap()
+            .contains("reset due (unconfirmed)"));
+
+        let unknown = model::normalize(
+            &json!({"rateLimits":{"primary":{"usedPercent":50}}}),
+            now,
+            &Usage::default(),
+        );
+        assert!(tooltip_at(&unknown, now).contains("Primary (period unknown): 50% left"));
+        assert!(!tooltip_at(&unknown, now).contains("5-hour"));
+
+        let long = format!("{}😀{}", "a".repeat(125), "b".repeat(20));
+        let capped = cap_tooltip_utf16(long);
+        assert!(capped.encode_utf16().count() <= 127);
+        assert!(capped.ends_with('…'));
+        assert!(!capped.contains('😀'));
     }
 }

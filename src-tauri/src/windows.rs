@@ -121,6 +121,23 @@ impl DragSession {
     }
 }
 
+fn default_anchors(mode: DisplayMode) -> geometry::SnapAnchors {
+    match mode {
+        DisplayMode::ScreenEdge => geometry::SnapAnchors {
+            horizontal: geometry::HorizontalAnchor::None,
+            vertical: geometry::VerticalAnchor::Top,
+        },
+        DisplayMode::TaskbarStrip => geometry::SnapAnchors {
+            horizontal: geometry::HorizontalAnchor::Right,
+            vertical: geometry::VerticalAnchor::Bottom,
+        },
+        _ => geometry::SnapAnchors {
+            horizontal: geometry::HorizontalAnchor::Left,
+            vertical: geometry::VerticalAnchor::Top,
+        },
+    }
+}
+
 pub struct Windows {
     preview_freeze: bool,
     pub gap_constraints: geometry::GapConstraints,
@@ -213,6 +230,7 @@ impl Windows {
             shell_size: match settings.mode {
                 DisplayMode::ScreenEdge => (64.0, 96.0),
                 DisplayMode::CompactHud => (440.0, 44.0),
+                DisplayMode::TaskbarStrip => (122.0, 42.0),
                 _ => (336.0, 72.0),
             },
             preview_size: if settings.mode == DisplayMode::SystemTray {
@@ -441,12 +459,11 @@ impl Windows {
             self.interaction.change_mode(next.mode);
             self.ready_shell = None;
             self.ready_preview = None;
-            self.shell_size = if next.mode == DisplayMode::ScreenEdge {
-                (64.0, 96.0)
-            } else if next.mode == DisplayMode::CompactHud {
-                (440.0, 44.0)
-            } else {
-                (336.0, 72.0)
+            self.shell_size = match next.mode {
+                DisplayMode::ScreenEdge => (64.0, 96.0),
+                DisplayMode::CompactHud => (440.0, 44.0),
+                DisplayMode::TaskbarStrip => (122.0, 42.0),
+                _ => (336.0, 72.0),
             };
             self.preview_size = if next.mode == DisplayMode::SystemTray {
                 (260.0, 76.0)
@@ -725,7 +742,9 @@ impl Windows {
                     let max_width = if source == Surface::Shell
                         && matches!(
                             settings.mode,
-                            DisplayMode::ScreenEdge | DisplayMode::CompactHud
+                            DisplayMode::ScreenEdge
+                                | DisplayMode::CompactHud
+                                | DisplayMode::TaskbarStrip
                         ) {
                         3000.0
                     } else {
@@ -849,14 +868,7 @@ impl Windows {
                     placement = Some(PlacementUpdate {
                         placement: Placement::default(),
                         edge_side: None,
-                        anchors: Some(geometry::SnapAnchors {
-                            horizontal: if settings.mode == DisplayMode::ScreenEdge {
-                                geometry::HorizontalAnchor::None
-                            } else {
-                                geometry::HorizontalAnchor::Left
-                            },
-                            vertical: geometry::VerticalAnchor::Top,
-                        }),
+                        anchors: Some(default_anchors(settings.mode)),
                     });
                     self.interaction.collapse();
                 }
@@ -1180,7 +1192,13 @@ impl Windows {
             .get(settings.mode.key())
             .or_else(|| self.inferred_anchors.get(settings.mode.key()))
             .copied()
-            .unwrap_or_default()
+            .unwrap_or_else(|| {
+                if settings.mode == DisplayMode::TaskbarStrip {
+                    default_anchors(DisplayMode::TaskbarStrip)
+                } else {
+                    geometry::SnapAnchors::default()
+                }
+            })
     }
     pub fn merge_inferred(&self, settings: &mut Settings) {
         for (mode, anchors) in &self.inferred_anchors {
@@ -1331,7 +1349,9 @@ impl Windows {
                         .monitor
                         .as_ref()
                         .is_some_and(|name| monitor.name() == Some(name));
-                    let anchors = if known {
+                    let anchors = if settings.mode == DisplayMode::TaskbarStrip {
+                        default_anchors(DisplayMode::TaskbarStrip)
+                    } else if known {
                         geometry::infer_legacy(
                             raw,
                             work,
@@ -1344,13 +1364,7 @@ impl Windows {
                     self.inferred_anchors
                         .insert(settings.mode.key().into(), anchors);
                 }
-                let anchors = settings
-                    .windows
-                    .snap_anchors
-                    .get(settings.mode.key())
-                    .or_else(|| self.inferred_anchors.get(settings.mode.key()))
-                    .copied()
-                    .unwrap_or_default();
+                let anchors = self.anchors(settings);
                 let mut rect = geometry::resolve_anchors(
                     Rect {
                         x: work.x + placement.x * scale,
@@ -1380,6 +1394,7 @@ impl Windows {
                     match settings.mode {
                         DisplayMode::ScreenEdge => 16.0,
                         DisplayMode::CompactHud => 12.0,
+                        DisplayMode::TaskbarStrip => 8.0,
                         _ => 14.0,
                     } * widget_scale,
                 )?;
@@ -1462,8 +1477,10 @@ impl Windows {
                         && state.preview_source != Surface::Tray)
                         .then_some(settings.windows.edge_side == EdgeSide::Right);
                     let place = |trigger, width, height, gap, work| {
-                        if settings.mode == DisplayMode::CompactHud
-                            && state.preview_source == Surface::Shell
+                        if matches!(
+                            settings.mode,
+                            DisplayMode::CompactHud | DisplayMode::TaskbarStrip
+                        ) && state.preview_source == Surface::Shell
                         {
                             geometry::centered_panel(trigger, width, height, gap, work)
                         } else {
@@ -1619,8 +1636,10 @@ impl Windows {
                                 && self.detail_anchor == Surface::Shell
                             {
                                 geometry::around(trigger, width, height, gap, work)
-                            } else if settings.mode == DisplayMode::CompactHud
-                                && self.detail_anchor == Surface::Shell
+                            } else if matches!(
+                                settings.mode,
+                                DisplayMode::CompactHud | DisplayMode::TaskbarStrip
+                            ) && self.detail_anchor == Surface::Shell
                             {
                                 geometry::centered_panel(trigger, width, height, gap, work)
                             } else {
@@ -1745,7 +1764,7 @@ impl Windows {
         });
         if activation_denied {
             self.activation_denied();
-            service.dispatch_reliable(Action::Window(Input::Reconcile));
+            service.dispatch_reliable(Action::Window(Input::Environment));
         }
         Ok(())
     }
@@ -2022,11 +2041,34 @@ mod tests {
     }
 
     #[test]
+    fn default_anchors_put_taskbar_strip_at_bottom_right() {
+        assert_eq!(
+            default_anchors(DisplayMode::TaskbarStrip),
+            geometry::SnapAnchors {
+                horizontal: geometry::HorizontalAnchor::Right,
+                vertical: geometry::VerticalAnchor::Bottom,
+            }
+        );
+        let mut settings = Settings {
+            mode: DisplayMode::TaskbarStrip,
+            ..Settings::default()
+        };
+        settings.windows.snap_anchors.clear();
+        let windows = Windows::new(&settings, false);
+        assert_eq!(
+            windows.anchors(&settings),
+            default_anchors(DisplayMode::TaskbarStrip)
+        );
+        assert_eq!(windows.shell_size, (122.0, 42.0));
+    }
+
+    #[test]
     fn external_foreground_restores_topmost_once_without_revealing_hidden_widgets() {
         for mode in [
             DisplayMode::Floating,
             DisplayMode::ScreenEdge,
             DisplayMode::CompactHud,
+            DisplayMode::TaskbarStrip,
         ] {
             let mut settings = Settings {
                 mode,
@@ -2103,6 +2145,7 @@ mod tests {
         for mode in [
             DisplayMode::ScreenEdge,
             DisplayMode::CompactHud,
+            DisplayMode::TaskbarStrip,
             DisplayMode::Floating,
         ] {
             next.mode = mode;

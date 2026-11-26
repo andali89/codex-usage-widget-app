@@ -96,6 +96,8 @@ pub struct WidgetAppearance {
     pub compact_countdown_high_contrast: bool,
     pub edge_scale_percent: u16,
     pub hud_scale_percent: u16,
+    pub taskbar_strip_show_bars: bool,
+    pub taskbar_strip_scale_percent: u16,
     pub preset_id: Option<PresetId>,
     pub quota_customizations: BTreeMap<PresetId, QuotaThemes>,
     #[serde(deserialize_with = "deserialize_transparency")]
@@ -111,6 +113,8 @@ impl Default for WidgetAppearance {
             compact_countdown_high_contrast: false,
             edge_scale_percent: 100,
             hud_scale_percent: 100,
+            taskbar_strip_show_bars: true,
+            taskbar_strip_scale_percent: 100,
             preset_id: None,
             quota_customizations: BTreeMap::new(),
             background_transparency_percent: 0,
@@ -136,10 +140,14 @@ mod tests {
         assert!(!defaults.compact_countdown_high_contrast);
         assert_eq!(defaults.edge_scale_percent, 100);
         assert_eq!(defaults.hud_scale_percent, 100);
+        assert!(defaults.taskbar_strip_show_bars);
+        assert_eq!(defaults.taskbar_strip_scale_percent, 100);
         for value in [80, 100, 125, 137, 150, 200, 300] {
             let settings = WidgetAppearance {
                 edge_scale_percent: value,
                 hud_scale_percent: 80,
+                taskbar_strip_show_bars: false,
+                taskbar_strip_scale_percent: value,
                 compact_countdown_bold: true,
                 compact_countdown_high_contrast: true,
                 ..Default::default()
@@ -150,22 +158,29 @@ mod tests {
                     let resolved = settings.resolve(dark, high_contrast, true, true);
                     assert!(resolved.compact_countdown_bold);
                     assert!(resolved.compact_countdown_high_contrast);
+                    assert!(!resolved.taskbar_strip_show_bars);
                 }
             }
         }
         for value in [0, 79, 301, 65535] {
             let settings = WidgetAppearance {
                 edge_scale_percent: value,
+                taskbar_strip_scale_percent: value,
                 ..Default::default()
             };
-            assert!(settings
-                .issues()
+            let issues = settings.issues();
+            assert!(issues
                 .iter()
                 .any(|issue| issue.field.ends_with("edgeScalePercent")));
+            assert!(issues
+                .iter()
+                .any(|issue| issue.field.ends_with("taskbarStripScalePercent")));
         }
         for value in [
             serde_json::json!({"edgeScalePercent":80.5}),
             serde_json::json!({"hudScalePercent":"150"}),
+            serde_json::json!({"taskbarStripScalePercent":"120"}),
+            serde_json::json!({"taskbarStripShowBars":1}),
             serde_json::json!({"compactCountdownBold":1}),
             serde_json::json!({"compactCountdownHighContrast":null}),
         ] {
@@ -357,6 +372,7 @@ pub struct Issue {
 pub struct EffectiveAppearance {
     pub compact_countdown_bold: bool,
     pub compact_countdown_high_contrast: bool,
+    pub taskbar_strip_show_bars: bool,
     pub original_structure: bool,
     pub palette: Palette,
     pub divider: String,
@@ -584,6 +600,7 @@ impl WidgetAppearance {
         for (key, value) in [
             ("edgeScalePercent", self.edge_scale_percent),
             ("hudScalePercent", self.hud_scale_percent),
+            ("taskbarStripScalePercent", self.taskbar_strip_scale_percent),
         ] {
             if !(80..=300).contains(&value) {
                 issues.push(Issue {
@@ -713,6 +730,7 @@ impl WidgetAppearance {
         EffectiveAppearance {
             compact_countdown_bold: self.compact_countdown_bold,
             compact_countdown_high_contrast: self.compact_countdown_high_contrast,
+            taskbar_strip_show_bars: self.taskbar_strip_show_bars,
             frame_border,
             quota_text,
             original_structure: self.preset_id == Some(PresetId::Original)

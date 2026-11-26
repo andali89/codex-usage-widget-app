@@ -526,5 +526,77 @@
     },
     "width": 192,
     "height": 38
+  },
+  {
+    "mode": "taskbar-strip",
+    "labels": "words",
+    "periods": "both",
+    "resets": {
+      "fiveHour": true,
+      "weekly": true
+    },
+    "showBars": true,
+    "width": 138,
+    "height": 42
+  },
+  {
+    "mode": "taskbar-strip",
+    "labels": "words",
+    "periods": "both",
+    "resets": {
+      "fiveHour": true,
+      "weekly": true
+    },
+    "showBars": false,
+    "width": 138,
+    "height": 36
+  },
+  {
+    "mode": "taskbar-strip",
+    "labels": "words",
+    "periods": "five-hour",
+    "resets": {
+      "fiveHour": true,
+      "weekly": false
+    },
+    "showBars": true,
+    "width": 138,
+    "height": 28
+  },
+  {
+    "mode": "taskbar-strip",
+    "labels": "words",
+    "periods": "five-hour",
+    "resets": {
+      "fiveHour": true,
+      "weekly": false
+    },
+    "showBars": false,
+    "width": 138,
+    "height": 24
+  },
+  {
+    "mode": "taskbar-strip",
+    "labels": "words",
+    "periods": "weekly",
+    "resets": {
+      "fiveHour": false,
+      "weekly": true
+    },
+    "showBars": true,
+    "width": 138,
+    "height": 28
+  },
+  {
+    "mode": "taskbar-strip",
+    "labels": "words",
+    "periods": "weekly",
+    "resets": {
+      "fiveHour": false,
+      "weekly": true
+    },
+    "showBars": false,
+    "width": 138,
+    "height": 24
   }
 ]

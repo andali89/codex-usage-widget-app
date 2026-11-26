@@ -166,6 +166,7 @@ pub fn appearance(preference: ThemePreference) -> Appearance {
     let mut state = Appearance {
         theme_preference: preference,
         resolved_theme: "light".into(),
+        system_resolved_theme: "light".into(),
         transparency_allowed: false,
         text_scale: 100,
         ..Appearance::default()
@@ -201,7 +202,11 @@ pub fn appearance(preference: ThemePreference) -> Appearance {
         state.reduced_motion = animate == 0;
         let personal = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize";
         let dark = registry_dword(personal, "AppsUseLightTheme") == Some(0);
+        let system_dark = registry_dword(personal, "SystemUsesLightTheme")
+            .map(|value| value == 0)
+            .unwrap_or(dark);
         state.resolved_theme = if dark { "dark" } else { "light" }.into();
+        state.system_resolved_theme = if system_dark { "dark" } else { "light" }.into();
         state.transparency_allowed =
             !state.high_contrast && registry_dword(personal, "EnableTransparency") == Some(1);
         state.text_scale = registry_dword("Software\\Microsoft\\Accessibility", "TextScaleFactor")
@@ -209,8 +214,14 @@ pub fn appearance(preference: ThemePreference) -> Appearance {
             .clamp(100, 225);
     }
     match preference {
-        ThemePreference::Light => state.resolved_theme = "light".into(),
-        ThemePreference::Dark => state.resolved_theme = "dark".into(),
+        ThemePreference::Light => {
+            state.resolved_theme = "light".into();
+            state.system_resolved_theme = "light".into();
+        }
+        ThemePreference::Dark => {
+            state.resolved_theme = "dark".into();
+            state.system_resolved_theme = "dark".into();
+        }
         ThemePreference::System => {}
     }
     state

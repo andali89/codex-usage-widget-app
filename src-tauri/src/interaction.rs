@@ -407,7 +407,11 @@ mod tests {
 
     #[test]
     fn desktop_modes_share_hover_dwell_and_leave_grace() {
-        for mode in [DisplayMode::ScreenEdge, DisplayMode::CompactHud] {
+        for mode in [
+            DisplayMode::ScreenEdge,
+            DisplayMode::CompactHud,
+            DisplayMode::TaskbarStrip,
+        ] {
             let mut i = Interaction::new(mode, DetailState::Closed);
             i.pointer_from(Surface::Shell, true, false, false, 0, true);
             assert!(!i.tick(199), "{mode:?} opened before the dwell");
@@ -446,6 +450,7 @@ mod tests {
             DisplayMode::Floating,
             DisplayMode::ScreenEdge,
             DisplayMode::CompactHud,
+            DisplayMode::TaskbarStrip,
         ] {
             let mut i = Interaction::new(mode, DetailState::Closed);
             assert_eq!(i.activate(Surface::Shell), Some(Effect::FocusDetail));
@@ -547,14 +552,16 @@ mod tests {
     }
     #[test]
     fn fullscreen_suppresses_automatic_shells_but_not_explicit_detail() {
-        let mut i = Interaction::new(DisplayMode::Floating, DetailState::Closed);
-        i.suppress(true);
-        assert!(!i.compact_visible());
-        i.pointer(true, false, false, 0, true);
-        assert!(!i.tick(200));
-        i.open_detail(true);
-        assert!(i.expanded_visible());
-        assert_eq!(i.state.detail, DetailState::Window);
+        for mode in [DisplayMode::Floating, DisplayMode::TaskbarStrip] {
+            let mut i = Interaction::new(mode, DetailState::Closed);
+            i.suppress(true);
+            assert!(!i.compact_visible());
+            i.pointer(true, false, false, 0, true);
+            assert!(!i.tick(200));
+            i.open_detail(true);
+            assert!(i.expanded_visible());
+            assert_eq!(i.state.detail, DetailState::Window);
+        }
     }
     #[test]
     fn suppressed_edge_hover_does_not_count_as_visible_expanded_detail() {

@@ -84,7 +84,7 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
         .get("schemaVersion")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    if version > 13 {
+    if version > 14 {
         return Err("storage-future-version");
     }
     if version < 6 {
@@ -210,6 +210,35 @@ fn decode(bytes: &[u8]) -> Result<Document, &'static str> {
             .as_object_mut()
             .ok_or("storage-corrupt")?
             .insert("schemaVersion".into(), 13.into());
+    }
+    if version < 14 {
+        let obj = value.as_object_mut().ok_or("storage-corrupt")?;
+        obj.insert("schemaVersion".into(), 14.into());
+        if let Some(windows) = obj
+            .entry("windows")
+            .or_insert_with(|| serde_json::json!({}))
+            .as_object_mut()
+        {
+            if let Some(placements) = windows
+                .entry("placements")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+            {
+                placements
+                    .entry("taskbar-strip")
+                    .or_insert_with(|| serde_json::json!({"monitor": null, "x": 0.0, "y": 0.0}));
+            }
+            if let Some(anchors) = windows
+                .entry("snapAnchors")
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+            {
+                anchors.entry("taskbar-strip").or_insert_with(
+                    || serde_json::json!({"horizontal": "right", "vertical": "bottom"}),
+                );
+            }
+        }
+        // Missing taskbarStripShowBars (true) and taskbarStripScalePercent (100) use defaults.
     }
     let settings: Settings = serde_json::from_value(value).map_err(|_| "storage-corrupt")?;
     settings.validate()?;
@@ -426,6 +455,83 @@ mod tests {
     use super::*;
     use crate::model::ThemePreference;
     #[test]
+    fn schema_thirteen_adds_taskbar_strip_defaults_preserving_existing_settings() {
+        let mut engine = crate::reminders::Engine::new(Durable::default(), false);
+        engine.test_claim(1000, 1).unwrap();
+        let mut settings = serde_json::to_value(Settings::default()).unwrap();
+        settings["schemaVersion"] = 13.into();
+        settings["revision"] = 61.into();
+        settings["themePreference"] = "dark".into();
+        settings["mode"] = "compact-hud".into();
+        settings["windows"]["placements"]
+            .as_object_mut()
+            .unwrap()
+            .remove("taskbar-strip");
+        settings["windows"]["snapAnchors"]
+            .as_object_mut()
+            .unwrap()
+            .remove("taskbar-strip");
+        for key in ["taskbarStripShowBars", "taskbarStripScalePercent"] {
+            settings["widgetAppearance"]
+                .as_object_mut()
+                .unwrap()
+                .remove(key);
+        }
+        let document = serde_json::json!({
+            "settings": settings,
+            "reminders": engine.data,
+            "profileId": "b".repeat(64),
+            "dataRevision": 23,
+        });
+        let bytes = serde_json::to_vec(&Envelope {
+            format: 4,
+            checksum: format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(&document).unwrap())
+            ),
+            settings: document,
+        })
+        .unwrap();
+        let loaded = decode(&bytes).unwrap();
+        assert_eq!(loaded.settings.schema_version, 14);
+        assert_eq!(loaded.settings.revision, 61);
+        assert_eq!(loaded.settings.theme_preference, ThemePreference::Dark);
+        assert_eq!(loaded.settings.mode, crate::model::DisplayMode::CompactHud);
+        assert!(loaded.settings.widget_appearance.taskbar_strip_show_bars);
+        assert_eq!(
+            loaded
+                .settings
+                .widget_appearance
+                .taskbar_strip_scale_percent,
+            100
+        );
+        assert_eq!(
+            loaded.settings.windows.snap_anchors["taskbar-strip"],
+            crate::geometry::SnapAnchors {
+                horizontal: crate::geometry::HorizontalAnchor::Right,
+                vertical: crate::geometry::VerticalAnchor::Bottom,
+            }
+        );
+        assert!(loaded
+            .settings
+            .windows
+            .placements
+            .contains_key("taskbar-strip"));
+        let dir = directory();
+        let (store, _) = Store::open(&dir);
+        let mut next = loaded.settings;
+        next.mode = crate::model::DisplayMode::TaskbarStrip;
+        next.widget_appearance.taskbar_strip_show_bars = false;
+        next.widget_appearance.taskbar_strip_scale_percent = 125;
+        store.save(&next, &loaded.reminders).unwrap();
+        let (_, reopened) = Store::open(&dir);
+        assert_eq!(
+            serde_json::to_value(reopened.settings).unwrap(),
+            serde_json::to_value(next).unwrap()
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
     fn schema_twelve_defaults_diagnostics_off_and_preserves_opt_in() {
         let mut settings = serde_json::to_value(Settings::default()).unwrap();
         settings["schemaVersion"] = 12.into();
@@ -443,7 +549,7 @@ mod tests {
             .unwrap()
         };
         let migrated = decode(&encode(settings)).unwrap().settings;
-        assert_eq!(migrated.schema_version, 13);
+        assert_eq!(migrated.schema_version, 14);
         assert!(!migrated.diagnostic_logging_enabled);
         let mut enabled = migrated;
         enabled.diagnostic_logging_enabled = true;
@@ -485,7 +591,7 @@ mod tests {
         .unwrap();
         let loaded = decode(&bytes).unwrap();
         let mut expected = document;
-        expected["settings"]["schemaVersion"] = 13.into();
+        expected["settings"]["schemaVersion"] = 14.into();
         expected["settings"]["widgetAppearance"]["compactCountdownBold"] = false.into();
         expected["settings"]["widgetAppearance"]["compactCountdownHighContrast"] = false.into();
         expected["settings"]["widgetAppearance"]["edgeScalePercent"] = 100.into();
@@ -535,7 +641,7 @@ mod tests {
         .unwrap();
         let loaded = decode(&bytes).unwrap();
         let mut expected = document;
-        expected["settings"]["schemaVersion"] = 13.into();
+        expected["settings"]["schemaVersion"] = 14.into();
         expected["settings"]["windows"]["resetSegmentCounts"] = serde_json::json!({});
         let actual = serde_json::json!({"settings":loaded.settings,"reminders":loaded.reminders,"profileId":loaded.profile_id,"dataRevision":loaded.data_revision});
         assert_eq!(actual, expected);
@@ -583,7 +689,7 @@ mod tests {
         .unwrap();
         let loaded = decode(&bytes).unwrap();
         let mut expected = document;
-        expected["settings"]["schemaVersion"] = 13.into();
+        expected["settings"]["schemaVersion"] = 14.into();
         expected["settings"]["widgetAppearance"]["showBorder"] = true.into();
         let actual = serde_json::json!({
             "settings":loaded.settings,
@@ -607,7 +713,7 @@ mod tests {
         })
         .unwrap();
         let loaded = decode(&bytes).unwrap();
-        value["schemaVersion"] = 13.into();
+        value["schemaVersion"] = 14.into();
         assert_eq!(serde_json::to_value(loaded.settings).unwrap(), value);
     }
     #[test]
@@ -639,7 +745,7 @@ mod tests {
             })
             .unwrap();
             let loaded = decode(&bytes).unwrap();
-            assert_eq!(loaded.settings.schema_version, 13);
+            assert_eq!(loaded.settings.schema_version, 14);
             assert_eq!(loaded.settings.revision, 42);
             assert_eq!(loaded.settings.theme_preference, ThemePreference::Dark);
             assert_eq!(loaded.settings.windows.snap_gap_logical_px, 24);
@@ -676,7 +782,17 @@ mod tests {
             let appearance = &loaded.settings.widget_appearance;
             assert_eq!(loaded.settings.revision, 42);
             assert_eq!(loaded.settings.windows.snap_gap_logical_px, 24);
-            assert_eq!(loaded.settings.windows.snap_anchors.len(), 1);
+            assert_eq!(loaded.settings.windows.snap_anchors.len(), 2);
+            assert!(loaded
+                .settings
+                .windows
+                .snap_anchors
+                .contains_key("floating"));
+            assert!(loaded
+                .settings
+                .windows
+                .snap_anchors
+                .contains_key("taskbar-strip"));
             assert_eq!(appearance.preset_id, Some(PresetId::Original));
             assert_eq!(
                 appearance.palette(false)["fiveHour"],
@@ -731,7 +847,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 13);
+        assert_eq!(migrated.settings.schema_version, 14);
         assert_eq!(migrated.settings.revision, 42);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert_eq!(
@@ -743,7 +859,28 @@ mod tests {
             Some("http://127.0.0.1:7890")
         );
         assert_eq!(migrated.settings.windows.snap_gap_logical_px, 8);
-        assert!(migrated.settings.windows.snap_anchors.is_empty());
+        assert!(!migrated
+            .settings
+            .windows
+            .snap_anchors
+            .contains_key("floating"));
+        assert!(!migrated
+            .settings
+            .windows
+            .snap_anchors
+            .contains_key("screen-edge"));
+        assert!(!migrated
+            .settings
+            .windows
+            .snap_anchors
+            .contains_key("compact-hud"));
+        assert_eq!(
+            migrated.settings.windows.snap_anchors["taskbar-strip"],
+            crate::geometry::SnapAnchors {
+                horizontal: crate::geometry::HorizontalAnchor::Right,
+                vertical: crate::geometry::VerticalAnchor::Bottom,
+            }
+        );
         assert_eq!(
             migrated.settings.windows.placements["compact-hud"]
                 .monitor
@@ -780,7 +917,7 @@ mod tests {
         })
         .unwrap();
         let migrated = decode(&bytes).unwrap();
-        assert_eq!(migrated.settings.schema_version, 13);
+        assert_eq!(migrated.settings.schema_version, 14);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(migrated.settings.proxy_url.is_none());
         assert_eq!(
@@ -873,7 +1010,7 @@ mod tests {
         for (version, theme, expected) in [
             (0, "dark", Some(ThemePreference::Dark)),
             (0, "unknown", Some(ThemePreference::System)),
-            (14, "light", None),
+            (15, "light", None),
         ] {
             let settings = serde_json::json!({"schemaVersion":version,"themePreference":theme});
             let body = serde_json::to_vec(&settings).unwrap();
@@ -904,7 +1041,7 @@ mod tests {
             serde_json::json!({"schemaVersion":3,"themePreference":"dark"}),
         ))
         .unwrap();
-        assert_eq!(migrated.settings.schema_version, 13);
+        assert_eq!(migrated.settings.schema_version, 14);
         assert_eq!(migrated.settings.theme_preference, ThemePreference::Dark);
         assert!(!migrated.settings.autostart.requested);
         assert!(!migrated.settings.autostart.pending);
