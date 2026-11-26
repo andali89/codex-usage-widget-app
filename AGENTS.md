@@ -32,7 +32,7 @@ The application is under phased implementation. Do not describe planned widget m
 
 ## Design and architecture constraints
 
-- Implement four modes: Floating, Screen Edge, System Tray, and Compact HUD. Keep the tray as the recovery/control surface. Do not add an inline taskbar chip or taskbar-adjacent substitute unless the user changes the scope.
+- Implement five modes: Floating, Screen Edge, System Tray, Compact HUD, and Taskbar Strip. Keep the tray as the recovery/control surface. Do not add an in-taskbar shell injection or unsupported DeskBand unless the user changes the scope.
 - Keep tray hover compact and read-only, approximately 260 × 76 logical pixels at default text size. Clicking opens the larger dashboard. Follow the report's focus, hover timing, placement, and tooltip-fallback rules.
 - Support Light, Dark, and Follow Windows across app-rendered surfaces, with Follow Windows as default. Honor high contrast, reduced motion, text scaling, and disabled transparency.
 - Rust owns authoritative state, process supervision, scheduling, persistence, reminders, and native-window coordination. React renders shared state and issues narrow validated commands; each view must not create its own quota client or scheduler.
