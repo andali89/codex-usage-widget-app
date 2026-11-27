@@ -4,6 +4,31 @@ Date: 2026-11-27
 Specification: [Two-line taskbar strip design](taskbar-two-line-display-design.md) (Phase 1 §§1–6 & §8, §5.2 opt-in unparented in-taskbar transparent overlay, and §7.1 two-row tray hover preview and native tooltip; §7.2 dynamic RGBA tray icon remains deferred).
 Application version baseline: **0.1.5** (settings schema **13 → 14**). No dependencies, lockfiles, Tauri capabilities, Codex protocol reads, or installer/release artifacts were changed.
 
+## Neutral text, aligned readings, and border controls — 2026-11-27
+
+The strip uses the same neutral color for both period labels, remaining percentages, and reset times. The percentage is semibold, and the existing bold and higher-contrast options apply to every text column. The quota bars retain the active Light or Dark swatches. The shared **Quota labels** setting selects words or circular badges on Save.
+
+The base width is 128 logical pixels at 100% scale, with 16 additional pixels when the status indicator is visible. The existing single- and two-row heights are preserved. Each row uses the same fixed label and percentage columns and an aligned reset column. The native and frontend size rules use the new width.
+
+**Display → Taskbar Strip** groups placement, transparency, the outline, and micro bars. The border preference is saved in schema 14 as `taskbarStripBorder`. It defaults to Automatic when absent. Automatic follows the shared border preference for opaque cards and hides the outline when transparent. Show and Hide apply independently of background paint. Windows high contrast keeps its system outline and opaque background. The Taskbar Strip appearance settings use the existing live preview, Save, and Cancel flow.
+
+Rust publishes the active transparency state after placing the window and configuring its native region. That state drives webview paint. The strip stays clear under the pointer when transparent. Moving above the taskbar, turning off Windows transparency effects, turning on Windows high contrast, or losing native composition uses an opaque fallback while preserving the preference. Inside the taskbar the strip follows the Windows taskbar theme. Above it the strip follows the app theme.
+
+### Validation for this update
+
+| Check | Result |
+| --- | --- |
+| `npm.cmd test` | Passed, 171 tests. Includes both label styles, unknown periods, border policy, the Light/Dark swatch editor, and fallback messaging. |
+| `npm.cmd run build` | Passed, including TypeScript checking and the production Vite build. |
+| `npm.cmd run rust:fmt`, `npm.cmd run rust:check`, `npm.cmd run rust:clippy` | Passed. |
+| `npm.cmd run rust:test` | Passed, 184 application tests and 3 autostart tests. The live protocol probe remained ignored. |
+| `npm.cmd run desktop:build` | The installed Tauri CLI binding failed to load with `ERR_DLOPEN_FAILED`. |
+| `cargo build --release --manifest-path src-tauri/Cargo.toml --locked --features tauri/custom-protocol` | Passed. Built the executable used for isolated Windows validation. |
+| `Usage.exe --check-native-compact-options` | Passed, 194 assertions. Covered all-column readability controls, equal widths, fitting wide readings, app and taskbar theme selection, native and webview transparency, independent border paint, widget scale, and live preview, Cancel, and Save. See `src-tauri/target/validation/native-compact-options/result.log`. |
+| `Usage.exe --check-native-appearance` | Passed, 871 assertions. Includes Taskbar Strip and existing compact widget and dashboard appearance checks. See `src-tauri/target/validation/native-appearance/result.log`. |
+
+Manual checks remain for the physical pointer over the transparent strip, the effect of toggling Windows transparency and high contrast live, mixed-DPI monitor movement, and an actual Explorer restart on interactive Windows 10 and 11 desktops. The isolated Windows session exercised taskbar-band geometry and webview rendering using synthetic data.
+
 ## Phase 2 increment — Unparented in-taskbar overlay & transparent text-only style (2026-11-27)
 
 Added user-requested in-taskbar placement and transparent background styling for **Taskbar Strip** without `SetParent` shell injection or DeskBand COM extensions:
@@ -91,8 +116,8 @@ All checks below ran against the final working tree after the last code edit unl
 
 Automated synthetic checks do not replace manual verification on real Windows 10 and Windows 11 desktops:
 
-- [ ] Visual inspection of Taskbar Strip docked above the Windows 10 and Windows 11 taskbar clock with micro quota bars **On** (`122 × 42`) and **Off** (`122 × 36`).
-- [ ] **Mixed OS polarity:** Windows *Custom* theme with Light Apps (`AppsUseLightTheme = 1`) + Dark Taskbar (`SystemUsesLightTheme = 0`) under *Follow Windows* — confirm Taskbar Strip renders Dark while Overview, Settings, and Tray Hover Preview render Light, and that explicit Light/Dark overrides both.
+- [ ] Inspect Taskbar Strip inside and above the taskbar clock on Windows 10 and Windows 11 with micro bars **On** (`128 × 42`) and **Off** (`128 × 36`).
+- [ ] Check live mixed Windows polarity with light apps and a dark taskbar. Confirm the strip uses the taskbar theme inside it and the app theme above it, including when the app theme is set explicitly.
 - [ ] **DPI & Text Scaling:** Verify crisp alignment and zero clipping at 100%, 125%, 150%, 175%, and 200% DPI and Windows Text Scale 100%–225%, plus worst-case strings (`100%`, `99.9%`, `<1%`, `23h59m`, `6d23h`, `due?`).
 - [ ] **Windows High Contrast / Contrast Themes:** Confirm forced-colors legibility on Taskbar Strip and two-row Tray Hover Preview.
 - [ ] **Multi-monitor & Taskbar edge cases:** Drag across mixed-DPI monitors, snap/release, *Reset position*, auto-hide taskbar behavior, and fullscreen video/game suppression.

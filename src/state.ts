@@ -55,7 +55,7 @@ export interface AppState {
   dashboardRequest:{sequence:number;page:"overview"|"settings"}|null;
   firstLaunch:boolean;
   appearance: {
-    compactMonitorBudgets?:Record<string,import("./compactSizing").MonitorBudget>; compactSizing:Partial<Record<"screen-edge"|"compact-hud"|"taskbar-strip",import("./compactSizing").ScaleState>>; widget: EffectiveWidgetAppearance; taskbarWidget?: EffectiveWidgetAppearance; taskbarOverlayActive?: boolean; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
+    compactMonitorBudgets?:Record<string,import("./compactSizing").MonitorBudget>; compactSizing:Partial<Record<"screen-edge"|"compact-hud"|"taskbar-strip",import("./compactSizing").ScaleState>>; widget: EffectiveWidgetAppearance; taskbarWidget?: EffectiveWidgetAppearance; taskbarOverlayActive?: boolean; taskbarTransparencyActive?: boolean; placementConstraints:{margins:number[];taskbarUncertain:boolean;reducedToFit:boolean;contentExceedsWorkArea:boolean};
     themePreference: ThemePreference; resolvedTheme: "light" | "dark"; systemResolvedTheme?: "light" | "dark";
     highContrast: boolean; transparencyAllowed: boolean; reducedMotion: boolean; textScale: number;
   };

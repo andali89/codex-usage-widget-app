@@ -3,7 +3,7 @@ import { applyAppearance, command, useSharedState, useVisibleClock } from "./sta
 import { useDiagnostics } from "./useDiagnostics";
 import WidgetBackground from "./WidgetBackground";
 import WidgetContents from "./WidgetContents";
-import { widgetStyle } from "./widgetAppearance";
+import { showTaskbarStripBorder, widgetStyle } from "./widgetAppearance";
 import { showsPeriod, effectiveResets } from "./periods";
 import { compactLayout } from "./compactLayout";
 import { shouldActivateWidgetClick, shouldStartWidgetDrag } from "./widgetGestures";
@@ -20,8 +20,9 @@ export default function SurfaceView({ surface }: { surface: "shell" | "preview" 
   const compactMode = state?.settings.mode === "screen-edge" || state?.settings.mode === "compact-hud" || state?.settings.mode === "taskbar-strip" ? state.settings.mode : undefined;
   const widgetScale = surface === "shell" && compactMode ? (state?.appearance.compactSizing?.[compactMode]?.effectivePercent ?? 100) / 100 : 1;
   const taskbarShell = surface === "shell" && state?.settings.mode === "taskbar-strip";
-  const effectiveTheme = taskbarShell ? (state?.appearance.systemResolvedTheme ?? state?.appearance.resolvedTheme) : state?.appearance.resolvedTheme;
-  const effectiveWidget = taskbarShell ? (state?.appearance.taskbarWidget ?? state?.appearance.widget) : state?.appearance.widget;
+  const taskbarOverlay = taskbarShell && !!state?.appearance.taskbarOverlayActive;
+  const effectiveTheme = (taskbarOverlay ? state?.appearance.systemResolvedTheme : undefined) ?? state?.appearance.resolvedTheme;
+  const effectiveWidget = (taskbarOverlay ? state?.appearance.taskbarWidget : undefined) ?? state?.appearance.widget;
   const showBars = effectiveWidget?.taskbarStripShowBars ?? state?.settings.widgetAppearance.taskbarStripShowBars ?? true;
   const dragOrigin = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const dragging = useRef(false), suppressClick = useRef(false), lastMeasurement = useRef("");
@@ -89,11 +90,11 @@ export default function SurfaceView({ surface }: { surface: "shell" | "preview" 
     if (delta && !state.settings.windows.lockPosition) { event.preventDefault(); void surfaceAction({ type: "nudge", dx: delta[0], dy: delta[1] }); }
   };
   const activeWidget = effectiveWidget ?? state.appearance.widget;
-  const taskbarOverlay = taskbarShell && !!state.appearance.taskbarOverlayActive;
-  const taskbarTransparent = taskbarOverlay && (activeWidget.taskbarStripTransparent ?? state.settings.widgetAppearance.taskbarStripTransparent ?? true) && !state.appearance.highContrast && activeWidget.compositionAvailable;
-  const palettePaint=!state.appearance.highContrast && (!activeWidget.originalStructure || surface==="shell" && activeWidget.backgroundAlpha<1);
-  const compose=surface==="shell"&&!state.appearance.highContrast&&activeWidget.backgroundAlpha<1;
-  return <div ref={root} data-taskbar-overlay={taskbarOverlay ? "true" : undefined} data-countdown-bold={activeWidget.compactCountdownBold} data-countdown-contrast={activeWidget.compactCountdownHighContrast} style={{zoom:widgetScale,...layoutStyle,...(!state.appearance.highContrast ? widgetStyle(activeWidget,surface==="shell") : {})}} data-label-style={labelStyle} className={`native-surface ${compose?"surface-composition":""} ${palettePaint ? "widget-palette" : ""} ${palettePaint && activeWidget.originalStructure ? "widget-original" : ""} ${surface} mode-${mode}${taskbarTransparent ? " taskbar-transparent" : ""}${layout ? " stable-compact" : ""}${trayPreview ? " tray-summary" : ""}${state.settings.windows.lockPosition ? " position-locked" : ""}`} onContextMenu={contextMenu} onKeyDown={keyDown}
+  const taskbarTransparent = taskbarOverlay && !!state.appearance.taskbarTransparencyActive;
+  const taskbarBorder = taskbarShell && showTaskbarStripBorder(activeWidget, taskbarTransparent, state.appearance.highContrast);
+  const palettePaint=!taskbarShell&&!state.appearance.highContrast && (!activeWidget.originalStructure || surface==="shell" && activeWidget.backgroundAlpha<1);
+  const compose=surface==="shell"&&!taskbarShell&&!state.appearance.highContrast&&activeWidget.backgroundAlpha<1;
+  return <div ref={root} data-taskbar-overlay={taskbarOverlay ? "true" : undefined} data-taskbar-border={taskbarBorder ? "true" : undefined} data-countdown-bold={activeWidget.compactCountdownBold} data-countdown-contrast={activeWidget.compactCountdownHighContrast} style={{zoom:widgetScale,...layoutStyle,...(!taskbarShell&&!state.appearance.highContrast ? widgetStyle(activeWidget,surface==="shell") : {})}} data-label-style={labelStyle} className={`native-surface ${compose?"surface-composition":""} ${palettePaint ? "widget-palette" : ""} ${palettePaint && activeWidget.originalStructure ? "widget-original" : ""} ${surface} mode-${mode}${taskbarTransparent ? " taskbar-transparent" : ""}${layout ? " stable-compact" : ""}${trayPreview ? " tray-summary" : ""}${state.settings.windows.lockPosition ? " position-locked" : ""}`} onContextMenu={contextMenu} onKeyDown={keyDown}
     onPointerDown={pointerDown} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}
     onPointerMove={event => { const origin = dragOrigin.current; if (origin && origin.pointerId === event.pointerId && shouldStartWidgetDrag(origin, { x: event.clientX, y: event.clientY }, state.settings.windows.lockPosition, dragging.current)) { dragging.current = true; suppressClick.current = true; void surfaceAction({ type: "drag" }); } }}
     onClick={event => { if (surface !== "shell" || isControl(event.target)) return; if (!shouldActivateWidgetClick(event.detail, suppressClick.current)) { event.preventDefault(); return; } void surfaceAction({ type: event.detail === 0 ? "details" : "activate" }); }}

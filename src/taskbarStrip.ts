@@ -53,27 +53,21 @@ export function taskbarStripRows(windows: readonly QuotaWindow[], selection: Vis
       label: taskbarPeriodLabel(quota ? quota.durationMinutes : duration, slotIndex),
       remainingPercent: quota?.remainingPercent ?? null,
       resetsAtMs: quota?.resetsAtMs ?? null,
-      durationMinutes: quota?.durationMinutes ?? null,
+      durationMinutes: quota ? quota.durationMinutes : duration,
       lastKnown: !!quota?.lastKnown,
     }];
   }
-  if (!windows.length) {
-    return [
-      { key: "missing-five-hour", role: "five-hour", label: "5h:", remainingPercent: null, resetsAtMs: null, durationMinutes: null, lastKnown: false },
-      { key: "missing-weekly", role: "weekly", label: "Wk:", remainingPercent: null, resetsAtMs: null, durationMinutes: null, lastKnown: false },
-    ];
-  }
   const [primary, secondary] = resolveBothSlots(windows);
   return ([
-    [primary, "five-hour", 0, "5h:"],
-    [secondary, "weekly", 1, "Wk:"],
-  ] as const).map(([quota, role, slotIndex, fallbackLabel]) => ({
+    [primary, "five-hour", 0, 300],
+    [secondary, "weekly", 1, 10080],
+  ] as const).map(([quota, role, slotIndex, duration]) => ({
     key: quota?.key ?? `missing-${role}`,
     role,
-    label: quota ? taskbarPeriodLabel(quota.durationMinutes, slotIndex) : fallbackLabel,
+    label: taskbarPeriodLabel(quota ? quota.durationMinutes : duration, slotIndex),
     remainingPercent: quota?.remainingPercent ?? null,
     resetsAtMs: quota?.resetsAtMs ?? null,
-    durationMinutes: quota?.durationMinutes ?? null,
+    durationMinutes: quota ? quota.durationMinutes : duration,
     lastKnown: !!quota?.lastKnown,
   }));
 }

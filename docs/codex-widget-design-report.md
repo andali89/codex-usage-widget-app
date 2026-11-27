@@ -6,6 +6,8 @@
 **Target platform:** Windows 10/11  
 **Proposed stack:** Tauri 2 · TypeScript · React · Tailwind CSS · Rust application services
 
+**Taskbar Strip update, 27 November 2026.** The display modes include Taskbar Strip alongside the four modes in the original design. The strip is a separate app window that can sit inside a horizontal taskbar or dock above it. For current placement, theme, accessibility, and appearance behavior, see the [Taskbar Strip implementation report](taskbar-strip-implementation-report.md).
+
 **Proposed follow-up:** [Widget appearance and consistent snapping](widget-appearance-and-snap-design.md) specifies configurable background transparency, element colors, and a shared desktop snap gap. It is a design proposal; the current implementation and validation status remain in the implementation reports.
 
 ---

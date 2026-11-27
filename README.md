@@ -52,20 +52,22 @@ These screenshots use synthetic example data; they do not show a real account.
 | Screen Edge | Percentage rings that dock to the nearest left or right screen edge after dragging. |
 | System Tray | Background monitoring with a compact hover summary and dashboard access. |
 | Compact HUD | Movable horizontal strip with quota values, bars, and optional countdowns. |
+| Taskbar Strip | Two aligned rows with remaining percentages, expected resets, and optional colored bars. |
 
 - View remaining quota, expected resets, data freshness, and reset-credit information when provided by Codex.
 - Choose 5-hour, weekly, or both periods independently for Edge and HUD, with optional countdowns and word or badge labels. Set 2–12 remaining-time bars independently for each period and widget (default 10); Save applies the choices.
 - Select Light, Dark, or Follow Windows appearance; configure position lock, always on top, and launch at sign-in.
-- Choose Original or ten showcase-inspired paired Light/Dark themes, optionally customize quota colors from 24 or more named swatches plus the selected theme’s colors, and set one snap gap for Floating, Edge, and HUD (0–48 logical px; default 8). Appearance and gap edits temporarily update the active widget; Save keeps them and Cancel restores saved settings. Show widget border defaults to On and applies across themes, widget modes, and hover summaries; turning it off preserves widget dimensions and internal dividers. Widget backgrounds are currently opaque, and the transparency setting is hidden. Existing saved transparency values are retained but inactive. Windows high contrast keeps a visible border. See the [appearance and snapping report](docs/widget-appearance-and-snap-implementation-report.md).
+- Choose Original or ten showcase-inspired paired Light/Dark themes and customize quota colors from 24 or more named swatches plus the selected theme’s colors. Set a shared snap gap of 0–48 logical pixels, with a default of 8. Appearance and gap edits update the active widget during preview. Save keeps them and Cancel restores saved settings. Show widget border defaults to On, and Windows high contrast keeps the border visible. See the [appearance and snapping report](docs/widget-appearance-and-snap-implementation-report.md).
+- Taskbar Strip uses neutral text with a choice of word or badge labels and independently colored quota bars. The bold and higher-contrast settings apply to every text column. The strip can sit inside a horizontal taskbar, where it follows the Windows taskbar theme and can show the background through. Above the taskbar it uses an opaque card in the app theme. Its border has Automatic, Show, and Hide options. See the [Taskbar Strip report](docs/taskbar-strip-implementation-report.md).
 - Set independent Edge and HUD sizes from **80% to 300%** without changing their layouts (default 100%), and optionally make their reset countdowns bold or use higher contrast text across all themes. Edits preview temporarily; Save keeps them and Cancel restores saved values. Oversized selections are rejected with the monitor’s fitting limit. A saved enlargement that later stops fitting temporarily falls back to 100% without changing its saved value.
 - Configure an HTTP/HTTPS proxy without credentials for the widget's Codex process and choose EXE-adjacent, AppData, or custom configuration storage.
 
 ## Using the widget
 
-- **Hover** over Edge, HUD, or the tray icon for a usage summary.
+- **Hover** over Edge, HUD, Taskbar Strip, or the tray icon for a usage summary.
 - **Single-click** a widget or tray icon for Overview; **double-click** opens the standard dashboard window.
 - **Right-click** for the shared menu, including Settings, Hide/show, Reset position, and Quit.
-- **Drag** Floating or HUD to move them. Drag Edge and release to dock it. Enable Lock position to prevent movement.
+- **Drag** Floating, HUD, or Taskbar Strip to move them. Drag Edge and release to dock it. Enable Lock position to prevent movement.
 - Overview fits its content up to 85% of the monitor work-area height. Settings keeps those dimensions and scrolls. Manually resizing the standard dashboard preserves its session size; the single-click popup remains independent.
 - Closing the dashboard keeps monitoring active. Floating's × switches to System Tray mode; **Quit** exits the application.
 

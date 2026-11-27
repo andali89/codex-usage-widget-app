@@ -469,7 +469,7 @@ unsafe extern "system" fn control_proc(
         Some(Input::Layout)
     } else {
         match message {
-            WM_SETTINGCHANGE | WM_THEMECHANGED => {
+            WM_SETTINGCHANGE | WM_THEMECHANGED | WM_DWMCOMPOSITIONCHANGED => {
                 if let Some(hooks) = HOOKS.get().and_then(|h| h.lock().ok()) {
                     hooks.service.dispatch(Action::Appearance);
                 }

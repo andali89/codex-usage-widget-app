@@ -1,6 +1,7 @@
 //! Explicit isolated native integration checks (appearance/sizing also in release). Exercises this application's coordinator, never
 //! sends OS mouse/keyboard input, and records no quota values or account identifiers.
 use crate::{
+    compact_sizing::TASKBAR_STRIP_WIDTH,
     interaction::{DetailState, ShellState, Surface},
     model::{
         AppState, DisplayMode, QuotaLabelStyle, ResetCountdowns, Settings, ThemePreference,
@@ -560,7 +561,7 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                             38.0,
                         )),
                         DisplayMode::TaskbarStrip => Some((
-                            122.0,
+                            TASKBAR_STRIP_WIDTH,
                             if single {
                                 if five_hour {
                                     28.0
@@ -958,6 +959,7 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
 }
 
 async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    use crate::widget_appearance::TaskbarStripBorder;
     let original = service.snapshot().await?.settings;
     service.dispatch(Action::Window(Input::Close));
     let mut setup = original.clone();
@@ -967,6 +969,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
     setup.widget_appearance.taskbar_strip_scale_percent = 100;
     setup.widget_appearance.taskbar_strip_show_bars = true;
     setup.widget_appearance.taskbar_strip_in_taskbar = false;
+    setup.widget_appearance.show_border = true;
     for mode in [
         DisplayMode::ScreenEdge,
         DisplayMode::CompactHud,
@@ -1019,13 +1022,32 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 settings.widget_appearance.compact_countdown_high_contrast = strong;
                 save_settings(service, settings).await?;
                 let expression = if mode == DisplayMode::TaskbarStrip {
-                    let weight = if bold { "700" } else { "450" };
-                    let color = if strong {
-                        "getComputedStyle(root).color"
+                    let weights = if bold {
+                        "['700','700','700']"
                     } else {
-                        "getComputedStyle(root).getPropertyValue('--quota-five-hour-text').trim()"
+                        "['500','600','450']"
                     };
-                    format!("(()=>{{const root=document.querySelector('.native-surface.shell'),c=root?.querySelector('.ts-rst');if(!c)return false;const probe=document.createElement('span');probe.style.color={color};root.append(probe);const expected=getComputedStyle(probe).color;probe.remove();return getComputedStyle(c).fontWeight==='{weight}'&&getComputedStyle(c).color===expected&&root.querySelectorAll('.micro-bar').length===1;}})()")
+                    let color = match (theme, strong) {
+                        (ThemePreference::Dark, true) => "rgb(255, 255, 255)",
+                        (ThemePreference::Dark, false) => "rgb(230, 230, 230)",
+                        (_, true) => "rgb(16, 16, 16)",
+                        (_, false) => "rgb(48, 48, 48)",
+                    };
+                    format!(
+                        r#"(()=>{{
+                            const root=document.querySelector('.native-surface.shell');
+                            const row=root?.querySelector('.taskbar-strip-row');
+                            const bar=root?.querySelector('.micro-bar > i');
+                            if(!row||!bar||row.children[0].textContent!=='5')return false;
+                            const probe=document.createElement('span');
+                            probe.style.color='var(--quota-five-hour)'; root.append(probe);
+                            const barColor=getComputedStyle(probe).color; probe.remove();
+                            return [...row.children].every((cell,i)=>{{
+                                const style=getComputedStyle(cell);
+                                return style.color==='{color}'&&style.fontWeight==={weights}[i];
+                            }})&&getComputedStyle(bar).backgroundColor===barColor;
+                        }})()"#
+                    )
                 } else {
                     let weight = if bold { "700" } else { "400" };
                     let color = if strong {
@@ -1047,21 +1069,48 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
             if mode == DisplayMode::TaskbarStrip {
                 let mut no_bars = service.snapshot().await?.settings;
                 no_bars.widget_appearance.taskbar_strip_show_bars = false;
+                no_bars.windows.quota_label_style = QuotaLabelStyle::Words;
+                no_bars
+                    .windows
+                    .visible_periods
+                    .insert(mode.key().into(), VisiblePeriods::Both);
                 save_settings(service, no_bars).await?;
                 frontend_assert(
                     app,
                     "shell",
-                    "document.querySelectorAll('.native-surface.shell .micro-bar').length===0",
-                    "taskbar-strip-micro-bars-off",
+                    r#"(()=>{
+                        const root=document.querySelector('.mode-taskbar-strip.shell');
+                        const rows=root?.querySelectorAll('.taskbar-strip-row');
+                        if(rows?.length!==2||root.querySelector('.micro-bar'))return false;
+                        const first=[...rows[0].children], second=[...rows[1].children];
+                        if(first[0].textContent!=='5h:'||second[0].textContent!=='Wk:')return false;
+                        const measure=cell=>cell.getBoundingClientRect();
+                        return first.every((cell,i)=>{
+                            const other=second[i], a=measure(cell), b=measure(other);
+                            const sample=['Wk:','99.9%','23h59m'][i], saved=cell.textContent;
+                            cell.textContent=sample;
+                            const fits=cell.scrollWidth<=cell.clientWidth+1;
+                            cell.textContent=saved;
+                            return fits&&Math.abs(a.x-b.x)<.1&&Math.abs(a.width-b.width)<.1
+                                &&getComputedStyle(cell).fontWeight==='700'&&getComputedStyle(cell).color===getComputedStyle(root).color;
+                        });
+                    })()"#,
+                    "taskbar-strip-text-only-aligned-columns-fit-bold-readings",
                 )
                 .await?;
                 let mut restore_bars = service.snapshot().await?.settings;
+                restore_bars.windows.quota_label_style = QuotaLabelStyle::Badges;
+                restore_bars
+                    .windows
+                    .visible_periods
+                    .insert(mode.key().into(), VisiblePeriods::FiveHour);
                 restore_bars.widget_appearance.taskbar_strip_show_bars = true;
                 restore_bars.widget_appearance.taskbar_strip_in_taskbar = true;
                 restore_bars.widget_appearance.taskbar_strip_transparent = true;
+                restore_bars.widget_appearance.taskbar_strip_border = TaskbarStripBorder::Automatic;
                 save_settings(service, restore_bars).await?;
-                let overlay_active = service.snapshot().await?.appearance.taskbar_overlay_active;
-                if overlay_active {
+                let appearance = service.snapshot().await?.appearance;
+                if appearance.taskbar_overlay_active {
                     let shell = app
                         .get_webview_window("shell")
                         .ok_or("taskbar-overlay-shell")?;
@@ -1077,21 +1126,43 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                         inside_bottom || inside_top,
                         "taskbar-strip-positioned-inside-taskbar-band",
                     )?;
+                    let transparent = appearance.transparency_allowed
+                        && appearance.widget.composition_available
+                        && !appearance.high_contrast;
+                    let taskbar_theme = appearance.system_resolved_theme;
                     require(
-                        !crate::native_windows::has_rounded_corners(&shell),
-                        "taskbar-strip-transparent-clears-window-region",
+                        appearance.taskbar_transparency_active == transparent
+                            && crate::native_windows::has_rounded_corners(&shell) != transparent,
+                        "taskbar-strip-native-background-matches-transparency-availability",
                     )?;
                     frontend_assert(
                         app,
                         "shell",
-                        "(()=>{const s=document.querySelector('.native-surface.shell.mode-taskbar-strip');if(!s)return false;const c=getComputedStyle(s);return s.classList.contains('taskbar-transparent')&&c.backgroundColor==='rgba(0, 0, 0, 0)'&&c.backgroundImage==='none'&&c.borderTopColor==='rgba(0, 0, 0, 0)';})()",
-                        "taskbar-strip-in-taskbar-transparent",
+                        &format!("(()=>{{const s=document.querySelector('.native-surface.shell.mode-taskbar-strip');if(!s)return false;const c=getComputedStyle(s);return document.documentElement.dataset.theme==='{taskbar_theme}'&&s.classList.contains('taskbar-transparent')==={transparent}&&(c.backgroundColor==='rgba(0, 0, 0, 0)')==={transparent}&&c.backgroundImage==='none'&&(c.borderTopColor==='rgba(0, 0, 0, 0)')==={transparent};}})()"),
+                        "taskbar-strip-overlay-matches-windows-theme-and-background",
                     )
                     .await?;
+                    let mut outlined = service.snapshot().await?.settings;
+                    outlined.widget_appearance.taskbar_strip_border = TaskbarStripBorder::Show;
+                    save_settings(service, outlined.clone()).await?;
+                    frontend_assert(app,"shell",&format!("(()=>{{const s=document.querySelector('.mode-taskbar-strip.shell[data-taskbar-border=true]');return s&&getComputedStyle(s).borderTopColor!=='rgba(0, 0, 0, 0)'&&s.classList.contains('taskbar-transparent')==={transparent};}})()"),"taskbar-strip-explicit-border-keeps-background-choice").await?;
+                    outlined.widget_appearance.taskbar_strip_transparent = false;
+                    save_settings(service, outlined).await?;
+                    frontend_assert(app,"shell","document.querySelector('.mode-taskbar-strip.shell[data-taskbar-border=true]:not(.taskbar-transparent)')","taskbar-strip-transparency-off-with-outline").await?;
+                } else {
+                    record("native-check taskbar-strip-overlay-unavailable".into());
                 }
                 let mut desktop_dock = service.snapshot().await?.settings;
                 desktop_dock.widget_appearance.taskbar_strip_in_taskbar = false;
+                desktop_dock.widget_appearance.taskbar_strip_transparent = true;
+                desktop_dock.widget_appearance.taskbar_strip_border = TaskbarStripBorder::Hide;
                 save_settings(service, desktop_dock).await?;
+                let app_theme = if theme == ThemePreference::Dark {
+                    "dark"
+                } else {
+                    "light"
+                };
+                frontend_assert(app,"shell",&format!("(()=>{{const s=document.querySelector('.mode-taskbar-strip.shell');return s&&document.documentElement.dataset.theme==='{app_theme}'&&!s.classList.contains('taskbar-transparent')&&getComputedStyle(s).borderTopColor==='rgba(0, 0, 0, 0)';}})()"),"taskbar-strip-desktop-card-uses-app-theme-and-hidden-border").await?;
             }
             let text = f64::from(service.snapshot().await?.appearance.text_scale) / 100.0;
             for percent in [80, 100, 125, 137, 150, 200, 300] {
@@ -1116,7 +1187,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 let (width, height) = match mode {
                     DisplayMode::ScreenEdge => (54.0, 124.0),
                     DisplayMode::CompactHud => (164.0, 38.0),
-                    _ => (122.0, 28.0),
+                    _ => (TASKBAR_STRIP_WIDTH, 28.0),
                 };
                 let extra_check = if mode == DisplayMode::TaskbarStrip {
                     "root.querySelectorAll('.micro-bar').length===1"
@@ -1923,6 +1994,79 @@ async fn settings_preview_check(app: &AppHandle, service: &Service) -> Result<()
             == Some(PresetId::Matcha),
         "close-retains-saved-preset",
     )?;
+    taskbar_border_preview_check(app, service).await
+}
+
+async fn taskbar_border_preview_check(app: &AppHandle, service: &Service) -> Result<(), String> {
+    use crate::widget_appearance::TaskbarStripBorder;
+    let mut settings = service.snapshot().await?.settings;
+    settings.mode = DisplayMode::TaskbarStrip;
+    settings.widget_appearance.taskbar_strip_scale_percent = 100;
+    settings.widget_appearance.taskbar_strip_in_taskbar = false;
+    settings.widget_appearance.show_border = true;
+    settings.widget_appearance.taskbar_strip_border = TaskbarStripBorder::Automatic;
+    save_settings(service, settings).await?;
+    service.dispatch(Action::Window(Input::Open {
+        standard: true,
+        settings: true,
+    }));
+    wait(
+        app,
+        service,
+        "taskbar-strip-settings-preview-session",
+        |s| s.appearance.preview_session.is_some() && visible(app, "main") && visible(app, "shell"),
+    )
+    .await?;
+    let main = app.get_webview_window("main").ok_or("taskbar-settings")?;
+    let select_hide = r#"(()=>{
+        const select=document.querySelector('#taskbar-strip-border');
+        select.value='hide'; select.dispatchEvent(new Event('change',{bubbles:true}));
+    })()"#;
+    main.eval(select_hide)
+        .map_err(|_| "taskbar-border-control")?;
+    wait(
+        app,
+        service,
+        "taskbar-strip-border-previews-without-save",
+        |s| {
+            s.appearance.widget.taskbar_strip_border == TaskbarStripBorder::Hide
+                && s.settings.widget_appearance.taskbar_strip_border
+                    == TaskbarStripBorder::Automatic
+        },
+    )
+    .await?;
+    main.eval("[...document.querySelectorAll('.save-bar button')].find(el=>el.textContent==='Cancel').click()")
+        .map_err(|_| "taskbar-border-cancel")?;
+    wait(
+        app,
+        service,
+        "taskbar-strip-cancel-restores-automatic-border",
+        |s| s.appearance.widget.taskbar_strip_border == TaskbarStripBorder::Automatic,
+    )
+    .await?;
+    frontend_assert(
+        app,
+        "main",
+        "document.querySelector('#taskbar-strip-border')?.value==='automatic'",
+        "taskbar-strip-cancel-restores-border-control",
+    )
+    .await?;
+    main.eval(select_hide)
+        .map_err(|_| "taskbar-border-control")?;
+    wait(
+        app,
+        service,
+        "taskbar-strip-border-draft-before-save",
+        |s| s.appearance.widget.taskbar_strip_border == TaskbarStripBorder::Hide,
+    )
+    .await?;
+    main.eval("document.querySelector('.save-bar button[type=submit]').click()")
+        .map_err(|_| "taskbar-border-save")?;
+    wait(app, service, "taskbar-strip-save-keeps-border", |s| {
+        s.settings.widget_appearance.taskbar_strip_border == TaskbarStripBorder::Hide
+    })
+    .await?;
+    service.dispatch(Action::Window(Input::Close));
     Ok(())
 }
 

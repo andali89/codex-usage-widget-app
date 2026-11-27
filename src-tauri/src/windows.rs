@@ -1,7 +1,8 @@
 use crate::{
+    compact_sizing::TASKBAR_STRIP_WIDTH,
     geometry::{self, Placement, Rect},
     interaction::{ClickActivation, DetailState, Interaction, ShellState, Surface},
-    model::{DashboardPage, DashboardRequest, DisplayMode, EdgeSide, Settings},
+    model::{Appearance, DashboardPage, DashboardRequest, DisplayMode, EdgeSide, Settings},
     native_windows as native,
     service::{Action, Service},
     view_lifecycle::Lease,
@@ -142,8 +143,9 @@ pub struct Windows {
     preview_freeze: bool,
     pub gap_constraints: geometry::GapConstraints,
     pub taskbar_overlay_active: bool,
+    pub taskbar_transparency_active: bool,
     inferred_anchors: std::collections::BTreeMap<String, geometry::SnapAnchors>,
-    pub composition_failed: bool,
+    shell_transparent: bool,
     pub interaction: Interaction,
     pub diagnostic: Option<String>,
     pub coordination_fault: Option<String>,
@@ -210,8 +212,9 @@ impl Windows {
             preview_freeze: false,
             gap_constraints: geometry::GapConstraints::default(),
             taskbar_overlay_active: false,
+            taskbar_transparency_active: false,
             inferred_anchors: std::collections::BTreeMap::new(),
-            composition_failed: false,
+            shell_transparent: false,
             interaction: Interaction::new(
                 settings.mode,
                 if dashboard {
@@ -232,7 +235,7 @@ impl Windows {
             shell_size: match settings.mode {
                 DisplayMode::ScreenEdge => (64.0, 96.0),
                 DisplayMode::CompactHud => (440.0, 44.0),
-                DisplayMode::TaskbarStrip => (122.0, 42.0),
+                DisplayMode::TaskbarStrip => (TASKBAR_STRIP_WIDTH, 42.0),
                 _ => (336.0, 72.0),
             },
             preview_size: if settings.mode == DisplayMode::SystemTray {
@@ -464,7 +467,7 @@ impl Windows {
             self.shell_size = match next.mode {
                 DisplayMode::ScreenEdge => (64.0, 96.0),
                 DisplayMode::CompactHud => (440.0, 44.0),
-                DisplayMode::TaskbarStrip => (122.0, 42.0),
+                DisplayMode::TaskbarStrip => (TASKBAR_STRIP_WIDTH, 42.0),
                 _ => (336.0, 72.0),
             };
             self.preview_size = if next.mode == DisplayMode::SystemTray {
@@ -620,6 +623,7 @@ impl Windows {
                         0
                     }
                     Surface::Shell => {
+                        self.shell_transparent = false;
                         self.drag_session = None;
                         if self.interaction.state.dragging {
                             self.interaction.dragging(false);
@@ -1056,12 +1060,19 @@ impl Windows {
                 .build()
         };
         crate::diagnostics::event("webview_create", || serde_json::json!({"source":label}));
-        let window = match create(
-            label == "shell" && native::composition_available() && !self.composition_failed,
-        ) {
-            Ok(window) => window,
+        // Keep the shell capable of alpha paint if composition becomes available later.
+        let window = match create(label == "shell") {
+            Ok(window) => {
+                if label == "shell" {
+                    self.shell_transparent = true;
+                    if self.diagnostic.as_deref() == Some("native-composition-failed") {
+                        self.diagnostic = None;
+                    }
+                }
+                window
+            }
             Err(_) if label == "shell" => {
-                self.composition_failed = true;
+                self.shell_transparent = false;
                 self.diagnostic = Some("native-composition-failed".into());
                 create(false).map_err(|_| "native-window-create")?
             }
@@ -1343,9 +1354,12 @@ impl Windows {
         settings: &Settings,
         service: &Service,
         focus: Option<Surface>,
-        shadow: bool,
+        appearance: &Appearance,
         widget_scale: f64,
     ) -> Result<(), &'static str> {
+        let shadow = !appearance.high_contrast;
+        self.taskbar_overlay_active = false;
+        self.taskbar_transparency_active = false;
         if settings.mode == DisplayMode::SystemTray {
             self.gap_constraints = geometry::GapConstraints::default();
         }
@@ -1383,7 +1397,6 @@ impl Windows {
         } else {
             None
         };
-        self.taskbar_overlay_active = false;
         let mut taskbar_bar = None;
         if settings.mode != DisplayMode::SystemTray && self.interaction.compact_visible() {
             let initial_topmost = settings.windows.always_on_top
@@ -1505,14 +1518,14 @@ impl Windows {
                         height: s.height as f64,
                     };
                 }
-                let transparent_overlay = self.taskbar_overlay_active
+                self.taskbar_transparency_active = self.taskbar_overlay_active
                     && settings.widget_appearance.taskbar_strip_transparent
-                    && shadow
-                    && !self.composition_failed
-                    && native::composition_available();
-                if transparent_overlay {
-                    native::clear_window_region(&shell)?;
-                } else {
+                    && appearance.transparency_allowed
+                    && !appearance.high_contrast
+                    && self.shell_transparent
+                    && native::composition_available()
+                    && native::clear_window_region(&shell).is_ok();
+                if !self.taskbar_transparency_active {
                     native::round_corners(
                         &shell,
                         match settings.mode {
@@ -2190,7 +2203,7 @@ mod tests {
             windows.anchors(&settings),
             default_anchors(DisplayMode::TaskbarStrip)
         );
-        assert_eq!(windows.shell_size, (122.0, 42.0));
+        assert_eq!(windows.shell_size, (128.0, 42.0));
     }
 
     #[test]

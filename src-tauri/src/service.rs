@@ -681,6 +681,8 @@ pub fn start(
                 if old_cadence != windows.cadence(&state.settings)
                     || old_presentation != windows.interaction.state.generation
                     || previous_high_contrast != state.appearance.high_contrast
+                    || (state.settings.mode == model::DisplayMode::TaskbarStrip
+                        && windows.interaction.compact_visible())
                 {
                     coordinate(&app, &mut state, &mut windows, &actor_service, None);
                     scheduler.set_cadence(now, windows.cadence(&state.settings));
@@ -845,6 +847,7 @@ pub fn start(
                         Action::Tooltip => { if tooltip_enabled(&state) { if let Some(tray) = app.tray_by_id("main") { let _ = tray.set_tooltip(Some(tooltip(&state.usage))); } } },
                         Action::Window(input) => {
                             let reconcile = matches!(input, Input::Reconcile | Input::Lock(false));
+                            if reconcile { refresh_platform_appearance(&mut state); }
                             let render = !matches!(input, Input::Pointer { .. });
                             let explicit_open = matches!(&input, Input::Open { .. } | Input::Tray { activate:true, .. } | Input::Tray { open_window:true, .. } | Input::Request(_,crate::windows::Request::Activate | crate::windows::Request::OpenWindow | crate::windows::Request::Details));
                             let was_expanded = windows.expanded_visible();
@@ -1129,7 +1132,7 @@ fn coordinate(
         &display,
         service,
         focus,
-        !state.appearance.high_contrast,
+        &state.appearance,
         widget_scale,
     ) {
         windows.coordination_fault = Some(code.into());
@@ -1140,7 +1143,7 @@ fn coordinate(
                 &display,
                 service,
                 None,
-                !state.appearance.high_contrast,
+                &state.appearance,
                 widget_scale,
             );
         } else if windows.interaction.state.shell == crate::interaction::ShellState::Preview {
@@ -1153,6 +1156,7 @@ fn coordinate(
         windows.coordination_fault = None;
     }
     state.appearance.taskbar_overlay_active = windows.taskbar_overlay_active;
+    state.appearance.taskbar_transparency_active = windows.taskbar_transparency_active;
     state.appearance.placement_constraints = windows.gap_constraints;
     state.presentation = windows.interaction.state.clone();
     state.dashboard_visible =

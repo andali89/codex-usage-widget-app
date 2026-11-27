@@ -4,7 +4,7 @@ import { createServer } from "vite";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { taskbarPeriodLabel, taskbarStripRows } from "../src/taskbarStrip.ts";
-import { defaultWidgetAppearance, resolveWidgetAppearance } from "../src/widgetAppearance.ts";
+import { defaultWidgetAppearance, resolveWidgetAppearance, showTaskbarStripBorder } from "../src/widgetAppearance.ts";
 
 let server, TaskbarStripReadings, WidgetContents, PeriodSettings, WidgetAppearanceSettings;
 before(async () => {
@@ -60,7 +60,7 @@ test("TaskbarStripReadings renders micro bars on/off, <1% sliver, worst-case wid
   assert.match(withBars, />5h:</);
   assert.match(withBars, />&lt;1%</);
   assert.match(withBars, /min-width:0\.125rem/);
-  assert.match(withBars, /class="ts-rst ts-due">due\?</);
+  assert.match(withBars, /class="ts-rst ts-due" title="due\?">due\?</);
   assert.match(withBars, />Wk:</);
   assert.match(withBars, />99\.9%</);
   assert.match(withBars, />23h59m</);
@@ -68,6 +68,17 @@ test("TaskbarStripReadings renders micro bars on/off, <1% sliver, worst-case wid
 
   const withoutBars = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows, selection: "both", showBars: false, retained: false, now: 0 }));
   assert.equal((withoutBars.match(/class="micro-bar/g) ?? []).length, 0);
+
+  const badges = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows, labelStyle: "badges", now: 0 }));
+  assert.match(badges, /class="ts-lbl ts-badge" title="5-hour">5</);
+  assert.match(badges, /class="ts-lbl ts-badge" title="Weekly">W</);
+  const custom = renderToStaticMarkup(createElement(TaskbarStripReadings, {
+    windows: [{ ...windows[0], durationMinutes: null }, { ...windows[1], durationMinutes: 1440 }],
+    labelStyle: "badges", now: 0,
+  }));
+  assert.doesNotMatch(custom, /ts-badge/);
+  assert.match(custom, />P1:</);
+  assert.match(custom, />1d:</);
 
   const unavailable = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows: [], selection: "both", showBars: true, retained: true, now: 0 }));
   assert.equal((unavailable.match(/class="micro-bar unknown retained"/g) ?? []).length, 2);
@@ -87,6 +98,7 @@ test("WidgetContents renders Taskbar Strip blocked/warning indicators and two-ro
     appearance: {
       resolvedTheme: "light",
       systemResolvedTheme: "dark",
+      taskbarOverlayActive: mode === "taskbar-strip",
       highContrast: false,
       transparencyAllowed: false,
       widget: resolveWidgetAppearance(appearance, "light"),
@@ -112,11 +124,17 @@ test("WidgetContents renders Taskbar Strip blocked/warning indicators and two-ro
 
   const freshStrip = renderToStaticMarkup(createElement(WidgetContents, { state: makeState("taskbar-strip"), surface: "shell", now: 0 }));
   assert.match(freshStrip, /taskbar-strip-rows/);
+  assert.match(freshStrip, />5h:</);
   assert.match(freshStrip, />50%</);
   assert.match(freshStrip, />2h17m</);
   assert.match(freshStrip, />60%</);
   assert.match(freshStrip, />3d11h</);
   assert.doesNotMatch(freshStrip, /status-warning/);
+
+  const badgeState = makeState("taskbar-strip");
+  badgeState.settings.windows.quotaLabelStyle = "badges";
+  const badgeStrip = renderToStaticMarkup(createElement(WidgetContents, { state: badgeState, surface: "shell", now: 0 }));
+  assert.equal((badgeStrip.match(/ts-lbl ts-badge/g) ?? []).length, 2);
 
   const blockedStrip = renderToStaticMarkup(createElement(WidgetContents, { state: makeState("taskbar-strip", { ordinaryUsageAllowed: false }), surface: "shell", now: 0 }));
   assert.match(blockedStrip, /class="status-warning critical"[^>]*>!</);
@@ -140,10 +158,18 @@ test("WidgetContents renders Taskbar Strip blocked/warning indicators and two-ro
   assert.doesNotMatch(periodHtml, /aria-label="Taskbar Strip: 5-hour reset"/);
 
   const mixedThemeState = makeState("taskbar-strip");
+  mixedThemeState.settings.themePreference = "light";
   const settingsHtml = renderToStaticMarkup(createElement(WidgetAppearanceSettings, { state: mixedThemeState, draft: mixedThemeState.settings, onChange: () => {} }));
   assert.match(settingsHtml, /Editing Dark colors \(matching Windows taskbar\) for Original/);
   assert.match(settingsHtml, /id="taskbar-strip-in-taskbar"[^>]*checked/);
   assert.match(settingsHtml, /id="taskbar-strip-transparent"[^>]*checked/);
+  assert.match(settingsHtml, /id="taskbar-strip-border"[^>]*>.*value="automatic" selected=""/);
+  assert.match(settingsHtml, /Windows transparency effects are off/);
+
+  mixedThemeState.appearance.taskbarOverlayActive = false;
+  const fallback = renderToStaticMarkup(createElement(WidgetAppearanceSettings, { state: mixedThemeState, draft: mixedThemeState.settings, onChange: () => {} }));
+  assert.match(fallback, /Editing Light colors for Original/);
+  assert.match(fallback, /The strip is above the taskbar, so it uses an opaque card/);
 
   const desktopOnly = structuredClone(mixedThemeState.settings);
   desktopOnly.widgetAppearance.taskbarStripInTaskbar = false;
@@ -155,4 +181,18 @@ test("WidgetContents renders Taskbar Strip blocked/warning indicators and two-ro
   const resolvedOff = resolveWidgetAppearance({ ...defaultWidgetAppearance(), taskbarStripInTaskbar: false, taskbarStripTransparent: false }, "dark");
   assert.equal(resolvedOff.taskbarStripInTaskbar, false);
   assert.equal(resolvedOff.taskbarStripTransparent, false);
+});
+
+test("Taskbar Strip border is independent of background transparency and honors high contrast", () => {
+  const defaults = defaultWidgetAppearance();
+  assert.equal(defaults.taskbarStripBorder, "automatic");
+  for (const transparent of [false, true]) {
+    for (const showBorder of [false, true]) {
+      for (const taskbarStripBorder of ["automatic", "show", "hide"]) {
+        const widget = resolveWidgetAppearance({ ...defaults, showBorder, taskbarStripBorder }, "dark");
+        assert.equal(showTaskbarStripBorder(widget, transparent, false), taskbarStripBorder === "show" || (taskbarStripBorder === "automatic" && !transparent && showBorder));
+        assert.equal(showTaskbarStripBorder(widget, transparent, true), true);
+      }
+    }
+  }
 });

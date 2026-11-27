@@ -10,7 +10,8 @@ export type PaletteTheme = "light" | "dark";
 export type PresetId = keyof typeof presets;
 export const presetIds = Object.keys(presets) as PresetId[];
 export interface QuotaCustomization { enabled:boolean; fiveHour?:string; weekly?:string }
-export interface WidgetAppearanceSettings { showBorder:boolean; compactCountdownBold:boolean; compactCountdownHighContrast:boolean; edgeScalePercent:number; hudScalePercent:number; taskbarStripShowBars:boolean; taskbarStripInTaskbar:boolean; taskbarStripTransparent:boolean; taskbarStripScalePercent:number; presetId?:PresetId|null; quotaCustomizations?:Partial<Record<PresetId,Partial<Record<PaletteTheme,QuotaCustomization>>>>; backgroundTransparencyPercent:number; colorMode:"theme-defaults"|"custom"; palettes:Record<PaletteTheme,Partial<Palette>> }
+export type TaskbarStripBorder = "automatic" | "show" | "hide";
+export interface WidgetAppearanceSettings { showBorder:boolean; compactCountdownBold:boolean; compactCountdownHighContrast:boolean; edgeScalePercent:number; hudScalePercent:number; taskbarStripShowBars:boolean; taskbarStripInTaskbar:boolean; taskbarStripTransparent:boolean; taskbarStripBorder:TaskbarStripBorder; taskbarStripScalePercent:number; presetId?:PresetId|null; quotaCustomizations?:Partial<Record<PresetId,Partial<Record<PaletteTheme,QuotaCustomization>>>>; backgroundTransparencyPercent:number; colorMode:"theme-defaults"|"custom"; palettes:Record<PaletteTheme,Partial<Palette>> }
 export interface AppearanceIssue { field:string; message:string }
 export const colorRoleLabels:Record<ColorRole,string>={background:"Widget background",contentSurface:"Content surface",text:"Main text",secondaryText:"Secondary text",fiveHour:"5-hour quota",weekly:"Weekly quota",track:"Track",border:"Border and divider"};
 export interface AppearanceIssueGroup { field:string; label:string; message:string; details:string[] }
@@ -28,8 +29,13 @@ export function groupAppearanceIssues(issues:AppearanceIssue[]):AppearanceIssueG
 }
 export const summarizeAppearanceIssues=(issues:AppearanceIssue[])=>groupAppearanceIssues(issues).map(group=>`${group.label}: ${group.message}`).join(" ");
 
-export interface EffectiveWidgetAppearance { compactCountdownBold:boolean; compactCountdownHighContrast:boolean; taskbarStripShowBars:boolean; taskbarStripInTaskbar?:boolean; taskbarStripTransparent?:boolean; originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
-export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({showBorder:true,compactCountdownBold:false,compactCountdownHighContrast:false,edgeScalePercent:100,hudScalePercent:100,taskbarStripShowBars:true,taskbarStripInTaskbar:true,taskbarStripTransparent:true,taskbarStripScalePercent:100,presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
+export interface EffectiveWidgetAppearance { compactCountdownBold:boolean; compactCountdownHighContrast:boolean; taskbarStripShowBars:boolean; taskbarStripInTaskbar?:boolean; taskbarStripTransparent?:boolean; taskbarStripBorder:TaskbarStripBorder; originalStructure?:boolean; palette:Palette; divider:string; frameBorder:string; quotaText:Record<"fiveHour"|"weekly",string>; backgroundAlpha:number; backingAlpha:number; reason:string|null; compositionAvailable:boolean; protectContent:boolean }
+export const defaultWidgetAppearance = ():WidgetAppearanceSettings => ({showBorder:true,compactCountdownBold:false,compactCountdownHighContrast:false,edgeScalePercent:100,hudScalePercent:100,taskbarStripShowBars:true,taskbarStripInTaskbar:true,taskbarStripTransparent:true,taskbarStripBorder:"automatic",taskbarStripScalePercent:100,presetId:"original",quotaCustomizations:{},backgroundTransparencyPercent:0,colorMode:"theme-defaults",palettes:{light:{},dark:{}}});
+
+export function showTaskbarStripBorder(widget: EffectiveWidgetAppearance, transparent: boolean, highContrast: boolean) {
+  return highContrast || widget.taskbarStripBorder === "show"
+    || (widget.taskbarStripBorder === "automatic" && !transparent && widget.frameBorder !== "transparent");
+}
 export const themePalette = (theme:PaletteTheme):Palette => ({...defaults[theme]});
 export const validHex = (value:string) => /^#[0-9a-f]{6}$/i.test(value);
 export function paletteFor(settings:WidgetAppearanceSettings, theme:PaletteTheme):Palette {
@@ -122,7 +128,7 @@ export function resolveWidgetAppearance(settings:WidgetAppearanceSettings, theme
   const frameBase=originalStructure?divider:palette.border;
   const frameBorder=!settings.showBorder&&!highContrast?"transparent":theme==="dark"&&(!settings.presetId||settings.presetId==="original")?frameBase:mixColor(frameBase,palette.background,0.35);
   const quota=quotaPaint(palette,theme);
-  return {compactCountdownBold:settings.compactCountdownBold,compactCountdownHighContrast:settings.compactCountdownHighContrast,taskbarStripShowBars:settings.taskbarStripShowBars,taskbarStripInTaskbar:settings.taskbarStripInTaskbar,taskbarStripTransparent:settings.taskbarStripTransparent,frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
+  return {compactCountdownBold:settings.compactCountdownBold,compactCountdownHighContrast:settings.compactCountdownHighContrast,taskbarStripShowBars:settings.taskbarStripShowBars,taskbarStripInTaskbar:settings.taskbarStripInTaskbar,taskbarStripTransparent:settings.taskbarStripTransparent,taskbarStripBorder:settings.taskbarStripBorder??"automatic",frameBorder,quotaText:quota.text,originalStructure:settings.presetId==="original"||(!settings.presetId&&settings.colorMode==="theme-defaults"),palette,divider,backgroundAlpha,backingAlpha:backgroundAlpha,reason,compositionAvailable,protectContent:false};
 }
 export function widgetStyle(effective:EffectiveWidgetAppearance, _shell=true):CSSProperties {
   const p=effective.palette;

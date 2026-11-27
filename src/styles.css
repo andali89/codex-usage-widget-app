@@ -289,29 +289,47 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .stable-compact .status-warning { flex:none; width:.95rem; height:.95rem; }
 .native-surface.shell.stable-compact.mode-screen-edge { padding-inline:.125rem; padding-top:.375rem; padding-bottom:1rem; }
 .native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; padding-right:.625rem; }
-.native-surface.shell.mode-taskbar-strip { display:flex; align-items:center; gap:.1875rem; padding:.1875rem .375rem; border-radius:8px; background:linear-gradient(180deg,var(--raised),var(--shell)); }
-.native-surface.shell.stable-compact.mode-taskbar-strip { padding:.1875rem .375rem; gap:.1875rem; }
+.native-surface.shell.stable-compact.mode-taskbar-strip {
+  display:flex; align-items:center; gap:.1875rem; padding:.1875rem .375rem; border-radius:8px;
+  --strip-background:#f5f5f5; --strip-text:#303030; --strip-strong-text:#101010; --strip-outline:#737373; --strip-track:rgb(0 0 0 / 16%);
+  color:var(--strip-text); background:var(--strip-background); border-color:transparent;
+}
+:root[data-theme=dark] .native-surface.shell.mode-taskbar-strip {
+  --strip-background:#202020; --strip-text:#e6e6e6; --strip-strong-text:#fff; --strip-outline:#919191; --strip-track:rgb(255 255 255 / 20%);
+}
+.native-surface.shell.stable-compact.mode-taskbar-strip.taskbar-transparent { background:none; }
+.native-surface.shell.stable-compact.mode-taskbar-strip[data-taskbar-border=true] { border-color:var(--strip-outline); }
+.native-surface.shell.stable-compact.mode-taskbar-strip[data-countdown-contrast=true] { color:var(--strip-strong-text); }
+:root[data-high-contrast=true] .native-surface.shell.stable-compact.mode-taskbar-strip {
+  --strip-background:Canvas; --strip-text:CanvasText; --strip-strong-text:CanvasText; --strip-outline:CanvasText; --strip-track:Canvas;
+  background:Canvas; border-color:CanvasText;
+}
+@media (forced-colors:active) {
+  :root .native-surface.shell.stable-compact.mode-taskbar-strip {
+    --strip-text:CanvasText; --strip-strong-text:CanvasText; --strip-track:Canvas;
+    background:Canvas; border-color:CanvasText;
+  }
+}
 .taskbar-strip-rows { display:grid; flex:1; min-width:0; align-content:center; row-gap:.125rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .taskbar-strip-rows.bars-off { row-gap:.1875rem; }
 .taskbar-strip-row-wrap { display:grid; row-gap:.09375rem; }
-.taskbar-strip-row-wrap.retained { opacity:.75; }
-.taskbar-strip-row { display:grid; grid-template-columns:1.375rem 2.40625rem minmax(0,1fr); align-items:baseline; line-height:1.05; }
-.taskbar-strip-row-wrap.role-5h { color:var(--quota-five-hour-text,var(--accent)); }
-.taskbar-strip-row-wrap.role-wk { color:var(--quota-weekly-text,var(--weekly)); }
-.ts-lbl { font-size:.65625rem; font-weight:500; opacity:.78; text-align:right; overflow:hidden; }
-.ts-pct { font-size:.75rem; font-weight:650; text-align:left; padding-left:.21875rem; }
-.ts-rst { font-size:.6875rem; font-weight:450; opacity:.82; text-align:right; padding-left:.375rem; }
-.ts-due { color:var(--warning); opacity:1; font-weight:650; }
-.ts-unavail { color:var(--secondary); opacity:1; }
-.micro-bar { height:.125rem; border-radius:.125rem; background:var(--track); overflow:hidden; }
+.taskbar-strip-row { display:grid; grid-template-columns:1.5rem 2.375rem minmax(0,1fr); column-gap:.25rem; align-items:baseline; line-height:1.05; }
+.ts-lbl,.ts-rst { overflow:hidden; text-overflow:ellipsis; }
+.ts-lbl { font-size:.65625rem; font-weight:500; text-align:right; }
+.ts-lbl.ts-badge { display:inline-grid; place-items:center; justify-self:center; width:.8125rem; height:.8125rem; border:1px solid currentColor; border-radius:50%; font-size:.5625rem; line-height:1; }
+.ts-pct { font-size:.75rem; font-weight:600; text-align:center; }
+.ts-rst { font-size:.6875rem; font-weight:450; text-align:left; }
+.ts-rst.ts-due { font-weight:600; }
+.mode-taskbar-strip[data-countdown-bold=true] .taskbar-strip-row > span { font-weight:700; }
+.micro-bar { height:.125rem; border-radius:.125rem; background:var(--strip-track); overflow:hidden; }
 .micro-bar>i { display:block; height:100%; border-radius:inherit; background:var(--quota-five-hour,var(--accent)); }
 .role-wk .micro-bar>i { background:var(--quota-weekly,var(--weekly)); }
 .micro-bar.unknown { border:1px dashed var(--border); background:transparent; }
 .micro-bar.retained { outline:1px dashed var(--border); outline-offset:0; }
 .micro-bar.retained>i { opacity:.65; }
-.mode-taskbar-strip .status-warning { flex:none; width:.8125rem; height:.8125rem; align-items:center; justify-content:center; }
+.mode-taskbar-strip .status-warning { flex:none; width:.8125rem; height:.8125rem; align-items:center; justify-content:center; color:inherit; }
 .mode-taskbar-strip .status-warning .icon { width:.8125rem; height:.8125rem; }
-.mode-taskbar-strip .status-warning.critical { color:var(--critical); font-size:.75rem; font-weight:800; line-height:1; }
+.mode-taskbar-strip .status-warning.critical { font-size:.75rem; font-weight:800; line-height:1; }
 .stable-compact.mode-screen-edge { gap:.25rem; }
 .stable-compact .edge-values { flex:1; min-height:0; width:100%; justify-content:center; gap:.3125rem; }
 /* Keep the existing small gap below the brand mark. */
@@ -329,8 +347,6 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .reset-time { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .native-surface.shell:is(.mode-screen-edge,.mode-compact-hud)[data-countdown-bold=true] .reset-countdown { font-weight:700; }
 .native-surface.shell:is(.mode-screen-edge,.mode-compact-hud)[data-countdown-contrast=true] .reset-countdown { color:var(--text); }
-.native-surface.shell.mode-taskbar-strip[data-countdown-bold=true] .ts-rst { font-weight:700; }
-.native-surface.shell.mode-taskbar-strip[data-countdown-contrast=true] .ts-rst:not(.ts-due):not(.ts-unavail) { color:var(--text); opacity:1; }
 .widget-size-option { margin-top:1rem; }
 .stable-compact .reset-segments { height:.4375rem; gap:.125rem; }
 .stable-compact .reset-segments i { width:.1875rem; border-radius:.125rem; }
@@ -400,10 +416,10 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 :root[data-high-contrast=true] .progress,:root[data-high-contrast=true] .hud-track { border:1px solid CanvasText; }
 :root[data-high-contrast=true] .micro-bar { border:1px solid CanvasText; height:.1875rem; }
 :root[data-high-contrast=true] .micro-bar>i { background:Highlight; forced-color-adjust:none; }
-:root[data-high-contrast=true] .ts-lbl,:root[data-high-contrast=true] .ts-rst,:root[data-high-contrast=true] .taskbar-strip-row-wrap.retained,:root[data-high-contrast=true] .tray-summary-row.retained { opacity:1; }
+:root[data-high-contrast=true] .tray-summary-row.retained { opacity:1; }
 :root[data-high-contrast=true] .reset-segments i { border:1px solid CanvasText; }
 :root[data-high-contrast=true] .reset-segments .filled { background:Highlight; forced-color-adjust:none; }
-@media (forced-colors:active) { .reset-segments i { border:1px solid CanvasText; } .reset-segments .filled { background:Highlight; forced-color-adjust:none; } .micro-bar { border:1px solid CanvasText; height:.1875rem; } .micro-bar>i { background:Highlight; forced-color-adjust:none; } .ts-lbl,.ts-rst,.taskbar-strip-row-wrap.retained,.tray-summary-row.retained { opacity:1; } }
+@media (forced-colors:active) { .reset-segments i { border:1px solid CanvasText; } .reset-segments .filled { background:Highlight; forced-color-adjust:none; } .micro-bar { border:1px solid CanvasText; height:.1875rem; } .micro-bar>i { background:Highlight; forced-color-adjust:none; } .tray-summary-row.retained { opacity:1; } }
 :root[data-high-contrast=true] .quota-card { box-shadow:none; }
 @media (forced-colors:active) { :root { --canvas:Canvas; --surface:Canvas; --selected:Canvas; --text:CanvasText; --secondary:CanvasText; --divider:CanvasText; --border:ButtonText; --accent:LinkText; --weekly:LinkText; --track:Canvas; --healthy:CanvasText; --warning:CanvasText; --critical:CanvasText; --shadow:none; --shell:Canvas; --raised:Canvas; --wash:Canvas; --on-accent:Canvas; } .native-surface { background:Canvas; } .empty-art,.brand-mark img { display:none; } .contrast-mark { display:inline-grid; place-items:center; width:100%; height:100%; border:2px solid CanvasText; border-radius:50%; color:CanvasText; font-weight:700; } .quota-card { box-shadow:none; } .progress,.hud-track { border:1px solid CanvasText; } .progress>span,.hud-track>i { background:Highlight; forced-color-adjust:none; } .ring-value { stroke:Highlight; forced-color-adjust:none; } button.primary { color:ButtonText; background:ButtonFace; border-color:ButtonText; } }
 
@@ -416,12 +432,12 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .widget-palette { --selected:var(--widget-track); --text:var(--widget-text); --secondary:var(--widget-secondary); --track:var(--widget-track); --border:var(--widget-border); --divider:var(--widget-divider); --surface:var(--widget-surface-paint); --raised:var(--widget-surface-paint); --wash:var(--widget-content); --shell:var(--widget-base-paint); color:var(--text); }
 .native-surface.shell.widget-palette { background:var(--widget-base-paint); border-color:var(--widget-border); }
 .native-surface.shell.widget-palette.mode-floating { background:linear-gradient(145deg,var(--widget-wash-paint),var(--widget-base-paint)); }
-.native-surface.shell.widget-palette.mode-screen-edge,.native-surface.shell.widget-palette.mode-compact-hud,.native-surface.shell.widget-palette.mode-taskbar-strip { background:linear-gradient(180deg,var(--widget-decorative-raised-paint),var(--widget-base-paint)); }
+.native-surface.shell.widget-palette.mode-screen-edge,.native-surface.shell.widget-palette.mode-compact-hud { background:linear-gradient(180deg,var(--widget-decorative-raised-paint),var(--widget-base-paint)); }
 .native-surface.preview.widget-palette { background:var(--widget-content); }
 .native-surface.shell.widget-original { border-color:var(--widget-divider); --surface:var(--widget-reading-paint); }
 .native-surface.shell.widget-palette.widget-original .widget-credits { background:var(--widget-wash-paint); }
 .widget-original .period-badge { background:var(--widget-wash-paint); }
-.widget-palette .widget-header,.widget-palette .widget-status,.widget-palette .widget-empty,.widget-palette .edge-values,.widget-palette .hud-values,.widget-palette .taskbar-strip-rows,.widget-palette .status-warning { background:var(--widget-group-paint); border-radius:5px; }
+.widget-palette .widget-header,.widget-palette .widget-status,.widget-palette .widget-empty,.widget-palette .edge-values,.widget-palette .hud-values,.widget-palette .status-warning { background:var(--widget-group-paint); border-radius:5px; }
 .widget-palette .widget-credits { background:var(--widget-surface-paint); }
 .native-surface.shell.widget-palette .compact-card,.native-surface.shell.widget-palette .widget-credits { background:var(--widget-decorative-raised-paint); }
 .widget-palette .compact-card>.quota-title,.widget-palette .compact-card>.quota-quality,.widget-palette .compact-card>.quota-meta,.widget-palette .compact-card>.quota-details,.widget-palette .widget-credits>* { background:var(--widget-group-paint); border-radius:3px; }
@@ -460,13 +476,3 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .surface-background { position:absolute; left:0; top:0; pointer-events:none; z-index:-1; overflow:hidden; border-radius:inherit; }
 .surface-composition,.surface-composition .icon-button { transition-property:border-color; }
 [data-surface-paint] { background:none!important; }
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent,
-:root:not([data-high-contrast=true]) .native-surface.shell.widget-palette.mode-taskbar-strip.taskbar-transparent { background:transparent; border-color:transparent; border-radius:6px; transition:background-color 120ms ease; }
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent:hover { background:rgba(0,0,0,.06); }
-:root[data-theme=dark]:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent:hover { background:rgba(255,255,255,.08); }
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .taskbar-strip-rows,
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .status-warning { background:transparent; }
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .ts-lbl { opacity:.9; }
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .ts-rst { opacity:.92; }
-:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .micro-bar:not(.unknown) { background:rgba(0,0,0,.14); }
-:root[data-theme=dark]:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .micro-bar:not(.unknown) { background:rgba(255,255,255,.18); }

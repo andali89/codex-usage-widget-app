@@ -19,7 +19,7 @@ const mode = queryMode === "screen-edge" || queryMode === "compact-hud" || query
 const state: AppState = {
   diagnosticSegment:0, processEpoch: "synthetic-fixture", revision: 1, dashboardRequest:null, firstLaunch:query.has("welcome"),
   settings: { schemaVersion: 14, diagnosticLoggingEnabled:false, widgetAppearance:defaultWidgetAppearance(), autostart:{requested:false,pending:false,effective:false,diagnostic:null}, revision: 0, themePreference: "system", mode, codexPath: null, proxyUrl:null, storageLocation:{kind:"executable"}, foregroundSeconds: 120, compactSeconds: 120, backgroundSeconds: 120, windows: { snapGapLogicalPx:8,snapAnchors:{}, hoverEnabled:true, lockPosition:false, alwaysOnTop:false, suppressFullscreen:true, edgeSide:"right", quotaLabelStyle:query.get("labels") === "badges" ? "badges" : "words", placements:{}, resetCountdowns:{}, resetSegmentCounts:{}, visiblePeriods:{} }, reminders:defaultReminders() },
-  appearance: { compactSizing:{}, widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), taskbarWidget:systemDark!==dark?resolveWidgetAppearance(defaultWidgetAppearance(),systemDark?"dark":"light",query.has("contrast"),false):undefined, placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", systemResolvedTheme: systemDark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: false, reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
+  appearance: { compactSizing:{}, widget:resolveWidgetAppearance(defaultWidgetAppearance(),dark?"dark":"light",query.has("contrast"),false), placementConstraints:{margins:[8,8,8,8],taskbarUncertain:false,reducedToFit:false,contentExceedsWorkArea:false}, themePreference: "system", resolvedTheme: dark ? "dark" : "light", systemResolvedTheme: systemDark ? "dark" : "light", highContrast: query.has("contrast"), transparencyAllowed: !query.has("contrast") && query.get("windowsTransparency") !== "false", reducedMotion: true, textScale: Number(query.get("scale") ?? 100) },
   usage: {
     accountContextKey: "synthetic-only", connectionGeneration: 1, selectedLimitId: "codex",
     windows: [
@@ -75,23 +75,24 @@ for(const [key,param] of [["edgeScalePercent","edgeSize"],["hudScalePercent","hu
 if(query.get("showBars")==="false")state.settings.widgetAppearance.taskbarStripShowBars=false;
 if(query.get("inTaskbar")==="false")state.settings.widgetAppearance.taskbarStripInTaskbar=false;
 if(query.get("transparent")==="false")state.settings.widgetAppearance.taskbarStripTransparent=false;
-state.appearance.taskbarOverlayActive = state.settings.mode === "taskbar-strip" && state.settings.widgetAppearance.taskbarStripInTaskbar;
+const stripBorder = query.get("stripBorder");
+if (stripBorder === "show" || stripBorder === "hide") state.settings.widgetAppearance.taskbarStripBorder = stripBorder;
 state.settings.widgetAppearance.compactCountdownBold=query.has("boldCountdown");
 state.settings.widgetAppearance.compactCountdownHighContrast=query.has("contrastCountdown");
-state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,false);
-state.appearance.taskbarWidget=state.appearance.systemResolvedTheme!==state.appearance.resolvedTheme?resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.systemResolvedTheme!,state.appearance.highContrast,false):undefined;
-fixtureSizing(state.settings.widgetAppearance);
 const actionHistory: string[] = [];
 let displayPreview:{session:string;sequence:number}|null=null;
 const fixturePaint=(theme:Settings["themePreference"],appearance:Settings["widgetAppearance"],gap:number)=>{
   state.appearance.themePreference=theme;
   state.appearance.resolvedTheme=theme==="system"?(dark?"dark":"light"):theme;
-  state.appearance.systemResolvedTheme=theme==="system"?(systemDark?"dark":"light"):theme;
   state.appearance.widget=resolveWidgetAppearance(appearance,state.appearance.resolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed);
-  state.appearance.taskbarWidget=state.appearance.systemResolvedTheme!==state.appearance.resolvedTheme?resolveWidgetAppearance(appearance,state.appearance.systemResolvedTheme,state.appearance.highContrast,state.appearance.transparencyAllowed):undefined;
+  const taskbarTheme = systemDark ? "dark" : "light";
+  state.appearance.taskbarWidget=taskbarTheme!==state.appearance.resolvedTheme?resolveWidgetAppearance(appearance,taskbarTheme,state.appearance.highContrast,state.appearance.transparencyAllowed):undefined;
+  state.appearance.taskbarOverlayActive = state.settings.mode === "taskbar-strip" && appearance.taskbarStripInTaskbar && !query.has("taskbarFallback");
+  state.appearance.taskbarTransparencyActive = state.appearance.taskbarOverlayActive && appearance.taskbarStripTransparent && state.appearance.transparencyAllowed;
   state.appearance.placementConstraints.margins=[gap,gap,gap,gap];
   fixtureSizing(appearance);
 };
+fixturePaint(state.settings.themePreference, state.settings.widgetAppearance, state.settings.windows.snapGapLogicalPx);
 const fixturePublish=async()=>{state.revision++;await emit("widget-state",structuredClone(state));return structuredClone(state);};
 mockIPC(async (name, payload) => {
   if (name === "get_state") return structuredClone(state);

@@ -20,7 +20,7 @@ export default function WidgetContents({state,surface,now,onAction=()=>{}}:{stat
   const resets = filtered ? effectiveResets(selection,savedResets) : savedResets;
   const trayPreview = surface === "preview" && state.presentation.previewSource === "tray";
   const labelStyle = state.settings.windows.quotaLabelStyle;
-  const showBars = state.appearance?.taskbarWidget?.taskbarStripShowBars ?? state.appearance?.widget?.taskbarStripShowBars ?? state.settings.widgetAppearance?.taskbarStripShowBars ?? true;
+  const showBars = state.appearance?.widget?.taskbarStripShowBars ?? state.settings.widgetAppearance?.taskbarStripShowBars ?? true;
   const activationLabel = `${summary.first}. ${status}. ${state.settings.windows.lockPosition ? "Position locked." : "Drag to move."} Click for Overview; double-click for the app window.`;
   const settingsButton = <button type="button" data-widget-control className="icon-button" aria-label="Widget settings" title="Settings" onClick={() => onAction({ type: "settings" })}><Icon name="settings" /></button>;
   const credits = u.resetCreditsAvailable !== null && <div className="widget-credits"><Icon name="credits" /><span>{retained ? "Last known credits" : "Reset credits"}</span><strong>{u.resetCreditsAvailable}</strong><Icon name="chevron" /></div>;
@@ -42,7 +42,7 @@ export default function WidgetContents({state,surface,now,onAction=()=>{}}:{stat
       </div>{warningMark}
     </> : mode === "taskbar-strip" ? <>
       <div className={`glance-target taskbar-strip-rows${showBars ? "" : " bars-off"}`} role="button" tabIndex={0} aria-label={activationLabel}>
-        <TaskbarStripReadings windows={u.windows} selection={selection} showBars={showBars} retained={retained} now={now} />
+        <TaskbarStripReadings windows={u.windows} selection={selection} labelStyle={labelStyle} showBars={showBars} retained={retained} now={now} />
       </div>{taskbarWarningMark}
     </> : <>
       <BrandMark small /><div className="glance-target hud-values" role="button" tabIndex={0} aria-label={activationLabel}>

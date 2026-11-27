@@ -339,6 +339,7 @@ pub struct Appearance {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub taskbar_widget: Option<crate::widget_appearance::EffectiveAppearance>,
     pub taskbar_overlay_active: bool,
+    pub taskbar_transparency_active: bool,
     pub placement_constraints: crate::geometry::GapConstraints,
     pub compact_sizing: std::collections::BTreeMap<String, crate::compact_sizing::ScaleState>,
     pub compact_monitor_budgets:
@@ -742,6 +743,7 @@ mod tests {
     }
     #[test]
     fn taskbar_strip_defaults_anchor_and_allowlists_round_trip() {
+        use crate::widget_appearance::TaskbarStripBorder;
         let mut settings = Settings::default();
         assert_eq!(settings.schema_version, 14);
         assert_eq!(DisplayMode::TaskbarStrip.key(), "taskbar-strip");
@@ -765,10 +767,25 @@ mod tests {
                 weekly: true,
             },
         );
+        let mut json = serde_json::to_value(&settings).unwrap();
+        json["widgetAppearance"]
+            .as_object_mut()
+            .unwrap()
+            .remove("taskbarStripBorder");
+        let previous: Settings = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            previous.widget_appearance.taskbar_strip_border,
+            TaskbarStripBorder::Automatic
+        );
+        settings.widget_appearance.taskbar_strip_border = TaskbarStripBorder::Show;
         let json = serde_json::to_value(&settings).unwrap();
         assert_eq!(json["mode"], "taskbar-strip");
         let copy: Settings = serde_json::from_value(json).unwrap();
         assert_eq!(copy.mode, DisplayMode::TaskbarStrip);
+        assert_eq!(
+            copy.widget_appearance.taskbar_strip_border,
+            TaskbarStripBorder::Show
+        );
         copy.validate().unwrap();
         let mut invalid = copy;
         invalid

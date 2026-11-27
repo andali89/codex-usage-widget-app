@@ -88,6 +88,15 @@ pub fn preset_palette(id: PresetId, dark: bool) -> Palette {
     });
     palette
 }
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TaskbarStripBorder {
+    #[default]
+    Automatic,
+    Show,
+    Hide,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct WidgetAppearance {
@@ -99,6 +108,7 @@ pub struct WidgetAppearance {
     pub taskbar_strip_show_bars: bool,
     pub taskbar_strip_in_taskbar: bool,
     pub taskbar_strip_transparent: bool,
+    pub taskbar_strip_border: TaskbarStripBorder,
     pub taskbar_strip_scale_percent: u16,
     pub preset_id: Option<PresetId>,
     pub quota_customizations: BTreeMap<PresetId, QuotaThemes>,
@@ -118,6 +128,7 @@ impl Default for WidgetAppearance {
             taskbar_strip_show_bars: true,
             taskbar_strip_in_taskbar: true,
             taskbar_strip_transparent: true,
+            taskbar_strip_border: TaskbarStripBorder::Automatic,
             taskbar_strip_scale_percent: 100,
             preset_id: None,
             quota_customizations: BTreeMap::new(),
@@ -385,6 +396,7 @@ pub struct EffectiveAppearance {
     pub taskbar_strip_show_bars: bool,
     pub taskbar_strip_in_taskbar: bool,
     pub taskbar_strip_transparent: bool,
+    pub taskbar_strip_border: TaskbarStripBorder,
     pub original_structure: bool,
     pub palette: Palette,
     pub divider: String,
@@ -745,6 +757,7 @@ impl WidgetAppearance {
             taskbar_strip_show_bars: self.taskbar_strip_show_bars,
             taskbar_strip_in_taskbar: self.taskbar_strip_in_taskbar,
             taskbar_strip_transparent: self.taskbar_strip_transparent,
+            taskbar_strip_border: self.taskbar_strip_border,
             frame_border,
             quota_text,
             original_structure: self.preset_id == Some(PresetId::Original)

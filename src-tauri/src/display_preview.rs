@@ -97,6 +97,7 @@ mod tests {
                 taskbar_strip_show_bars: false,
                 taskbar_strip_in_taskbar: false,
                 taskbar_strip_transparent: false,
+                taskbar_strip_border: crate::widget_appearance::TaskbarStripBorder::Hide,
                 taskbar_strip_scale_percent: 125,
                 show_border: false,
                 background_transparency_percent: 80,
@@ -134,6 +135,14 @@ mod tests {
         assert_eq!(effective.widget_appearance.edge_scale_percent, 80);
         assert_eq!(effective.widget_appearance.hud_scale_percent, 137);
         assert!(!effective.widget_appearance.taskbar_strip_show_bars);
+        assert_eq!(
+            effective.widget_appearance.taskbar_strip_border,
+            crate::widget_appearance::TaskbarStripBorder::Hide
+        );
+        assert_eq!(
+            saved.widget_appearance.taskbar_strip_border,
+            crate::widget_appearance::TaskbarStripBorder::Automatic
+        );
         assert_eq!(effective.widget_appearance.taskbar_strip_scale_percent, 125);
         assert!(effective.widget_appearance.compact_countdown_bold);
         assert!(effective.widget_appearance.compact_countdown_high_contrast);

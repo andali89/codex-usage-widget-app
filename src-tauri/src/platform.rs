@@ -216,11 +216,9 @@ pub fn appearance(preference: ThemePreference) -> Appearance {
     match preference {
         ThemePreference::Light => {
             state.resolved_theme = "light".into();
-            state.system_resolved_theme = "light".into();
         }
         ThemePreference::Dark => {
             state.resolved_theme = "dark".into();
-            state.system_resolved_theme = "dark".into();
         }
         ThemePreference::System => {}
     }

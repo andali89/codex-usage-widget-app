@@ -65,8 +65,7 @@ test("appearance controls show only active-theme custom quotas and no embedded p
   assert.deepEqual(before.usage,state.usage);
 
   assert.match(html,/Bold countdown text/);assert.match(html,/Higher contrast countdown text/);
-  assert.match(html,/id="taskbar-strip-show-bars" type="checkbox" checked=""/);
-  assert.match(html,/Show micro quota bars in Taskbar Strip/);
+  assert.doesNotMatch(html,/id="taskbar-strip-show-bars"/);
   assert.match(html,/Edge size \(%\)/);assert.match(html,/HUD size \(%\)/);assert.match(html,/Taskbar Strip size \(%\)/);
   assert.match(html,/id="edgeScalePercent" type="number" min="80" max="300" step="1"/);
   assert.match(html,/id="hudScalePercent" type="number" min="80" max="300" step="1"/);
