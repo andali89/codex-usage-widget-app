@@ -1,6 +1,6 @@
 import type { DisplayMode, QuotaLabelStyle, ResetCountdowns, VisiblePeriods } from "./state";
 
-/** Logical client size at 100% text. Only a warning may add space to a saved layout. */
+/** Logical size at 100% text. Taskbar Strip uses the width as a cap for measured content. */
 export function compactLayout(mode: DisplayMode, style: QuotaLabelStyle, resets?: ResetCountdowns, warning = false, periods: VisiblePeriods = "both", showBars = true) {
   const count = Number(periods !== "weekly" && !!resets?.fiveHour) + Number(periods !== "five-hour" && !!resets?.weekly);
   const single = periods !== "both";

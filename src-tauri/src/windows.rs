@@ -1,5 +1,5 @@
 use crate::{
-    compact_sizing::TASKBAR_STRIP_WIDTH,
+    compact_sizing::TASKBAR_STRIP_MAX_WIDTH,
     geometry::{self, Placement, Rect},
     interaction::{ClickActivation, DetailState, Interaction, ShellState, Surface},
     model::{Appearance, DashboardPage, DashboardRequest, DisplayMode, EdgeSide, Settings},
@@ -235,7 +235,7 @@ impl Windows {
             shell_size: match settings.mode {
                 DisplayMode::ScreenEdge => (64.0, 96.0),
                 DisplayMode::CompactHud => (440.0, 44.0),
-                DisplayMode::TaskbarStrip => (TASKBAR_STRIP_WIDTH, 42.0),
+                DisplayMode::TaskbarStrip => (TASKBAR_STRIP_MAX_WIDTH, 42.0),
                 _ => (336.0, 72.0),
             },
             preview_size: if settings.mode == DisplayMode::SystemTray {
@@ -467,7 +467,7 @@ impl Windows {
             self.shell_size = match next.mode {
                 DisplayMode::ScreenEdge => (64.0, 96.0),
                 DisplayMode::CompactHud => (440.0, 44.0),
-                DisplayMode::TaskbarStrip => (TASKBAR_STRIP_WIDTH, 42.0),
+                DisplayMode::TaskbarStrip => (TASKBAR_STRIP_MAX_WIDTH, 42.0),
                 _ => (336.0, 72.0),
             };
             self.preview_size = if next.mode == DisplayMode::SystemTray {

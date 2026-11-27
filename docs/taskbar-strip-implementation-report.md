@@ -8,7 +8,7 @@ Application version baseline: **0.1.5** (settings schema **13 → 14**). No depe
 
 The strip uses neutral text and the app’s regular-weight Segoe UI Variable and Segoe UI font stack with tabular digits. The period labels align left and the percentages align right. The reset times start immediately after the shared middle-dot column. Words mode displays `5h` and `7d`, and Badges mode shows the circular `5` and `W` labels. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
 
-The base width is 112 logical pixels at 100% scale, with 2 pixels of side padding and 16 additional pixels of width when the status indicator is visible. The two rows share a content-sized label column and reserve space for long percentages and reset times. Countdown text follows the existing compact format, including `2h3m` and `2h`.
+The strip fits the visible readings up to 112 logical pixels at 100% scale, with 2 pixels of side padding and up to 16 additional pixels for the status indicator. Both rows share columns sized to their readings. The existing window anchor is used when the strip resizes. Countdown text follows the compact format, including `2h3m` and `2h`.
 
 **Display → Taskbar Strip** groups placement, transparency, the outline, and micro bars. The border preference is saved in schema 14 as `taskbarStripBorder`. It defaults to Automatic when absent. Automatic follows the shared border preference for opaque cards and hides the outline when transparent. Show and Hide apply independently of background paint. Windows high contrast keeps its system outline and opaque background. The Taskbar Strip appearance settings use the existing live preview, Save, and Cancel flow.
 
@@ -32,6 +32,8 @@ The Arial layout passed all 20 focused frontend tests (`node --test tests/taskba
 During the Arial build, Windows denied replacement of the existing `Usage.exe`. The release build succeeded with `cargo rustc --release --manifest-path src-tauri/Cargo.toml --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-arial` and the verified copy is at `src-tauri/target/release/Usage-arial.exe`.
 
 The Segoe UI layout passed 15 focused frontend tests, the frontend build, and the Rust formatting check. The release build produced `src-tauri/target/release/Usage.exe`. Its `--check-native-compact-options` run passed for both label styles and weights, including reset alignment beside the dot and room for the longest standard readings.
+
+Content fitting passed 20 focused Taskbar Strip, sizing, and countdown tests, the frontend build, and the Rust formatting check. The isolated Windows compact-options check verified that the strip shrinks for short times, expands for wide readings, and retains column alignment in Words and Badges mode at both weights. Windows denied replacement of `Usage.exe`, so the release build used `cargo rustc --release --manifest-path src-tauri/Cargo.toml --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-fit`. The tested copy is `src-tauri/target/release/Usage-fit.exe`.
 
 Manual checks remain for the physical pointer over the transparent strip, the effect of toggling Windows transparency and high contrast live, mixed-DPI monitor movement, and an actual Explorer restart on interactive Windows 10 and 11 desktops. The isolated Windows session exercised taskbar-band geometry and webview rendering using synthetic data.
 
@@ -122,7 +124,7 @@ All checks below ran against the final working tree after the last code edit unl
 
 Automated synthetic checks do not replace manual verification on real Windows 10 and Windows 11 desktops:
 
-- [ ] Inspect Taskbar Strip inside and above the taskbar clock on Windows 10 and Windows 11 with micro bars **On** (`112 × 42`) and **Off** (`112 × 36`).
+- [ ] Inspect Taskbar Strip inside and above the taskbar clock on Windows 10 and Windows 11 with micro bars **On** (up to `112 × 42`) and **Off** (up to `112 × 36`). Watch the anchor as short and long reset times change the width.
 - [ ] Check live mixed Windows polarity with light apps and a dark taskbar. Confirm the strip uses the taskbar theme inside it and the app theme above it, including when the app theme is set explicitly.
 - [ ] **DPI & Text Scaling:** Verify crisp alignment and zero clipping at 100%, 125%, 150%, 175%, and 200% DPI and Windows Text Scale 100%–225%, plus worst-case strings (`100%`, `99.9%`, `<1%`, `23h59m`, `6d23h`, `due?`).
 - [ ] **Windows High Contrast / Contrast Themes:** Confirm forced-colors legibility on Taskbar Strip and two-row Tray Hover Preview.

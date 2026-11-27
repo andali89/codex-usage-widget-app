@@ -290,7 +290,7 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .native-surface.shell.stable-compact.mode-screen-edge { padding-inline:.125rem; padding-top:.375rem; padding-bottom:1rem; }
 .native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; padding-right:.625rem; }
 .native-surface.shell.stable-compact.mode-taskbar-strip {
-  display:flex; align-items:center; gap:.1875rem; padding:.1875rem .125rem; border-radius:8px;
+  display:flex; align-items:center; gap:.1875rem; width:max-content; max-width:var(--compact-width); padding:.1875rem .125rem; border-radius:8px;
   --strip-background:#f5f5f5; --strip-text:#303030; --strip-strong-text:#101010; --strip-outline:#737373; --strip-track:rgb(0 0 0 / 16%);
   color:var(--strip-text); background:var(--strip-background); border-color:transparent;
 }
@@ -311,14 +311,14 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
   }
 }
 .taskbar-strip-rows {
-  display:grid; grid-template-columns:fit-content(1.5rem) 2rem .5rem minmax(0,1fr);
+  display:grid; grid-template-columns:fit-content(1.5rem) max-content .5rem minmax(0,max-content);
   flex:1; min-width:0; align-content:center; row-gap:.125rem; white-space:nowrap;
 }
 .taskbar-strip-rows.bars-off { row-gap:.1875rem; }
 .taskbar-strip-row-wrap,.taskbar-strip-row,.taskbar-strip-row-wrap .micro-bar { grid-column:1/-1; }
 .taskbar-strip-row-wrap { display:grid; grid-template-columns:subgrid; row-gap:.09375rem; }
 .taskbar-strip-row {
-  display:grid; grid-template-columns:1.5rem 2rem .5rem minmax(0,1fr); grid-template-columns:subgrid; align-items:baseline;
+  display:grid; grid-template-columns:1.5rem 2rem .5rem minmax(0,max-content); grid-template-columns:subgrid; align-items:baseline;
   font-size:.6875rem; font-weight:400; font-variant-numeric:tabular-nums; line-height:1.05;
 }
 .ts-lbl,.ts-rst { overflow:hidden; text-overflow:ellipsis; }

@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 
-pub const TASKBAR_STRIP_WIDTH: f64 = 112.0;
+pub const TASKBAR_STRIP_MAX_WIDTH: f64 = 112.0;
 
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,7 +49,7 @@ pub fn base_size(settings: &Settings, mode: DisplayMode) -> (f64, f64) {
     if mode == DisplayMode::TaskbarStrip {
         let show_bars = settings.widget_appearance.taskbar_strip_show_bars;
         return (
-            TASKBAR_STRIP_WIDTH + 16.0,
+            TASKBAR_STRIP_MAX_WIDTH + 16.0,
             if single {
                 if show_bars {
                     28.0

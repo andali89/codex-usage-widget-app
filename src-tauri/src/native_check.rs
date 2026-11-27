@@ -1,7 +1,7 @@
 //! Explicit isolated native integration checks (appearance/sizing also in release). Exercises this application's coordinator, never
 //! sends OS mouse/keyboard input, and records no quota values or account identifiers.
 use crate::{
-    compact_sizing::TASKBAR_STRIP_WIDTH,
+    compact_sizing::TASKBAR_STRIP_MAX_WIDTH,
     interaction::{DetailState, ShellState, Surface},
     model::{
         AppState, DisplayMode, QuotaLabelStyle, ResetCountdowns, Settings, ThemePreference,
@@ -561,7 +561,7 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                             38.0,
                         )),
                         DisplayMode::TaskbarStrip => Some((
-                            TASKBAR_STRIP_WIDTH,
+                            TASKBAR_STRIP_MAX_WIDTH,
                             if single {
                                 if five_hour {
                                     28.0
@@ -645,7 +645,12 @@ async fn compact_sizing(app: &AppHandle, service: &Service) -> Result<(), String
                             && size == last_size
                             && desired.is_none_or(|(w, h)| {
                                 content.is_some_and(|(cw, ch)| {
-                                    (cw - w.ceil()).abs() <= 1.0 && (ch - h.ceil()).abs() <= 1.0
+                                    let width_fits = if mode == DisplayMode::TaskbarStrip {
+                                        cw <= w.ceil() + 1.0
+                                    } else {
+                                        (cw - w.ceil()).abs() <= 1.0
+                                    };
+                                    width_fits && (ch - h.ceil()).abs() <= 1.0
                                 })
                             })
                         {
@@ -1097,21 +1102,29 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                                                 &&style.fontVariantNumeric==='tabular-nums'&&style.color===getComputedStyle(root).color;
                                         }});
                                 }});
-                                const wideReadingsFit=[[first[1],'99.9%'],[first[3],'23h59m']].every(([cell,sample])=>{{
-                                    const saved=cell.textContent;
-                                    cell.textContent=sample;
-                                    const fits=cell.scrollWidth<=cell.clientWidth;
-                                    cell.textContent=saved;
-                                    return fits;
-                                }});
-                                return sameColumns&&wideReadingsFit;
+                                const samples=[first[1],first[3],second[1],second[3]];
+                                const saved=samples.map(cell=>cell.textContent);
+                                try {{
+                                    ['45%','2h','100%','3h'].forEach((sample,i)=>samples[i].textContent=sample);
+                                    const shortWidth=root.getBoundingClientRect().width;
+                                    const shortTime=document.createRange();
+                                    shortTime.selectNodeContents(second[3]);
+                                    const trailingSpace=second[3].getBoundingClientRect().right-shortTime.getBoundingClientRect().right;
+                                    first[1].textContent='99.9%';
+                                    first[3].textContent='23h59m';
+                                    const wideReadingsFit=samples.every(cell=>cell.scrollWidth<=cell.clientWidth);
+                                    return sameColumns&&wideReadingsFit&&trailingSpace<2
+                                        &&root.getBoundingClientRect().width>shortWidth+5;
+                                }} finally {{
+                                    samples.forEach((cell,i)=>cell.textContent=saved[i]);
+                                }}
                             }})()"#
                         );
                         frontend_assert(
                             app,
                             "shell",
                             &expression,
-                            "taskbar-strip-text-only-aligns-columns-and-fits-wide-readings",
+                            "taskbar-strip-fits-short-and-wide-aligned-readings",
                         )
                         .await?;
                     }
@@ -1205,14 +1218,20 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 let (width, height) = match mode {
                     DisplayMode::ScreenEdge => (54.0, 124.0),
                     DisplayMode::CompactHud => (164.0, 38.0),
-                    _ => (TASKBAR_STRIP_WIDTH, 28.0),
+                    _ => (TASKBAR_STRIP_MAX_WIDTH, 28.0),
+                };
+                let expected_width = width * text * factor;
+                let width_check = if mode == DisplayMode::TaskbarStrip {
+                    format!("r.width>0&&r.width<={expected_width}+1")
+                } else {
+                    format!("Math.abs(r.width-{expected_width})<1")
                 };
                 let extra_check = if mode == DisplayMode::TaskbarStrip {
                     "root.querySelectorAll('.micro-bar').length===1"
                 } else {
                     "root.querySelectorAll('.reset-segments i').length===2"
                 };
-                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell');if(!root)return false;const r=root.getBoundingClientRect();return Math.abs(Number(getComputedStyle(root).zoom)-{factor})<.001&&Math.abs(r.width-{})<1&&Math.abs(r.height-{})<1&&{extra_check};}})()",width*text*factor,height*text*factor);
+                let expression=format!("(()=>{{const root=document.querySelector('.native-surface.shell');if(!root)return false;const r=root.getBoundingClientRect();return Math.abs(Number(getComputedStyle(root).zoom)-{factor})<.001&&{width_check}&&Math.abs(r.height-{})<1&&{extra_check};}})()",height*text*factor);
                 frontend_assert(
                     app,
                     "shell",
