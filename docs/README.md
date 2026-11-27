@@ -9,7 +9,8 @@ Store design reports, implementation reports, plans, investigation notes, valida
 
 - [GitHub publication and release guide](github-release-guide.md): automated Windows installer/portable draft releases from the `release` branch, plus the earlier manual source-publication procedure.
 - [Publication audit](publication-audit.md): tracked-file/history review, privacy findings, release artifacts, and verification limits.
-- [Version 0.1.5 release notes](v0.1.5-release-notes.md): unreleased diagnostics and account-notification correction, carried-forward compact widget changes, November 4 validation, artifact status and remaining release checks.
+- [Version 0.1.6 release notes](v0.1.6-release-notes.md): Taskbar Strip, two-row tray hover, settings upgrade, and Windows validation.
+- [Version 0.1.5 release notes](v0.1.5-release-notes.md): diagnostics, account-notification correction, and compact widget improvements from that release.
 - [Version 0.1.3 release notes](v0.1.3-release-notes.md): earlier unreleased draft with compact widget sizing and warning-spacing improvements, carried forward into the current development version.
 - [Version 0.1.2 release notes](v0.1.2-release-notes.md): published public preview with widget presets, temporary display edits and shared snapping; local validation is in the appearance report.
 - [Version 0.1.1 release notes](v0.1.1-release-notes.md): published defaults update; local Rust checks are recorded in the implementation report.
@@ -27,6 +28,9 @@ Store design reports, implementation reports, plans, investigation notes, valida
 - [Implementation and evidence](implementation-report.md): protocol-based CLI compatibility and version diagnostics, phased checklist, core/four modes/reminders/lifecycle, widget click timing/countdowns/content sizing, dependency patch, NSIS install/upgrade checks, stress measurements, compatibility gates, and AC-01–AC-40 status.
 - [Implementation handoff](implementation-handoff.md): stopped-session worktree, final checks, artifact provenance, remaining work and resumption instructions.
 - [Installed notification failure](notification-error-investigation.md): reproducible `ToastNotifier.Setting()` error, attempted fixes, evidence and investigation handoff.
+- [Taskbar & system tray display feasibility](taskbar-and-tray-display-feasibility-report.md): Windows 10/11 feasibility investigation comparing official taskbar (`ITaskbarList3`), deprecated/unsupported taskbar hacks, dynamic system tray icons, and recommended phased implementation strategy.
+- [Two-line taskbar strip design](taskbar-two-line-display-design.md): original layout proposal and validation checklist. The [two-line preview comparison](taskbar-two-line-preview.html) preserves the layout candidates.
+- [Taskbar Strip and tray hover implementation](taskbar-strip-implementation-report.md): implemented Taskbar Strip mode, `SystemUsesLightTheme` taskbar polarity, schema v14 migration, `TaskbarCreated` Explorer recovery, two-row Tray Hover Preview and 127-UTF16-safe native tooltip, validation results, and remaining manual Windows checks.
 - [Project overview and development setup](../README.md): requirements, usage, limitations, license, setup and build commands.
 - [Environment setup and validation](development-environment-setup.md): historical setup evidence, tested toolchain, presentation fixture, native validation commands, and installer smoke check.
 - [Codex protocol reference](../schemas/codex/README.md): versioned schema provenance and regeneration instructions.

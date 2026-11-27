@@ -6,7 +6,7 @@ Keep Codex remaining quota and expected reset times in view on your Windows desk
 
 An unofficial project, not affiliated with or endorsed by OpenAI. Version **0.1.5** is a public preview; see [known limitations](#known-limitations).
 
-**New in v0.1.5:** optional local diagnostics, a bounded account recheck to reduce unintended empty quota views, and clearer verification/retry messages. Includes the earlier Edge/HUD sizing and countdown-readability improvements.
+**In v0.1.6** the new Taskbar Strip shows remaining quota and reset times in two compact rows. System tray hover also shows both periods. See the [v0.1.6 release notes](docs/v0.1.6-release-notes.md). The downloads below are for the published v0.1.5 preview.
 
 ## Download and install
 

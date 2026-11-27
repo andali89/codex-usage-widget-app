@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Two-Line Colored Taskbar &amp; Tray Display — Candidate Selection</title>
+  <style>
+    :root {
+      --page-bg: #eef2f7;
+      --card-bg: #ffffff;
+      --card-border: #d4dce7;
+      --text: #12233f;
+      --muted: #516075;
+      --wallpaper-a: #cfe4ff;
+      --wallpaper-b: #e7ddff;
+      --taskbar-bg: rgba(243, 246, 251, 0.96);
+      --taskbar-border: rgba(15, 23, 42, 0.10);
+      --taskbar-text: #1a2433;
+      --taskbar-muted: #526072;
+      --widget-bg: #f7faff;
+      --widget-border: rgba(100, 116, 139, 0.35);
+      --widget-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+      --c-5h: #005fcc;
+      --c-wk: #6d28d9;
+      --c-track: rgba(15, 23, 42, 0.11);
+      --c-warn: #b45309;
+      --c-crit: #dc2626;
+      --pill-bg: #e6eef9;
+      --pill-text: #1d4ed8;
+    }
+
+    :root[data-theme="dark"] {
+      --page-bg: #0b111b;
+      --card-bg: #121b29;
+      --card-border: #243247;
+      --text: #eef4fc;
+      --muted: #9eb0c7;
+      --wallpaper-a: #0f2544;
+      --wallpaper-b: #1e183d;
+      --taskbar-bg: rgba(28, 32, 40, 0.96);
+      --taskbar-border: rgba(255, 255, 255, 0.08);
+      --taskbar-text: #f3f6fb;
+      --taskbar-muted: #a9b5c6;
+      --widget-bg: #1c222d;
+      --widget-border: rgba(148, 163, 184, 0.24);
+      --widget-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      --c-5h: #60a5fa;
+      --c-wk: #a78bfa;
+      --c-track: rgba(255, 255, 255, 0.12);
+      --c-warn: #fbbf24;
+      --c-crit: #f87171;
+      --pill-bg: rgba(96, 165, 250, 0.16);
+      --pill-text: #93c5fd;
+    }
+
+    :root[data-preset="graphite"] { --c-5h: #376d9c; --c-wk: #a63e19; }
+    :root[data-theme="dark"][data-preset="graphite"] { --c-5h: #70b8f5; --c-wk: #ffb05c; }
+    :root[data-preset="glacier"] { --c-5h: #006bc0; --c-wk: #6d28d9; }
+    :root[data-theme="dark"][data-preset="glacier"] { --c-5h: #57d7ff; --c-wk: #c18bff; }
+    :root[data-preset="matcha"] { --c-5h: #237332; --c-wk: #8f6100; }
+    :root[data-theme="dark"][data-preset="matcha"] { --c-5h: #a0e183; --c-wk: #f1d35c; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI Variable Small", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      background: var(--page-bg);
+      color: var(--text);
+      padding: 20px 24px 28px;
+      line-height: 1.4;
+    }
+
+    .board {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .top-header h1 {
+      font-size: 20px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .top-header p {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .controls select {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .card-head h2 {
+      font-size: 14.5px;
+      font-weight: 650;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--pill-bg);
+      color: var(--pill-text);
+      white-space: nowrap;
+    }
+
+    .card-desc {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: -6px;
+    }
+
+    /* Simulated Windows 11 taskbar strip */
+    .stage-row {
+      display: grid;
+      gap: 10px;
+    }
+
+    .zoom-box {
+      background: linear-gradient(135deg, var(--wallpaper-a), var(--wallpaper-b));
+      border-radius: 8px;
+      padding: 14px 14px 0;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+    }
+
+    .zoom-caption {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .zoom-preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 12px 14px;
+      background: var(--taskbar-bg);
+      margin: 0 -14px;
+      border-top: 1px solid var(--taskbar-border);
+    }
+
+    .zoom-preview .zoom-inner {
+      transform: scale(1.75);
+      transform-origin: center;
+      margin: 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .taskbar-sim {
+      margin: 0 -14px;
+      height: 46px;
+      background: var(--taskbar-bg);
+      border-top: 1px solid var(--taskbar-border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 10px;
+      gap: 6px;
+    }
+
+    .tray-icons {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--taskbar-text);
+      opacity: 0.88;
+      padding: 0 4px;
+    }
+
+    .tray-icons svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .win-clock {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 11.5px;
+      line-height: 1.25;
+      color: var(--taskbar-text);
+      font-variant-numeric: tabular-nums;
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+
+    /* THE TWO-LINE WIDGET CANDIDATES */
+    .u-strip {
+      display: inline-grid;
+      row-gap: 1px;
+      padding: 3px 7px;
+      border-radius: 6px;
+      background: var(--widget-bg);
+      border: 1px solid var(--widget-border);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      line-height: 1.25;
+      user-select: none;
+    }
+
+    .u-strip.in-taskbar {
+      background: transparent;
+      border-color: transparent;
+      padding: 3px 6px;
+    }
+
+    .u-strip.in-taskbar:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .u-row {
+      display: grid;
+      align-items: baseline;
+    }
+
+    .u-row.r-5h { color: var(--c-5h); }
+    .u-row.r-wk { color: var(--c-wk); }
+
+    /* Option A: Tight label + 4px + pct + 7px + time */
+    .opt-a .u-row {
+      grid-template-columns: 16px auto 1fr;
+      column-gap: 0;
+    }
+    .opt-a .lbl {
+      font-size: 10.5px;
+      font-weight: 500;
+      opacity: 0.78;
+      margin-right: 4px;
+    }
+    .opt-a .pct {
+      font-size: 12px;
+      font-weight: 650;
+      text-align: left;
+      min-width: 26px;
+    }
+    .opt-a .rst {
+      font-size: 11px;
+      font-weight: 450;
+      opacity: 0.82;
+      margin-left: 7px;
+      text-align: right;
+      min-width: 34px;
+    }
+
+    /* Option B: Tight label + subtle dot */
+    .opt-b .u-row {
+      grid-template-columns: 16px auto auto 1fr;
+      align-items: baseline;
+    }
+    .opt-b .lbl {
+      font-size: 10.5px;
+      font-weight: 500;
+      opacity: 0.78;
+      margin-right: 4px;
+    }
+    .opt-b .pct {
+      font-size: 12px;
+      font-weight: 650;
+      text-align: left;
+      min-width: 24px;
+    }
+    .opt-b .sep {
+      font-size: 11px;
+      opacity: 0.45;
+      margin: 0 3.5px;
+    }
+    .opt-b .rst {
+      font-size: 11px;
+      font-weight: 450;
+      opacity: 0.82;
+      text-align: right;
+      min-width: 34px;
+    }
+
+    /* Option C: Tight label + 2px micro bar under each row */
+    .opt-c {
+      row-gap: 2px;
+      padding: 3px 7px 4px;
+    }
+    .opt-c .u-row-wrap {
+      display: grid;
+      gap: 1.5px;
+    }
+    .opt-c .u-row {
+      grid-template-columns: 16px auto 1fr;
+    }
+    .opt-c .lbl {
+      font-size: 10.5px;
+      font-weight: 500;
+      opacity: 0.78;
+      margin-right: 4px;
+    }
+    .opt-c .pct {
+      font-size: 11.5px;
+      font-weight: 650;
+      text-align: left;
+      min-width: 25px;
+    }
+    .opt-c .rst {
+      font-size: 10.5px;
+      font-weight: 450;
+      opacity: 0.82;
+      margin-left: 7px;
+      text-align: right;
+      min-width: 33px;
+    }
+    .micro-bar {
+      height: 2px;
+      border-radius: 2px;
+      background: var(--c-track);
+      overflow: hidden;
+    }
+    .micro-bar i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+    }
+    .r-5h-bar i { background: var(--c-5h); }
+    .r-wk-bar i { background: var(--c-wk); }
+
+    /* Option D: Pure color (no labels, clock-width) */
+    .opt-d .u-row {
+      grid-template-columns: auto 1fr;
+    }
+    .opt-d .pct {
+      font-size: 12px;
+      font-weight: 650;
+      text-align: left;
+      min-width: 24px;
+    }
+    .opt-d .rst {
+      font-size: 11px;
+      font-weight: 450;
+      opacity: 0.82;
+      margin-left: 7px;
+      text-align: right;
+      min-width: 34px;
+    }
+
+    /* Placement comparison */
+    .desktop-scene {
+      position: relative;
+      height: 116px;
+      background: linear-gradient(135deg, var(--wallpaper-a), var(--wallpaper-b));
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    .desktop-work {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: 0 8px 4px;
+    }
+
+    .desktop-work .u-strip {
+      box-shadow: var(--widget-shadow);
+    }
+
+    .desktop-scene .taskbar-sim {
+      margin: 0;
+    }
+
+    .scene-tag {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+    }
+
+    /* Edge states strip */
+    .states-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .state-item {
+      display: grid;
+      gap: 5px;
+      justify-items: start;
+    }
+
+    .state-item span.state-lbl {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .u-strip.is-stale .u-row { opacity: 0.72; }
+    .warn-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--c-warn);
+      margin-left: 5px;
+      align-self: center;
+    }
+    .crit-mark {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--c-crit);
+      margin-left: 5px;
+      align-self: center;
+    }
+    .due-text {
+      color: var(--c-warn) !important;
+      opacity: 1 !important;
+      font-weight: 600 !important;
+    }
+    .unavail-text {
+      color: var(--taskbar-muted) !important;
+      opacity: 0.85 !important;
+    }
+    .with-status {
+      display: inline-flex;
+      align-items: center;
+    }
+    .status-col {
+      display: flex;
+      align-items: center;
+      padding-left: 3px;
+    }
+
+    .dim-meta {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <header class="top-header">
+      <div>
+        <h1>Two-Line Colored Display — Layout &amp; Placement Candidates</h1>
+        <p>5-hour (Row 1) &amp; Weekly (Row 2) remaining quota + reset countdown, sized to match the Windows two-line clock (<code>16:37 / 2026/11/26</code>).</p>
+      </div>
+      <div class="controls">
+        <label>Taskbar Theme
+          <select id="theme">
+            <option value="dark" selected>Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </label>
+        <label>Color Preset
+          <select id="preset">
+            <option value="original" selected>Original (Blue / Purple)</option>
+            <option value="glacier">Glacier (Cyan / Violet)</option>
+            <option value="graphite">Graphite (Sky / Amber)</option>
+            <option value="matcha">Matcha (Green / Gold)</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <!-- 4 Layout Candidates -->
+    <section class="grid-2">
+      <!-- Option A -->
+      <article class="card">
+        <div class="card-head">
+          <h2>Option A · Tight Label + Clean Space</h2>
+          <span class="badge">Recommended</span>
+        </div>
+        <p class="card-desc">4 px gap between label &amp; %, 7 px separation before reset time. Zero punctuation clutter.</p>
+        <div class="stage-row">
+          <div class="zoom-box">
+            <div class="zoom-caption"><span>1.75× Magnified Detail</span><span>~106 × 34 logical px</span></div>
+            <div class="zoom-preview">
+              <div class="zoom-inner">
+                <div class="u-strip opt-a">
+                  <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+                  <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+                </div>
+                <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+              </div>
+            </div>
+            <div class="taskbar-sim">
+              <div class="u-strip opt-a in-taskbar">
+                <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+                <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+              </div>
+              <div class="tray-icons" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M2.5 6.5a8 8 0 0 1 11 0M5 9.2a4.5 4.5 0 0 1 6 0M8 12h.01"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M3 6h3l3.5-3v10L6 10H3zM12 6a3 3 0 0 1 0 4"/></svg>
+                <svg viewBox="0 0 16 16"><rect x="2" y="5" width="10" height="6" rx="1"/><path d="M13.5 7v2"/></svg>
+              </div>
+              <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Option B -->
+      <article class="card">
+        <div class="card-head">
+          <h2>Option B · Tight Label + Subtle Dot</h2>
+          <span class="badge">Balanced</span>
+        </div>
+        <p class="card-desc">Same tight 4 px label gap, with a faint middle dot separating remaining % from countdown.</p>
+        <div class="stage-row">
+          <div class="zoom-box">
+            <div class="zoom-caption"><span>1.75× Magnified Detail</span><span>~114 × 34 logical px</span></div>
+            <div class="zoom-preview">
+              <div class="zoom-inner">
+                <div class="u-strip opt-b">
+                  <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="sep">·</span><span class="rst">2h17m</span></div>
+                  <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="sep">·</span><span class="rst">3d11h</span></div>
+                </div>
+                <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+              </div>
+            </div>
+            <div class="taskbar-sim">
+              <div class="u-strip opt-b in-taskbar">
+                <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="sep">·</span><span class="rst">2h17m</span></div>
+                <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="sep">·</span><span class="rst">3d11h</span></div>
+              </div>
+              <div class="tray-icons" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M2.5 6.5a8 8 0 0 1 11 0M5 9.2a4.5 4.5 0 0 1 6 0M8 12h.01"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M3 6h3l3.5-3v10L6 10H3zM12 6a3 3 0 0 1 0 4"/></svg>
+                <svg viewBox="0 0 16 16"><rect x="2" y="5" width="10" height="6" rx="1"/><path d="M13.5 7v2"/></svg>
+              </div>
+              <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Option C -->
+      <article class="card">
+        <div class="card-head">
+          <h2>Option C · Tight Label + Micro Quota Bar</h2>
+          <span class="badge">Visual Gauge</span>
+        </div>
+        <p class="card-desc">Adds a 2 px colored quota bar beneath each line for instant peripheral scanning.</p>
+        <div class="stage-row">
+          <div class="zoom-box">
+            <div class="zoom-caption"><span>1.75× Magnified Detail</span><span>~106 × 38 logical px</span></div>
+            <div class="zoom-preview">
+              <div class="zoom-inner">
+                <div class="u-strip opt-c">
+                  <div class="u-row-wrap">
+                    <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+                    <div class="micro-bar r-5h-bar"><i style="width:50%"></i></div>
+                  </div>
+                  <div class="u-row-wrap">
+                    <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+                    <div class="micro-bar r-wk-bar"><i style="width:60%"></i></div>
+                  </div>
+                </div>
+                <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+              </div>
+            </div>
+            <div class="taskbar-sim">
+              <div class="u-strip opt-c in-taskbar">
+                <div class="u-row-wrap">
+                  <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+                  <div class="micro-bar r-5h-bar"><i style="width:50%"></i></div>
+                </div>
+                <div class="u-row-wrap">
+                  <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+                  <div class="micro-bar r-wk-bar"><i style="width:60%"></i></div>
+                </div>
+              </div>
+              <div class="tray-icons" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M2.5 6.5a8 8 0 0 1 11 0M5 9.2a4.5 4.5 0 0 1 6 0M8 12h.01"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M3 6h3l3.5-3v10L6 10H3zM12 6a3 3 0 0 1 0 4"/></svg>
+                <svg viewBox="0 0 16 16"><rect x="2" y="5" width="10" height="6" rx="1"/><path d="M13.5 7v2"/></svg>
+              </div>
+              <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Option D -->
+      <article class="card">
+        <div class="card-head">
+          <h2>Option D · Pure Color (No Labels)</h2>
+          <span class="badge">Narrowest</span>
+        </div>
+        <p class="card-desc">Color alone distinguishes 5-hour vs. Weekly (matches Windows clock width; High Contrast auto-shows labels).</p>
+        <div class="stage-row">
+          <div class="zoom-box">
+            <div class="zoom-caption"><span>1.75× Magnified Detail</span><span>~88 × 34 logical px</span></div>
+            <div class="zoom-preview">
+              <div class="zoom-inner">
+                <div class="u-strip opt-d">
+                  <div class="u-row r-5h"><span class="pct">50%</span><span class="rst">2h17m</span></div>
+                  <div class="u-row r-wk"><span class="pct">60%</span><span class="rst">3d11h</span></div>
+                </div>
+                <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+              </div>
+            </div>
+            <div class="taskbar-sim">
+              <div class="u-strip opt-d in-taskbar">
+                <div class="u-row r-5h"><span class="pct">50%</span><span class="rst">2h17m</span></div>
+                <div class="u-row r-wk"><span class="pct">60%</span><span class="rst">3d11h</span></div>
+              </div>
+              <div class="tray-icons" aria-hidden="true">
+                <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M2.5 6.5a8 8 0 0 1 11 0M5 9.2a4.5 4.5 0 0 1 6 0M8 12h.01"/></svg>
+                <svg viewBox="0 0 16 16"><path d="M3 6h3l3.5-3v10L6 10H3zM12 6a3 3 0 0 1 0 4"/></svg>
+                <svg viewBox="0 0 16 16"><rect x="2" y="5" width="10" height="6" rx="1"/><path d="M13.5 7v2"/></svg>
+              </div>
+              <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- Placement Comparison -->
+    <section class="grid-2">
+      <article class="card">
+        <div class="card-head">
+          <h2>Placement 1 · Docked Flush Above Clock</h2>
+          <span class="badge">100% Official · Zero Hacks</span>
+        </div>
+        <div class="desktop-scene">
+          <span class="scene-tag">Safe Default (Win 10 &amp; Win 11)</span>
+          <div class="desktop-work">
+            <div class="u-strip opt-a">
+              <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+              <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+            </div>
+          </div>
+          <div class="taskbar-sim">
+            <div class="tray-icons" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>
+              <svg viewBox="0 0 16 16"><path d="M2.5 6.5a8 8 0 0 1 11 0M5 9.2a4.5 4.5 0 0 1 6 0M8 12h.01"/></svg>
+              <svg viewBox="0 0 16 16"><path d="M3 6h3l3.5-3v10L6 10H3zM12 6a3 3 0 0 1 0 4"/></svg>
+              <svg viewBox="0 0 16 16"><rect x="2" y="5" width="10" height="6" rx="1"/><path d="M13.5 7v2"/></svg>
+            </div>
+            <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h2>Placement 2 · Overlay Inside Taskbar</h2>
+          <span class="badge">Experimental Workaround</span>
+        </div>
+        <div class="desktop-scene">
+          <span class="scene-tag">Topmost Overlay (No Space Reservation)</span>
+          <div class="desktop-work"></div>
+          <div class="taskbar-sim">
+            <div class="u-strip opt-a in-taskbar">
+              <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+              <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+            </div>
+            <div class="tray-icons" aria-hidden="true">
+              <svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>
+              <svg viewBox="0 0 16 16"><path d="M2.5 6.5a8 8 0 0 1 11 0M5 9.2a4.5 4.5 0 0 1 6 0M8 12h.01"/></svg>
+              <svg viewBox="0 0 16 16"><path d="M3 6h3l3.5-3v10L6 10H3zM12 6a3 3 0 0 1 0 4"/></svg>
+              <svg viewBox="0 0 16 16"><rect x="2" y="5" width="10" height="6" rx="1"/><path d="M13.5 7v2"/></svg>
+            </div>
+            <div class="win-clock"><span>16:37</span><span>2026/11/26</span></div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- Edge States & Digit Widths -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Edge States &amp; Digit Alignment (Shown on Option A)</h2>
+        <span class="dim-meta">Tabular numerals · Honest missing / stale / due? markers</span>
+      </div>
+      <div class="states-grid">
+        <div class="state-item">
+          <span class="state-lbl">Single-digit &amp; 100%</span>
+          <div class="u-strip opt-a">
+            <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">8%</span><span class="rst">45m</span></div>
+            <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">100%</span><span class="rst">6d23h</span></div>
+          </div>
+        </div>
+        <div class="state-item">
+          <span class="state-lbl">Reset elapsed</span>
+          <div class="u-strip opt-a">
+            <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">0%</span><span class="rst due-text">due?</span></div>
+            <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">42%</span><span class="rst">4d11h</span></div>
+          </div>
+        </div>
+        <div class="state-item">
+          <span class="state-lbl">Stale / Last known</span>
+          <div class="u-strip opt-a is-stale with-status">
+            <div>
+              <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+              <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+            </div>
+            <div class="status-col"><span class="warn-dot" title="Out of date"></span></div>
+          </div>
+        </div>
+        <div class="state-item">
+          <span class="state-lbl">Usage blocked</span>
+          <div class="u-strip opt-a with-status">
+            <div>
+              <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct">50%</span><span class="rst">2h17m</span></div>
+              <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct">60%</span><span class="rst">3d11h</span></div>
+            </div>
+            <div class="status-col"><span class="crit-mark" title="Ordinary usage blocked">!</span></div>
+          </div>
+        </div>
+        <div class="state-item">
+          <span class="state-lbl">Unavailable (never 0%)</span>
+          <div class="u-strip opt-a">
+            <div class="u-row r-5h"><span class="lbl">5h</span><span class="pct unavail-text">—</span><span class="rst unavail-text">—</span></div>
+            <div class="u-row r-wk"><span class="lbl">Wk</span><span class="pct unavail-text">—</span><span class="rst unavail-text">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const theme = document.getElementById("theme");
+    const preset = document.getElementById("preset");
+    if (params.get("theme") === "light" || params.get("theme") === "dark") theme.value = params.get("theme");
+    if (["original", "glacier", "graphite", "matcha"].includes(params.get("preset"))) preset.value = params.get("preset");
+    const sync = () => {
+      document.documentElement.dataset.theme = theme.value;
+      document.documentElement.dataset.preset = preset.value;
+    };
+    theme.addEventListener("change", sync);
+    preset.addEventListener("change", sync);
+    sync();
+  </script>
+</body>
+</html>
