@@ -95,6 +95,8 @@ mod tests {
                 edge_scale_percent: 80,
                 hud_scale_percent: 137,
                 taskbar_strip_show_bars: false,
+                taskbar_strip_in_taskbar: false,
+                taskbar_strip_transparent: false,
                 taskbar_strip_scale_percent: 125,
                 show_border: false,
                 background_transparency_percent: 80,

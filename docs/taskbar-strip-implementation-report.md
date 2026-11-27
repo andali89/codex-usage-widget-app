@@ -1,10 +1,42 @@
 # Taskbar Strip mode and two-row tray hover — implementation evidence
 
-Date: 2026-11-26  
-Specification: [Two-line taskbar strip design](taskbar-two-line-display-design.md) (Phase 1, §§1–6 & §8, plus §7.1 two-row tray hover preview and native tooltip; §5.2 experimental in-taskbar overlay and §7.2 dynamic RGBA tray icon remain deferred).  
+Date: 2026-11-27
+Specification: [Two-line taskbar strip design](taskbar-two-line-display-design.md) (Phase 1 §§1–6 & §8, §5.2 opt-in unparented in-taskbar transparent overlay, and §7.1 two-row tray hover preview and native tooltip; §7.2 dynamic RGBA tray icon remains deferred).
 Application version baseline: **0.1.5** (settings schema **13 → 14**). No dependencies, lockfiles, Tauri capabilities, Codex protocol reads, or installer/release artifacts were changed.
 
-## Summary of implemented behavior
+## Phase 2 increment — Unparented in-taskbar overlay & transparent text-only style (2026-11-27)
+
+Added user-requested in-taskbar placement and transparent background styling for **Taskbar Strip** without `SetParent` shell injection or DeskBand COM extensions:
+
+- **Settings (`widget_appearance.rs`, `widgetAppearance.ts`, `WidgetAppearanceSettings.tsx`):**
+  - `widgetAppearance.taskbarStripInTaskbar` (default `true`, serde-default backward-compatible with schema v14): places the unparented `TaskbarStrip` shell window inside the horizontal Windows taskbar band flush left of `TrayNotifyWnd` (or the system tray icon / right-edge fallback), vertically centered inside the taskbar height. Automatically falls back to Phase 1 bottom-right work-area docking above the taskbar when unchecked, auto-hide (`ABS_AUTOHIDE`) is enabled, the taskbar is vertical/missing, or the scaled strip exceeds taskbar height (`bar.height + 4 * scale`).
+  - `widgetAppearance.taskbarStripTransparent` (default `true`): hides the card background gradient and outer border while placed inside the taskbar (`appearance.taskbarOverlayActive === true`), leaving crisp color-coded quota text (and optional 2 px micro bars via `taskbarStripShowBars`) over the native Windows taskbar chrome with a subtle native hover tint. Automatically stays opaque when fallen back above the taskbar, when Windows High Contrast is active, or when DWM composition is unavailable.
+  - Both controls participate in live temporary preview via `display_preview::Patch` and revert cleanly on Cancel.
+- **Win32 coordination (`native_windows.rs`, `geometry.rs`, `windows.rs`, `service.rs`):**
+  - Added `native_windows::taskbar_band(monitor, work)` inspecting `Shell_TrayWnd` / `Shell_SecondaryTrayWnd` + `TrayNotifyWnd` (with OS work-area band fallback when `Shell_TrayWnd` is not exposed in an isolated desktop session) and pure `geometry::taskbar_overlay_rect(...)`.
+  - Added `native_windows::is_above_taskbar(...)`, `raise_above_taskbar(...)`, taskbar mouse-up Z-order repair in `WH_MOUSE_LL`, and `clear_window_region(...)` (executed on the owning UI thread via `on_window_thread`) to remove GDI corner clipping while transparent.
+  - Preserves horizontal dragging and Left/Right arrow nudging inside the taskbar band, with **Reset position** snapping back flush left of `TrayNotifyWnd`.
+  - Forces `topmost: true` on `shell`, `preview`, and `main` popup while `taskbar_overlay_active` is active so the strip stays above `Shell_TrayWnd` and popups stay above the strip (while fullscreen suppression still hides it cleanly).
+  - Replaced full `state.appearance = platform::appearance(...)` overwrites in `service.rs` with `refresh_platform_appearance(...)` so coordinator-owned fields (`taskbar_overlay_active`, `placement_constraints`) are never clobbered on settings save or 60-second reconciliation.
+
+### Phase 2 validation (2026-11-27)
+
+| Check | Actual result |
+| --- | --- |
+| `npm.cmd run typecheck` | **Passed** (0 errors). |
+| `npm.cmd test` | **Passed — 170 / 170 tests** (including new `taskbarStripInTaskbar` / `taskbarStripTransparent` default, resolution, and disabled-state Settings assertions in `tests/taskbar-strip.test.mjs`). |
+| `npm.cmd run build` | **Passed**. |
+| `npm.cmd run rust:fmt`, `rust:check`, `rust:clippy` | **Passed** (`-D warnings`). |
+| `npm.cmd run rust:test` | **Passed — 184 app tests + 3 `auto-launch` tests passed; 1 live probe ignored**, including new `geometry::tests::taskbar_overlay_places_flush_left_of_tray_and_falls_back_cleanly` and extended `widget_appearance` / `display_preview` tests. |
+| Release executable build (`cargo rustc --release --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-taskbar`) | **Passed** (`src-tauri/target/release/Usage-taskbar.exe`, **14,134,272 bytes**, SHA-256 `80FD874E3E49F6D838A3CD142BBA3EEB79F5B4347CF376BA8875D17FD82BC2CD`; built side-by-side because `Usage.exe` was locked by an active instance). |
+| `Usage-taskbar.exe --check-native-compact-options` | **Passed — `native-check result=pass` (188 / 188 pass assertions)**, including `taskbar-strip-positioned-inside-taskbar-band=pass`, `taskbar-strip-transparent-clears-window-region=pass`, and `taskbar-strip-in-taskbar-transparent=pass` in both Light and Dark themes. |
+| `Usage-taskbar.exe --check-native-appearance` | **Passed — `native-check result=pass` (865 pass assertions)**. |
+
+Manual Windows 10/11 verification remains required for real `Shell_TrayWnd` / `TrayNotifyWnd` placement, taskbar click Z-order recovery, Win+D, Light/Dark acrylic readability, auto-hide fallback, and Explorer restart recovery.
+
+---
+
+## Summary of implemented behavior (Phase 1 + §7.1)
 
 ### 1. Settings schema v14, migration, and Rust policy (`src-tauri/src/`)
 

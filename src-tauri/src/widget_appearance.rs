@@ -97,6 +97,8 @@ pub struct WidgetAppearance {
     pub edge_scale_percent: u16,
     pub hud_scale_percent: u16,
     pub taskbar_strip_show_bars: bool,
+    pub taskbar_strip_in_taskbar: bool,
+    pub taskbar_strip_transparent: bool,
     pub taskbar_strip_scale_percent: u16,
     pub preset_id: Option<PresetId>,
     pub quota_customizations: BTreeMap<PresetId, QuotaThemes>,
@@ -114,6 +116,8 @@ impl Default for WidgetAppearance {
             edge_scale_percent: 100,
             hud_scale_percent: 100,
             taskbar_strip_show_bars: true,
+            taskbar_strip_in_taskbar: true,
+            taskbar_strip_transparent: true,
             taskbar_strip_scale_percent: 100,
             preset_id: None,
             quota_customizations: BTreeMap::new(),
@@ -141,12 +145,16 @@ mod tests {
         assert_eq!(defaults.edge_scale_percent, 100);
         assert_eq!(defaults.hud_scale_percent, 100);
         assert!(defaults.taskbar_strip_show_bars);
+        assert!(defaults.taskbar_strip_in_taskbar);
+        assert!(defaults.taskbar_strip_transparent);
         assert_eq!(defaults.taskbar_strip_scale_percent, 100);
         for value in [80, 100, 125, 137, 150, 200, 300] {
             let settings = WidgetAppearance {
                 edge_scale_percent: value,
                 hud_scale_percent: 80,
                 taskbar_strip_show_bars: false,
+                taskbar_strip_in_taskbar: false,
+                taskbar_strip_transparent: false,
                 taskbar_strip_scale_percent: value,
                 compact_countdown_bold: true,
                 compact_countdown_high_contrast: true,
@@ -159,6 +167,8 @@ mod tests {
                     assert!(resolved.compact_countdown_bold);
                     assert!(resolved.compact_countdown_high_contrast);
                     assert!(!resolved.taskbar_strip_show_bars);
+                    assert!(!resolved.taskbar_strip_in_taskbar);
+                    assert!(!resolved.taskbar_strip_transparent);
                 }
             }
         }
@@ -373,6 +383,8 @@ pub struct EffectiveAppearance {
     pub compact_countdown_bold: bool,
     pub compact_countdown_high_contrast: bool,
     pub taskbar_strip_show_bars: bool,
+    pub taskbar_strip_in_taskbar: bool,
+    pub taskbar_strip_transparent: bool,
     pub original_structure: bool,
     pub palette: Palette,
     pub divider: String,
@@ -731,6 +743,8 @@ impl WidgetAppearance {
             compact_countdown_bold: self.compact_countdown_bold,
             compact_countdown_high_contrast: self.compact_countdown_high_contrast,
             taskbar_strip_show_bars: self.taskbar_strip_show_bars,
+            taskbar_strip_in_taskbar: self.taskbar_strip_in_taskbar,
+            taskbar_strip_transparent: self.taskbar_strip_transparent,
             frame_border,
             quota_text,
             original_structure: self.preset_id == Some(PresetId::Original)

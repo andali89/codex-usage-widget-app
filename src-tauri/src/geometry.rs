@@ -364,6 +364,61 @@ pub fn anchored(
     .clamp(work)
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TaskbarBand {
+    pub bar: Rect,
+    pub tray_notify: Option<Rect>,
+}
+
+/// Place an unparented horizontal taskbar overlay flush left of the system tray,
+/// vertically centered in the taskbar. Returns `None` to fall back to work-area docking
+/// when the taskbar is vertical, too short, or too narrow for the strip.
+pub fn taskbar_overlay_rect(
+    band: TaskbarBand,
+    size: (f64, f64),
+    scale: f64,
+    tray: Option<Rect>,
+    placement_x: f64,
+    anchor_h: HorizontalAnchor,
+) -> Option<Rect> {
+    if band.bar.width <= band.bar.height
+        || band.bar.height < 24.0 * scale.max(1.0) * 0.5
+        || size.1 > band.bar.height + 4.0 * scale
+        || size.0 + 16.0 * scale > band.bar.width
+    {
+        return None;
+    }
+    let min_right = band.bar.x + 80.0 * scale;
+    let mut right_limit = band
+        .tray_notify
+        .filter(|notify| notify.x > min_right && notify.x < band.bar.right())
+        .map(|notify| notify.x);
+    if let Some(icon) = tray.filter(|icon| {
+        icon.x > min_right
+            && icon.x < band.bar.right()
+            && icon.y + icon.height / 2.0 >= band.bar.y
+            && icon.y + icon.height / 2.0 <= band.bar.bottom()
+    }) {
+        right_limit = Some(right_limit.map_or(icon.x, |limit| limit.min(icon.x)));
+    }
+    let right_limit = right_limit.unwrap_or_else(|| band.bar.right() - 260.0 * scale);
+    let gap = (6.0 * scale).round();
+    let max_x = (band.bar.right() - size.0).max(band.bar.x);
+    let default_x = (right_limit - gap - size.0).clamp(band.bar.x, max_x);
+    let x = match anchor_h {
+        HorizontalAnchor::Right => default_x,
+        HorizontalAnchor::Left => (band.bar.x + gap).clamp(band.bar.x, max_x),
+        HorizontalAnchor::None => (band.bar.x + placement_x * scale).clamp(band.bar.x, max_x),
+    };
+    let y = band.bar.y + ((band.bar.height - size.1) / 2.0).round();
+    Some(Rect {
+        x,
+        y,
+        width: size.0,
+        height: size.1,
+    })
+}
+
 /// HUD panels are centered on the actual trigger, then constrained to usable space.
 pub fn centered_panel(trigger: Rect, width: f64, height: f64, gap: f64, work: Rect) -> Rect {
     let mut rect = anchored(trigger, width, height, gap, work, None);
@@ -1036,6 +1091,163 @@ mod tests {
                 assert_eq!(panel.bottom(), work.bottom());
             }
         }
+    }
+
+    #[test]
+    fn taskbar_overlay_places_flush_left_of_tray_and_falls_back_cleanly() {
+        let win11_bar = Rect {
+            x: 0.0,
+            y: 1032.0,
+            width: 1920.0,
+            height: 48.0,
+        };
+        let tray_notify = Rect {
+            x: 1640.0,
+            y: 1032.0,
+            width: 280.0,
+            height: 48.0,
+        };
+        let band = TaskbarBand {
+            bar: win11_bar,
+            tray_notify: Some(tray_notify),
+        };
+        let rect =
+            taskbar_overlay_rect(band, (122.0, 42.0), 1.0, None, 0.0, HorizontalAnchor::Right)
+                .expect("win11 bottom taskbar fits");
+        assert_eq!(
+            rect,
+            Rect {
+                x: 1512.0,
+                y: 1035.0,
+                width: 122.0,
+                height: 42.0
+            }
+        );
+
+        // Hover preview anchored above an in-taskbar trigger stays in work area with a vertical corridor.
+        let work = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1032.0,
+        };
+        let preview = centered_panel(rect, 340.0, 300.0, 8.0, work);
+        assert!(preview.bottom() <= work.bottom());
+        assert!(corridor_contains(
+            rect,
+            preview,
+            rect.x + 20.0,
+            rect.y - 4.0
+        ));
+
+        // 150% DPI scaling keeps proportional gap and centering.
+        let hidpi_band = TaskbarBand {
+            bar: Rect {
+                x: 0.0,
+                y: 1368.0,
+                width: 2560.0,
+                height: 72.0,
+            },
+            tray_notify: Some(Rect {
+                x: 2160.0,
+                y: 1368.0,
+                width: 400.0,
+                height: 72.0,
+            }),
+        };
+        let hidpi = taskbar_overlay_rect(
+            hidpi_band,
+            (183.0, 63.0),
+            1.5,
+            None,
+            0.0,
+            HorizontalAnchor::Right,
+        )
+        .expect("150% DPI fits");
+        assert_eq!(hidpi.x, 1968.0);
+        assert_eq!(hidpi.y, 1373.0);
+
+        // Windows 10 40px taskbar accepts 42px strip (invisible 1px borders) vertically centered.
+        let win10 = taskbar_overlay_rect(
+            TaskbarBand {
+                bar: Rect {
+                    x: 0.0,
+                    y: 1040.0,
+                    width: 1920.0,
+                    height: 40.0,
+                },
+                tray_notify: Some(Rect {
+                    x: 1650.0,
+                    y: 1040.0,
+                    width: 270.0,
+                    height: 40.0,
+                }),
+            },
+            (122.0, 42.0),
+            1.0,
+            None,
+            0.0,
+            HorizontalAnchor::Right,
+        )
+        .expect("win10 40px taskbar fits");
+        assert_eq!(win10.x, 1522.0);
+        assert_eq!(win10.y, 1039.0);
+
+        // Tray icon further left than TrayNotifyWnd shifts the strip left to avoid overlap.
+        let with_icon = taskbar_overlay_rect(
+            band,
+            (122.0, 42.0),
+            1.0,
+            Some(Rect {
+                x: 1600.0,
+                y: 1044.0,
+                width: 24.0,
+                height: 24.0,
+            }),
+            0.0,
+            HorizontalAnchor::Right,
+        )
+        .unwrap();
+        assert_eq!(with_icon.x, 1472.0);
+
+        // User horizontal offset clamps inside the taskbar band.
+        let dragged = taskbar_overlay_rect(
+            band,
+            (122.0, 42.0),
+            1.0,
+            None,
+            900.0,
+            HorizontalAnchor::None,
+        )
+        .unwrap();
+        assert_eq!(dragged.x, 900.0);
+        assert_eq!(dragged.y, 1035.0);
+
+        // Vertical taskbar or oversized scaled strip falls back to work-area docking (None).
+        let vertical = TaskbarBand {
+            bar: Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 62.0,
+                height: 1080.0,
+            },
+            tray_notify: None,
+        };
+        assert_eq!(
+            taskbar_overlay_rect(
+                vertical,
+                (122.0, 42.0),
+                1.0,
+                None,
+                0.0,
+                HorizontalAnchor::Right
+            ),
+            None
+        );
+        assert_eq!(
+            taskbar_overlay_rect(band, (183.0, 63.0), 1.0, None, 0.0, HorizontalAnchor::Right),
+            None
+        );
     }
 }
 

@@ -338,6 +338,7 @@ pub struct Appearance {
     pub widget: crate::widget_appearance::EffectiveAppearance,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub taskbar_widget: Option<crate::widget_appearance::EffectiveAppearance>,
+    pub taskbar_overlay_active: bool,
     pub placement_constraints: crate::geometry::GapConstraints,
     pub compact_sizing: std::collections::BTreeMap<String, crate::compact_sizing::ScaleState>,
     pub compact_monitor_budgets:

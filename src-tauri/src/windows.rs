@@ -141,6 +141,7 @@ fn default_anchors(mode: DisplayMode) -> geometry::SnapAnchors {
 pub struct Windows {
     preview_freeze: bool,
     pub gap_constraints: geometry::GapConstraints,
+    pub taskbar_overlay_active: bool,
     inferred_anchors: std::collections::BTreeMap<String, geometry::SnapAnchors>,
     pub composition_failed: bool,
     pub interaction: Interaction,
@@ -208,6 +209,7 @@ impl Windows {
         Self {
             preview_freeze: false,
             gap_constraints: geometry::GapConstraints::default(),
+            taskbar_overlay_active: false,
             inferred_anchors: std::collections::BTreeMap::new(),
             composition_failed: false,
             interaction: Interaction::new(
@@ -431,7 +433,7 @@ impl Windows {
         false
     }
     fn external_foreground(&mut self, settings: &Settings) {
-        if settings.windows.always_on_top
+        if (settings.windows.always_on_top || self.taskbar_overlay_active)
             && self.interaction.compact_visible()
             && !self.interaction.state.dragging
         {
@@ -878,7 +880,53 @@ impl Windows {
                         && (-100..=100).contains(&dx)
                         && (-100..=100).contains(&dy) =>
                 {
-                    if let Some(mut p) = self.current_placement(app) {
+                    if self.taskbar_overlay_active {
+                        if dx != 0 {
+                            if let Some(shell) = app.get_webview_window("shell") {
+                                if let (Ok(pos), Ok(size), Ok(monitor)) = (
+                                    shell.outer_position(),
+                                    shell.outer_size(),
+                                    self.monitor(app, settings),
+                                ) {
+                                    let scale = monitor.scale_factor();
+                                    let monitor_rect = Rect {
+                                        x: monitor.position().x as f64,
+                                        y: monitor.position().y as f64,
+                                        width: monitor.size().width as f64,
+                                        height: monitor.size().height as f64,
+                                    };
+                                    let work_area = monitor.work_area();
+                                    let work_rect = Rect {
+                                        x: work_area.position.x as f64,
+                                        y: work_area.position.y as f64,
+                                        width: work_area.size.width as f64,
+                                        height: work_area.size.height as f64,
+                                    };
+                                    if let Some(band) =
+                                        native::taskbar_band(monitor_rect, work_rect)
+                                    {
+                                        let max_x =
+                                            (band.bar.right() - size.width as f64).max(band.bar.x);
+                                        let next_x = (pos.x as f64 + dx as f64 * scale)
+                                            .clamp(band.bar.x, max_x);
+                                        placement = Some(PlacementUpdate {
+                                            placement: Placement {
+                                                monitor: monitor.name().cloned(),
+                                                x: (next_x - band.bar.x) / scale,
+                                                y: 0.0,
+                                            },
+                                            edge_side: None,
+                                            anchors: Some(geometry::SnapAnchors {
+                                                horizontal: geometry::HorizontalAnchor::None,
+                                                vertical: geometry::VerticalAnchor::Bottom,
+                                            }),
+                                        });
+                                        self.interaction.collapse();
+                                    }
+                                }
+                            }
+                        }
+                    } else if let Some(mut p) = self.current_placement(app) {
                         p.x += dx as f64;
                         p.y += dy as f64;
                         let mut anchors = self.anchors(settings);
@@ -1129,6 +1177,50 @@ impl Windows {
         bounds.x = center - width / 2.0;
         bounds.width = width;
         bounds.height = height;
+        let monitor_rect = Rect {
+            x: monitor.position().x as f64,
+            y: monitor.position().y as f64,
+            width: monitor.size().width as f64,
+            height: monitor.size().height as f64,
+        };
+        if settings.mode == DisplayMode::TaskbarStrip
+            && settings.widget_appearance.taskbar_strip_in_taskbar
+        {
+            if let Some(band) = native::taskbar_band(monitor_rect, work) {
+                if let Some(default_rect) = geometry::taskbar_overlay_rect(
+                    band,
+                    (width, height),
+                    scale,
+                    self.tray,
+                    0.0,
+                    geometry::HorizontalAnchor::Right,
+                ) {
+                    let max_x = (band.bar.right() - width).max(band.bar.x);
+                    let clamped_x = bounds.x.clamp(band.bar.x, max_x);
+                    let snap_right = (clamped_x - default_rect.x).abs() <= 12.0 * scale;
+                    return Some(PlacementUpdate {
+                        placement: Placement {
+                            monitor: monitor.name().cloned(),
+                            x: if snap_right {
+                                0.0
+                            } else {
+                                (clamped_x - band.bar.x) / scale
+                            },
+                            y: 0.0,
+                        },
+                        edge_side: None,
+                        anchors: Some(geometry::SnapAnchors {
+                            horizontal: if snap_right {
+                                geometry::HorizontalAnchor::Right
+                            } else {
+                                geometry::HorizontalAnchor::None
+                            },
+                            vertical: geometry::VerticalAnchor::Bottom,
+                        }),
+                    });
+                }
+            }
+        }
         let edge = settings.mode == DisplayMode::ScreenEdge;
         let previous_right = settings.windows.edge_side == EdgeSide::Right;
         let delta = bounds.x + bounds.width / 2.0 - work.x - work.width / 2.0;
@@ -1291,24 +1383,15 @@ impl Windows {
         } else {
             None
         };
+        self.taskbar_overlay_active = false;
+        let mut taskbar_bar = None;
         if settings.mode != DisplayMode::SystemTray && self.interaction.compact_visible() {
-            if let Some(shell) = self.ensure(
-                app,
-                "shell",
-                self.shell_size,
-                service,
-                settings.windows.always_on_top,
-            )? {
-                native::configure(
-                    &shell,
-                    native::WindowPolicy {
-                        tool: true,
-                        no_activate: false,
-                        topmost: settings.windows.always_on_top,
-                        shadow: false,
-                        standard: None,
-                    },
-                )?;
+            let initial_topmost = settings.windows.always_on_top
+                || (settings.mode == DisplayMode::TaskbarStrip
+                    && settings.widget_appearance.taskbar_strip_in_taskbar);
+            if let Some(shell) =
+                self.ensure(app, "shell", self.shell_size, service, initial_topmost)?
+            {
                 let outer_size = native::content_outer_size(&shell, self.shell_size, scale)?;
                 let placement = settings
                     .windows
@@ -1365,20 +1448,53 @@ impl Windows {
                         .insert(settings.mode.key().into(), anchors);
                 }
                 let anchors = self.anchors(settings);
-                let mut rect = geometry::resolve_anchors(
-                    Rect {
-                        x: work.x + placement.x * scale,
-                        y: work.y + placement.y * scale,
-                        width: outer_size.0,
-                        height: outer_size.1,
+                let overlay = if settings.mode == DisplayMode::TaskbarStrip
+                    && settings.widget_appearance.taskbar_strip_in_taskbar
+                {
+                    native::taskbar_band(monitor_rect, work).and_then(|band| {
+                        geometry::taskbar_overlay_rect(
+                            band,
+                            outer_size,
+                            scale,
+                            self.tray,
+                            placement.x,
+                            anchors.horizontal,
+                        )
+                        .map(|rect| (band.bar, rect))
+                    })
+                } else {
+                    None
+                };
+                let mut rect = if let Some((bar, overlay_rect)) = overlay {
+                    self.taskbar_overlay_active = true;
+                    taskbar_bar = Some(bar);
+                    overlay_rect
+                } else {
+                    geometry::resolve_anchors(
+                        Rect {
+                            x: work.x + placement.x * scale,
+                            y: work.y + placement.y * scale,
+                            width: outer_size.0,
+                            height: outer_size.1,
+                        },
+                        work,
+                        anchors,
+                        self.gap_constraints.margins,
+                        free.margins,
+                        (settings.mode == DisplayMode::ScreenEdge)
+                            .then_some(settings.windows.edge_side == EdgeSide::Right),
+                    )
+                };
+                native::configure(
+                    &shell,
+                    native::WindowPolicy {
+                        tool: true,
+                        no_activate: false,
+                        topmost: settings.windows.always_on_top || self.taskbar_overlay_active,
+                        shadow: false,
+                        standard: None,
                     },
-                    work,
-                    anchors,
-                    self.gap_constraints.margins,
-                    free.margins,
-                    (settings.mode == DisplayMode::ScreenEdge)
-                        .then_some(settings.windows.edge_side == EdgeSide::Right),
-                );
+                )?;
                 if !state.dragging {
                     frame(&shell, rect)?;
                 } else if let (Ok(p), Ok(s)) = (shell.outer_position(), shell.outer_size()) {
@@ -1389,18 +1505,31 @@ impl Windows {
                         height: s.height as f64,
                     };
                 }
-                native::round_corners(
-                    &shell,
-                    match settings.mode {
-                        DisplayMode::ScreenEdge => 16.0,
-                        DisplayMode::CompactHud => 12.0,
-                        DisplayMode::TaskbarStrip => 8.0,
-                        _ => 14.0,
-                    } * widget_scale,
-                )?;
+                let transparent_overlay = self.taskbar_overlay_active
+                    && settings.widget_appearance.taskbar_strip_transparent
+                    && shadow
+                    && !self.composition_failed
+                    && native::composition_available();
+                if transparent_overlay {
+                    native::clear_window_region(&shell)?;
+                } else {
+                    native::round_corners(
+                        &shell,
+                        match settings.mode {
+                            DisplayMode::ScreenEdge => 16.0,
+                            DisplayMode::CompactHud => 12.0,
+                            DisplayMode::TaskbarStrip => 8.0,
+                            _ => 14.0,
+                        } * widget_scale,
+                    )?;
+                }
                 if self.interaction.compact_visible() && self.ready_shell.is_some() {
                     native::show_without_activation(&shell)?;
-                    if raise_shell {
+                    if self.taskbar_overlay_active {
+                        if raise_shell || !native::is_above_taskbar(&shell, monitor_rect) {
+                            native::raise_above_taskbar(&shell)?;
+                        }
+                    } else if raise_shell {
                         native::raise_without_activation(&shell)?;
                     }
                     trigger = Some(rect);
@@ -1453,20 +1582,20 @@ impl Windows {
             && !state.menu_open
         {
             if let Some(trigger) = trigger {
+                let shell_topmost = settings.windows.always_on_top || self.taskbar_overlay_active;
                 if let Some(preview) = self.ensure(
                     app,
                     "preview",
                     self.preview_size,
                     service,
-                    settings.windows.always_on_top || state.preview_source == Surface::Tray,
+                    shell_topmost || state.preview_source == Surface::Tray,
                 )? {
                     native::configure(
                         &preview,
                         native::WindowPolicy {
                             tool: true,
                             no_activate: true,
-                            topmost: settings.windows.always_on_top
-                                || state.preview_source == Surface::Tray,
+                            topmost: shell_topmost || state.preview_source == Surface::Tray,
                             shadow: false,
                             standard: None,
                         },
@@ -1514,13 +1643,14 @@ impl Windows {
             native::hide(&preview);
         }
         let mut popup = None;
+        let shell_topmost = settings.windows.always_on_top || self.taskbar_overlay_active;
         let main = if state.detail != DetailState::Closed {
             self.ensure(
                 app,
                 "main",
                 (620.0, 640.0),
                 service,
-                state.detail == DetailState::Popup && settings.windows.always_on_top,
+                state.detail == DetailState::Popup && shell_topmost,
             )?
         } else {
             app.get_webview_window("main")
@@ -1542,7 +1672,7 @@ impl Windows {
                     native::WindowPolicy {
                         tool: !standard,
                         no_activate: false,
-                        topmost: !standard && settings.windows.always_on_top,
+                        topmost: !standard && shell_topmost,
                         shadow,
                         standard: Some(standard),
                     },
@@ -1743,6 +1873,7 @@ impl Windows {
             trigger,
             shell: shell_bounds,
             tray: self.tray,
+            taskbar: taskbar_bar,
             source: state.preview_source,
             preview: preview_bounds,
             popup,

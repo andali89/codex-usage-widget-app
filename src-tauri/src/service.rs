@@ -192,6 +192,16 @@ fn effective_settings(state: &AppState) -> Settings {
         .map(|p| p.effective(&state.settings))
         .unwrap_or_else(|| state.settings.clone())
 }
+fn refresh_platform_appearance(state: &mut AppState) {
+    let resolved = platform::appearance(effective_settings(state).theme_preference);
+    state.appearance.theme_preference = resolved.theme_preference;
+    state.appearance.resolved_theme = resolved.resolved_theme;
+    state.appearance.system_resolved_theme = resolved.system_resolved_theme;
+    state.appearance.high_contrast = resolved.high_contrast;
+    state.appearance.transparency_allowed = resolved.transparency_allowed;
+    state.appearance.reduced_motion = resolved.reduced_motion;
+    state.appearance.text_scale = resolved.text_scale;
+}
 fn resolve_display(app: &AppHandle, state: &mut AppState) {
     if state
         .display_preview
@@ -655,8 +665,7 @@ pub fn start(
                     scheduler.request(now);
                 }
                 let previous_high_contrast = state.appearance.high_contrast;
-                state.appearance =
-                    platform::appearance(effective_settings(&state).theme_preference);
+                refresh_platform_appearance(&mut state);
                 reconcile_timezone(
                     &mut timezone,
                     &mut state,
@@ -832,7 +841,7 @@ pub fn start(
                             };
                             let _=reply.send(result);
                         },
-                        Action::Appearance => { reconcile_notifications(&app,&mut notification,&mut reminders,&mut scheduler,now);state.reminders=reminders.snapshot(notification.diagnostic());state.appearance = platform::appearance(effective_settings(&state).theme_preference);reconcile_timezone(&mut timezone,&mut state,&mut reminders,&mut scheduler,&mut generation,wall,now); coordinate(&app, &mut state, &mut windows, &actor_service, None); },
+                        Action::Appearance => { reconcile_notifications(&app,&mut notification,&mut reminders,&mut scheduler,now);state.reminders=reminders.snapshot(notification.diagnostic());refresh_platform_appearance(&mut state);reconcile_timezone(&mut timezone,&mut state,&mut reminders,&mut scheduler,&mut generation,wall,now); coordinate(&app, &mut state, &mut windows, &actor_service, None); },
                         Action::Tooltip => { if tooltip_enabled(&state) { if let Some(tray) = app.tray_by_id("main") { let _ = tray.set_tooltip(Some(tooltip(&state.usage))); } } },
                         Action::Window(input) => {
                             let reconcile = matches!(input, Input::Reconcile | Input::Lock(false));
@@ -917,11 +926,11 @@ pub fn start(
                                         crate::diagnostics::event("settings_saved",||serde_json::json!({"connection_reset":replaced_profile || state.usage.connection=="starting"}));
                                         state.storage_diagnostic = None;
                                         reconcile_autostart(&app,&mut state,&store,&reminders.data,true);
-                                        state.appearance = platform::appearance(effective_settings(&state).theme_preference);
+                                        refresh_platform_appearance(&mut state);
                                         windows.handle(&app, Input::Environment, &state.settings, now);
                                         coordinate(&app, &mut state, &mut windows, &actor_service, None);
                                         scheduler.set_cadence(now, windows.cadence(&state.settings));
-                                        state.appearance = platform::appearance(effective_settings(&state).theme_preference);
+                                        refresh_platform_appearance(&mut state);
                                         if let Some(window) = app.get_webview_window("main") {
                                             let theme = match state.settings.theme_preference { model::ThemePreference::System => None, model::ThemePreference::Light => Some(tauri::Theme::Light), model::ThemePreference::Dark => Some(tauri::Theme::Dark) };
                                             let _ = window.set_theme(theme);
@@ -1143,6 +1152,7 @@ fn coordinate(
     } else {
         windows.coordination_fault = None;
     }
+    state.appearance.taskbar_overlay_active = windows.taskbar_overlay_active;
     state.appearance.placement_constraints = windows.gap_constraints;
     state.presentation = windows.interaction.state.clone();
     state.dashboard_visible =

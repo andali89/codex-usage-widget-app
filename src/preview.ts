@@ -73,6 +73,9 @@ for(const [key,param] of [["edgeScalePercent","edgeSize"],["hudScalePercent","hu
   const percent=Number(query.get(param));if(Number.isInteger(percent)&&percent>=80&&percent<=300)state.settings.widgetAppearance[key]=percent;
 }
 if(query.get("showBars")==="false")state.settings.widgetAppearance.taskbarStripShowBars=false;
+if(query.get("inTaskbar")==="false")state.settings.widgetAppearance.taskbarStripInTaskbar=false;
+if(query.get("transparent")==="false")state.settings.widgetAppearance.taskbarStripTransparent=false;
+state.appearance.taskbarOverlayActive = state.settings.mode === "taskbar-strip" && state.settings.widgetAppearance.taskbarStripInTaskbar;
 state.settings.widgetAppearance.compactCountdownBold=query.has("boldCountdown");
 state.settings.widgetAppearance.compactCountdownHighContrast=query.has("contrastCountdown");
 state.appearance.widget=resolveWidgetAppearance(state.settings.widgetAppearance,state.appearance.resolvedTheme,state.appearance.highContrast,false);

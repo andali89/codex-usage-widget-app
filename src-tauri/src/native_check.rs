@@ -782,6 +782,7 @@ async fn appearance_check(app: &AppHandle, service: &Service) -> Result<(), Stri
             settings.windows.lock_position = true;
             settings.windows.always_on_top = true;
             settings.windows.suppress_fullscreen = false;
+            settings.widget_appearance.taskbar_strip_in_taskbar = false;
             settings.widget_appearance.background_transparency_percent = 0;
             save_settings(service, settings).await?;
             let revision = service.snapshot().await?.settings.revision;
@@ -965,6 +966,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
     setup.widget_appearance.hud_scale_percent = 100;
     setup.widget_appearance.taskbar_strip_scale_percent = 100;
     setup.widget_appearance.taskbar_strip_show_bars = true;
+    setup.widget_appearance.taskbar_strip_in_taskbar = false;
     for mode in [
         DisplayMode::ScreenEdge,
         DisplayMode::CompactHud,
@@ -1055,7 +1057,41 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 .await?;
                 let mut restore_bars = service.snapshot().await?.settings;
                 restore_bars.widget_appearance.taskbar_strip_show_bars = true;
+                restore_bars.widget_appearance.taskbar_strip_in_taskbar = true;
+                restore_bars.widget_appearance.taskbar_strip_transparent = true;
                 save_settings(service, restore_bars).await?;
+                let overlay_active = service.snapshot().await?.appearance.taskbar_overlay_active;
+                if overlay_active {
+                    let shell = app
+                        .get_webview_window("shell")
+                        .ok_or("taskbar-overlay-shell")?;
+                    let monitor = shell
+                        .current_monitor()
+                        .map_err(|_| "taskbar-overlay-monitor")?
+                        .ok_or("taskbar-overlay-monitor")?;
+                    let work = monitor.work_area();
+                    let pos = shell.outer_position().map_err(|_| "taskbar-overlay-pos")?;
+                    let inside_bottom = pos.y >= work.position.y + work.size.height as i32 - 4;
+                    let inside_top = pos.y < work.position.y;
+                    require(
+                        inside_bottom || inside_top,
+                        "taskbar-strip-positioned-inside-taskbar-band",
+                    )?;
+                    require(
+                        !crate::native_windows::has_rounded_corners(&shell),
+                        "taskbar-strip-transparent-clears-window-region",
+                    )?;
+                    frontend_assert(
+                        app,
+                        "shell",
+                        "(()=>{const s=document.querySelector('.native-surface.shell.mode-taskbar-strip');if(!s)return false;const c=getComputedStyle(s);return s.classList.contains('taskbar-transparent')&&c.backgroundColor==='rgba(0, 0, 0, 0)'&&c.backgroundImage==='none'&&c.borderTopColor==='rgba(0, 0, 0, 0)';})()",
+                        "taskbar-strip-in-taskbar-transparent",
+                    )
+                    .await?;
+                }
+                let mut desktop_dock = service.snapshot().await?.settings;
+                desktop_dock.widget_appearance.taskbar_strip_in_taskbar = false;
+                save_settings(service, desktop_dock).await?;
             }
             let text = f64::from(service.snapshot().await?.appearance.text_scale) / 100.0;
             for percent in [80, 100, 125, 137, 150, 200, 300] {

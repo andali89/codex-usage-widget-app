@@ -142,4 +142,17 @@ test("WidgetContents renders Taskbar Strip blocked/warning indicators and two-ro
   const mixedThemeState = makeState("taskbar-strip");
   const settingsHtml = renderToStaticMarkup(createElement(WidgetAppearanceSettings, { state: mixedThemeState, draft: mixedThemeState.settings, onChange: () => {} }));
   assert.match(settingsHtml, /Editing Dark colors \(matching Windows taskbar\) for Original/);
+  assert.match(settingsHtml, /id="taskbar-strip-in-taskbar"[^>]*checked/);
+  assert.match(settingsHtml, /id="taskbar-strip-transparent"[^>]*checked/);
+
+  const desktopOnly = structuredClone(mixedThemeState.settings);
+  desktopOnly.widgetAppearance.taskbarStripInTaskbar = false;
+  const disabledTransparentHtml = renderToStaticMarkup(createElement(WidgetAppearanceSettings, { state: mixedThemeState, draft: desktopOnly, onChange: () => {} }));
+  assert.match(disabledTransparentHtml, /id="taskbar-strip-transparent"[^>]*disabled/);
+
+  assert.equal(defaultWidgetAppearance().taskbarStripInTaskbar, true);
+  assert.equal(defaultWidgetAppearance().taskbarStripTransparent, true);
+  const resolvedOff = resolveWidgetAppearance({ ...defaultWidgetAppearance(), taskbarStripInTaskbar: false, taskbarStripTransparent: false }, "dark");
+  assert.equal(resolvedOff.taskbarStripInTaskbar, false);
+  assert.equal(resolvedOff.taskbarStripTransparent, false);
 });

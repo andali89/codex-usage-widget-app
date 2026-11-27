@@ -61,6 +61,7 @@ pub struct Regions {
     pub second_monitor: Option<Rect>,
     pub shell: Option<Rect>,
     pub tray: Option<Rect>,
+    pub taskbar: Option<Rect>,
     pub source: Surface,
 }
 struct Hooks {
@@ -269,21 +270,35 @@ fn observe(x: f64, y: f64, click: bool) {
 }
 
 unsafe extern "system" fn mouse_callback(code: i32, message: WPARAM, data: LPARAM) -> LRESULT {
-    if code >= 0
-        && data != 0
-        && [
+    if code >= 0 && data != 0 {
+        let packet = &*(data as *const MSLLHOOKSTRUCT);
+        if [
             WM_MOUSEMOVE as usize,
             WM_LBUTTONDOWN as usize,
             WM_RBUTTONDOWN as usize,
         ]
         .contains(&message)
-    {
-        let packet = &*(data as *const MSLLHOOKSTRUCT);
-        observe(
-            packet.pt.x as f64,
-            packet.pt.y as f64,
-            message != WM_MOUSEMOVE as usize,
-        );
+        {
+            observe(
+                packet.pt.x as f64,
+                packet.pt.y as f64,
+                message != WM_MOUSEMOVE as usize,
+            );
+        } else if [WM_LBUTTONUP as usize, WM_RBUTTONUP as usize].contains(&message) {
+            if let Some(hooks) = HOOKS.get().and_then(|h| h.try_lock().ok()) {
+                let (x, y) = (packet.pt.x as f64, packet.pt.y as f64);
+                let r = hooks.regions;
+                if r.taskbar.is_some_and(|tb| tb.contains(x, y))
+                    && !r.shell.is_some_and(|s| s.contains(x, y))
+                    && !r.popup.is_some_and(|p| p.contains(x, y))
+                {
+                    let _ = hooks
+                        .service
+                        .0
+                        .try_send(Action::Window(Input::ExternalForeground));
+                }
+            }
+        }
     }
     CallNextHookEx(std::ptr::null_mut(), code, message, data)
 }
@@ -729,6 +744,182 @@ pub fn is_above(window: &WebviewWindow, anchor: &WebviewWindow) -> bool {
         previous = unsafe { GetWindow(previous, GW_HWNDPREV) };
     }
     false
+}
+
+pub fn raise_above_taskbar(window: &WebviewWindow) -> Result<(), &'static str> {
+    on_window_thread(window, |window| {
+        let hwnd = window.hwnd().map_err(|_| "native-window-handle")?.0 as HWND;
+        if unsafe {
+            SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            )
+        } == 0
+        {
+            Err("native-raise-window")
+        } else {
+            Ok(())
+        }
+    })
+}
+
+fn find_taskbar_hwnd(monitor: Rect) -> Option<(HWND, Rect)> {
+    let inspect = |hwnd: HWND| -> Option<(HWND, Rect)> {
+        if hwnd.is_null() || unsafe { IsWindowVisible(hwnd) } == 0 {
+            return None;
+        }
+        let mut r = RECT::default();
+        if unsafe { GetWindowRect(hwnd, &mut r) } == 0 {
+            return None;
+        }
+        let bar = Rect {
+            x: r.left as f64,
+            y: r.top as f64,
+            width: (r.right - r.left) as f64,
+            height: (r.bottom - r.top) as f64,
+        };
+        if bar.width <= 0.0 || bar.height <= 0.0 {
+            return None;
+        }
+        if monitor.contains(bar.x + bar.width / 2.0, bar.y + bar.height / 2.0) {
+            Some((hwnd, bar))
+        } else {
+            None
+        }
+    };
+    let primary_class = "Shell_TrayWnd\0".encode_utf16().collect::<Vec<_>>();
+    let primary = unsafe { FindWindowW(primary_class.as_ptr(), std::ptr::null()) };
+    if let Some(found) = inspect(primary) {
+        return Some(found);
+    }
+    let secondary_class = "Shell_SecondaryTrayWnd\0"
+        .encode_utf16()
+        .collect::<Vec<_>>();
+    let mut prev = std::ptr::null_mut();
+    for _ in 0..16 {
+        let hwnd = unsafe {
+            FindWindowExW(
+                std::ptr::null_mut(),
+                prev,
+                secondary_class.as_ptr(),
+                std::ptr::null(),
+            )
+        };
+        if hwnd.is_null() {
+            break;
+        }
+        if let Some(found) = inspect(hwnd) {
+            return Some(found);
+        }
+        prev = hwnd;
+    }
+    None
+}
+
+/// Inspect the visible non-auto-hide taskbar band on `monitor` for unparented overlay placement.
+pub fn taskbar_band(monitor: Rect, work: Rect) -> Option<crate::geometry::TaskbarBand> {
+    use windows_sys::Win32::UI::Shell::{SHAppBarMessage, ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA};
+    let mut data = APPBARDATA {
+        cbSize: std::mem::size_of::<APPBARDATA>() as u32,
+        ..Default::default()
+    };
+    if unsafe { SHAppBarMessage(ABM_GETSTATE, &mut data) } & ABS_AUTOHIDE as usize != 0 {
+        return None;
+    }
+    if let Some((hwnd, bar)) = find_taskbar_hwnd(monitor) {
+        let notify_class = "TrayNotifyWnd\0".encode_utf16().collect::<Vec<_>>();
+        let notify = unsafe {
+            FindWindowExW(
+                hwnd,
+                std::ptr::null_mut(),
+                notify_class.as_ptr(),
+                std::ptr::null(),
+            )
+        };
+        let tray_notify = if !notify.is_null() && unsafe { IsWindowVisible(notify) } != 0 {
+            let mut nr = RECT::default();
+            if unsafe { GetWindowRect(notify, &mut nr) } != 0
+                && nr.right > nr.left
+                && nr.bottom > nr.top
+            {
+                Some(Rect {
+                    x: nr.left as f64,
+                    y: nr.top as f64,
+                    width: (nr.right - nr.left) as f64,
+                    height: (nr.bottom - nr.top) as f64,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        return Some(crate::geometry::TaskbarBand { bar, tray_notify });
+    }
+    let bottom_h = monitor.bottom() - work.bottom();
+    let top_h = work.y - monitor.y;
+    let bar = if (24.0..=160.0).contains(&bottom_h) {
+        Rect {
+            x: monitor.x,
+            y: work.bottom(),
+            width: monitor.width,
+            height: bottom_h,
+        }
+    } else if (24.0..=160.0).contains(&top_h) {
+        Rect {
+            x: monitor.x,
+            y: monitor.y,
+            width: monitor.width,
+            height: top_h,
+        }
+    } else {
+        return None;
+    };
+    Some(crate::geometry::TaskbarBand {
+        bar,
+        tray_notify: None,
+    })
+}
+
+pub fn is_above_taskbar(window: &WebviewWindow, monitor: Rect) -> bool {
+    let Ok(window) = window.hwnd() else {
+        return false;
+    };
+    let Some((tb, _)) = find_taskbar_hwnd(monitor) else {
+        return true;
+    };
+    let mut previous = unsafe { GetWindow(tb, GW_HWNDPREV) };
+    while !previous.is_null() {
+        if std::ptr::eq(previous, window.0) {
+            return true;
+        }
+        previous = unsafe { GetWindow(previous, GW_HWNDPREV) };
+    }
+    false
+}
+
+pub fn clear_window_region(window: &WebviewWindow) -> Result<(), &'static str> {
+    on_window_thread(window, |window| {
+        use windows_sys::Win32::Graphics::Gdi::*;
+        let hwnd = window.hwnd().map_err(|_| "native-window-handle")?.0 as HWND;
+        unsafe {
+            let probe = CreateRectRgn(0, 0, 0, 0);
+            if probe.is_null() {
+                return Ok(());
+            }
+            let has_region = GetWindowRgn(hwnd, probe) != 0;
+            DeleteObject(probe);
+            if has_region && SetWindowRgn(hwnd, std::ptr::null_mut(), 1) == 0 {
+                return Err("native-rounded-region");
+            }
+        }
+        Ok(())
+    })
 }
 
 pub fn above(window: &WebviewWindow, anchor: &WebviewWindow) -> Result<(), &'static str> {

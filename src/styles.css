@@ -460,3 +460,13 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .surface-background { position:absolute; left:0; top:0; pointer-events:none; z-index:-1; overflow:hidden; border-radius:inherit; }
 .surface-composition,.surface-composition .icon-button { transition-property:border-color; }
 [data-surface-paint] { background:none!important; }
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent,
+:root:not([data-high-contrast=true]) .native-surface.shell.widget-palette.mode-taskbar-strip.taskbar-transparent { background:transparent; border-color:transparent; border-radius:6px; transition:background-color 120ms ease; }
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent:hover { background:rgba(0,0,0,.06); }
+:root[data-theme=dark]:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent:hover { background:rgba(255,255,255,.08); }
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .taskbar-strip-rows,
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .status-warning { background:transparent; }
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .ts-lbl { opacity:.9; }
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .ts-rst { opacity:.92; }
+:root:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .micro-bar:not(.unknown) { background:rgba(0,0,0,.14); }
+:root[data-theme=dark]:not([data-high-contrast=true]) .native-surface.shell.mode-taskbar-strip.taskbar-transparent .micro-bar:not(.unknown) { background:rgba(255,255,255,.18); }

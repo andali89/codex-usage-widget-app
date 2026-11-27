@@ -19,7 +19,7 @@ const modes = [
   ["screen-edge", "Screen Edge", "An anchored tab with a temporary preview"],
   ["system-tray", "System Tray", "Quiet monitoring in the notification area"],
   ["compact-hud", "Compact HUD", "A thin quota strip"],
-  ["taskbar-strip", "Taskbar Strip", "Two color-coded lines docked above the taskbar"],
+  ["taskbar-strip", "Taskbar Strip", "Two color-coded lines in or above the taskbar"],
 ] as const;
 
 type SettingsSection = "display" | "reminders" | "general" | "connection";
