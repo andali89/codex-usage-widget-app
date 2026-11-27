@@ -290,7 +290,7 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 .native-surface.shell.stable-compact.mode-screen-edge { padding-inline:.125rem; padding-top:.375rem; padding-bottom:1rem; }
 .native-surface.shell.stable-compact.mode-compact-hud { padding-inline:.375rem; padding-right:.625rem; }
 .native-surface.shell.stable-compact.mode-taskbar-strip {
-  display:flex; align-items:center; gap:.1875rem; padding:.1875rem .375rem; border-radius:8px;
+  display:flex; align-items:center; gap:.1875rem; padding:.1875rem .125rem; border-radius:8px;
   --strip-background:#f5f5f5; --strip-text:#303030; --strip-strong-text:#101010; --strip-outline:#737373; --strip-track:rgb(0 0 0 / 16%);
   color:var(--strip-text); background:var(--strip-background); border-color:transparent;
 }
@@ -310,19 +310,22 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
     background:Canvas; border-color:CanvasText;
   }
 }
-.taskbar-strip-rows { display:grid; flex:1; min-width:0; align-content:center; row-gap:.125rem; white-space:nowrap; }
+.taskbar-strip-rows {
+  display:grid; grid-template-columns:fit-content(1.5rem) 2rem .5rem minmax(0,1fr);
+  flex:1; min-width:0; align-content:center; row-gap:.125rem; white-space:nowrap;
+}
 .taskbar-strip-rows.bars-off { row-gap:.1875rem; }
-.taskbar-strip-row-wrap { display:grid; row-gap:.09375rem; }
+.taskbar-strip-row-wrap,.taskbar-strip-row,.taskbar-strip-row-wrap .micro-bar { grid-column:1/-1; }
+.taskbar-strip-row-wrap { display:grid; grid-template-columns:subgrid; row-gap:.09375rem; }
 .taskbar-strip-row {
-  display:grid; grid-template-columns:1.375rem 2.5rem .625rem minmax(0,1fr); align-items:baseline;
-  font-family:Consolas,ui-monospace,monospace; font-size:.6875rem; font-weight:400; line-height:1.05;
+  display:grid; grid-template-columns:1.5rem 2rem .5rem minmax(0,1fr); grid-template-columns:subgrid; align-items:baseline;
+  font-family:Arial,"Segoe UI",sans-serif; font-size:.6875rem; font-weight:400; font-variant-numeric:tabular-nums; line-height:1.05;
 }
 .ts-lbl,.ts-rst { overflow:hidden; text-overflow:ellipsis; }
-.ts-lbl { text-align:right; }
-.ts-lbl.ts-badge { display:inline-grid; place-items:center; justify-self:end; width:.8125rem; height:.8125rem; border:1px solid currentColor; border-radius:50%; font-size:.5625rem; line-height:1; }
-.ts-pct { padding-inline-start:.25rem; text-align:right; }
+.ts-lbl { padding-inline-end:.125rem; text-align:left; }
+.ts-lbl.ts-badge { display:inline-grid; place-items:center; justify-self:start; width:.8125rem; height:.8125rem; padding:0; margin-inline-end:.125rem; border:1px solid currentColor; border-radius:50%; font-size:.5625rem; line-height:1; }
+.ts-pct,.ts-rst { text-align:right; }
 .ts-separator { text-align:center; }
-.ts-rst { text-align:left; }
 .mode-taskbar-strip[data-countdown-bold=true] .taskbar-strip-row { font-weight:700; }
 .micro-bar { height:.125rem; border-radius:.125rem; background:var(--strip-track); overflow:hidden; }
 .micro-bar>i { display:block; height:100%; border-radius:inherit; background:var(--quota-five-hour,var(--accent)); }

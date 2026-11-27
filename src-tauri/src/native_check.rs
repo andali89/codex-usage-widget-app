@@ -1040,7 +1040,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                             const barColor=getComputedStyle(probe).color; probe.remove();
                             return [...row.children].every(cell=>{{
                                 const style=getComputedStyle(cell);
-                                return style.color==='{color}'&&style.fontWeight==='{weight}'&&style.fontFamily.startsWith('Consolas');
+                                return style.color==='{color}'&&style.fontWeight==='{weight}'&&style.fontFamily.startsWith('Arial');
                             }})&&getComputedStyle(bar).backgroundColor===barColor;
                         }})()"#
                     )
@@ -1065,35 +1065,56 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
             if mode == DisplayMode::TaskbarStrip {
                 let mut no_bars = service.snapshot().await?.settings;
                 no_bars.widget_appearance.taskbar_strip_show_bars = false;
-                no_bars.windows.quota_label_style = QuotaLabelStyle::Words;
                 no_bars
                     .windows
                     .visible_periods
                     .insert(mode.key().into(), VisiblePeriods::Both);
-                save_settings(service, no_bars).await?;
-                frontend_assert(
-                    app,
-                    "shell",
-                    r#"(()=>{
-                        const root=document.querySelector('.mode-taskbar-strip.shell');
-                        const rows=root?.querySelectorAll('.taskbar-strip-row');
-                        if(rows?.length!==2||root.querySelector('.micro-bar'))return false;
-                        const first=[...rows[0].children], second=[...rows[1].children];
-                        if(first.length!==4||second.length!==4||first[0].textContent!=='5h'||second[0].textContent!=='7d')return false;
-                        const measure=cell=>cell.getBoundingClientRect();
-                        return first.every((cell,i)=>{
-                            const other=second[i], a=measure(cell), b=measure(other);
-                            const sample=['7d','99.9%','·','23h59m'][i], saved=cell.textContent;
-                            cell.textContent=sample;
-                            const fits=cell.scrollWidth<=cell.clientWidth+1;
-                            cell.textContent=saved;
-                            return fits&&Math.abs(a.x-b.x)<.1&&Math.abs(a.width-b.width)<.1
-                                &&getComputedStyle(cell).fontWeight==='700'&&getComputedStyle(cell).color===getComputedStyle(root).color;
-                        });
-                    })()"#,
-                    "taskbar-strip-text-only-aligned-columns-fit-bold-readings",
-                )
-                .await?;
+                for (label_style, five_hour, weekly) in [
+                    (QuotaLabelStyle::Words, "5h", "7d"),
+                    (QuotaLabelStyle::Badges, "5", "W"),
+                ] {
+                    for bold in [false, true] {
+                        no_bars.windows.quota_label_style = label_style;
+                        no_bars.widget_appearance.compact_countdown_bold = bold;
+                        save_settings(service, no_bars.clone()).await?;
+                        let weight = if bold { "700" } else { "400" };
+                        let expression = format!(
+                            r#"(()=>{{
+                                const root=document.querySelector('.mode-taskbar-strip.shell');
+                                const rows=root?.querySelectorAll('.taskbar-strip-row');
+                                if(rows?.length!==2||root.querySelector('.micro-bar'))return false;
+                                const first=[...rows[0].children], second=[...rows[1].children];
+                                if(first.length!==4||second.length!==4||first[0].textContent!=='{five_hour}'||second[0].textContent!=='{weekly}')return false;
+                                if(first[2].textContent!=='·'||second[2].textContent!=='·')return false;
+                                const expectedAlign=['left','right','center','right'];
+                                const sameColumns=first.every((cell,i)=>{{
+                                    const other=second[i], a=cell.getBoundingClientRect(), b=other.getBoundingClientRect();
+                                    return Math.abs(a.x-b.x)<.1&&Math.abs(a.width-b.width)<.1
+                                        &&[cell,other].every(el=>{{
+                                            const style=getComputedStyle(el);
+                                            return style.textAlign===expectedAlign[i]&&style.fontWeight==='{weight}'
+                                                &&style.fontVariantNumeric==='tabular-nums'&&style.color===getComputedStyle(root).color;
+                                        }});
+                                }});
+                                const wideReadingsFit=[[first[1],'99.9%'],[first[3],'23h59m']].every(([cell,sample])=>{{
+                                    const saved=cell.textContent;
+                                    cell.textContent=sample;
+                                    const fits=cell.scrollWidth<=cell.clientWidth;
+                                    cell.textContent=saved;
+                                    return fits;
+                                }});
+                                return sameColumns&&wideReadingsFit;
+                            }})()"#
+                        );
+                        frontend_assert(
+                            app,
+                            "shell",
+                            &expression,
+                            "taskbar-strip-text-only-aligns-columns-and-fits-wide-readings",
+                        )
+                        .await?;
+                    }
+                }
                 let mut restore_bars = service.snapshot().await?.settings;
                 restore_bars.windows.quota_label_style = QuotaLabelStyle::Badges;
                 restore_bars

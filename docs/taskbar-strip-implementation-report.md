@@ -6,9 +6,9 @@ Application version baseline: **0.1.5** (settings schema **13 → 14**). No depe
 
 ## Neutral text, aligned readings, and border controls — 2026-11-27
 
-The strip uses the same neutral color and regular-weight Consolas for period labels, remaining percentages, and reset times. Words mode displays `5h   57% · 2h24m` and `7d   42% · 3d11h` in fixed columns. The shared **Quota labels** setting selects words or circular badges on Save. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
+The strip uses the same neutral color and regular-weight Arial with tabular digits for each reading. The period labels align left, both numeric readings align right, and the middle dots share a column. Words mode displays `5h` and `7d`, and Badges mode shows the circular `5` and `W` labels. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
 
-The base width is 128 logical pixels at 100% scale, with 16 additional pixels when the status indicator is visible. The existing single- and two-row heights are preserved. Each row uses the same fixed label and percentage columns and an aligned reset column. The native and frontend size rules use the new width.
+The base width is 112 logical pixels at 100% scale, with 2 pixels of side padding and 16 additional pixels of width when the status indicator is visible. The two rows share a content-sized label column and reserve space for long percentages and reset times. Countdown text follows the existing compact format, including `2h3m` and `2h`.
 
 **Display → Taskbar Strip** groups placement, transparency, the outline, and micro bars. The border preference is saved in schema 14 as `taskbarStripBorder`. It defaults to Automatic when absent. Automatic follows the shared border preference for opaque cards and hides the outline when transparent. Show and Hide apply independently of background paint. Windows high contrast keeps its system outline and opaque background. The Taskbar Strip appearance settings use the existing live preview, Save, and Cancel flow.
 
@@ -27,7 +27,9 @@ Rust publishes the active transparency state after placing the window and config
 | `Usage.exe --check-native-compact-options` | Passed, 194 assertions. Covered all-column readability controls, equal widths, fitting wide readings, app and taskbar theme selection, native and webview transparency, independent border paint, widget scale, and live preview, Cancel, and Save. See `src-tauri/target/validation/native-compact-options/result.log`. |
 | `Usage.exe --check-native-appearance` | Passed, 871 assertions. Includes Taskbar Strip and existing compact widget and dashboard appearance checks. See `src-tauri/target/validation/native-appearance/result.log`. |
 
-The later typography and label changes passed `node --test tests/taskbar-strip.test.mjs` (5 tests), `npm.cmd run build`, `npm.cmd run rust:fmt`, and `npm.cmd run rust:check`.
+The Arial layout passed all 20 focused frontend tests (`node --test tests/taskbar-strip.test.mjs tests/compact-layout.test.mjs tests/compact-scaling.test.mjs tests/presentation.test.mjs`), the frontend build, Rust formatting, and four targeted Rust tests covering Taskbar Strip defaults and sizing. The isolated `Usage-arial.exe --check-native-compact-options` check passed for both label styles and font weights, including column alignment and room for `99.9%` and `23h59m`.
+
+Windows denied replacement of the existing `Usage.exe`. The release build succeeded with `cargo rustc --release --manifest-path src-tauri/Cargo.toml --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-arial` and the verified copy is at `src-tauri/target/release/Usage-arial.exe`.
 
 Manual checks remain for the physical pointer over the transparent strip, the effect of toggling Windows transparency and high contrast live, mixed-DPI monitor movement, and an actual Explorer restart on interactive Windows 10 and 11 desktops. The isolated Windows session exercised taskbar-band geometry and webview rendering using synthetic data.
 
@@ -118,7 +120,7 @@ All checks below ran against the final working tree after the last code edit unl
 
 Automated synthetic checks do not replace manual verification on real Windows 10 and Windows 11 desktops:
 
-- [ ] Inspect Taskbar Strip inside and above the taskbar clock on Windows 10 and Windows 11 with micro bars **On** (`128 × 42`) and **Off** (`128 × 36`).
+- [ ] Inspect Taskbar Strip inside and above the taskbar clock on Windows 10 and Windows 11 with micro bars **On** (`112 × 42`) and **Off** (`112 × 36`).
 - [ ] Check live mixed Windows polarity with light apps and a dark taskbar. Confirm the strip uses the taskbar theme inside it and the app theme above it, including when the app theme is set explicitly.
 - [ ] **DPI & Text Scaling:** Verify crisp alignment and zero clipping at 100%, 125%, 150%, 175%, and 200% DPI and Windows Text Scale 100%–225%, plus worst-case strings (`100%`, `99.9%`, `<1%`, `23h59m`, `6d23h`, `due?`).
 - [ ] **Windows High Contrast / Contrast Themes:** Confirm forced-colors legibility on Taskbar Strip and two-row Tray Hover Preview.

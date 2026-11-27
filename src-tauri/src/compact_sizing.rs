@@ -7,7 +7,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 
-pub const TASKBAR_STRIP_WIDTH: f64 = 128.0;
+pub const TASKBAR_STRIP_WIDTH: f64 = 112.0;
 
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]

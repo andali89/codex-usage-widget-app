@@ -19,7 +19,7 @@ test("normal compact readings keep their footprint, with space added only for a 
       for (const warning of [false, true]) {
         assert.deepEqual(
           compactLayout("taskbar-strip", "words", { fiveHour: true, weekly: true }, warning, periods, showBars),
-          { width: 128 + (warning ? 16 : 0), height: single ? (showBars ? 28 : 24) : (showBars ? 42 : 36) },
+          { width: 112 + (warning ? 16 : 0), height: single ? (showBars ? 28 : 24) : (showBars ? 42 : 36) },
         );
       }
     }

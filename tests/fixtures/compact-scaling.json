@@ -536,7 +536,7 @@
       "weekly": true
     },
     "showBars": true,
-    "width": 144,
+    "width": 128,
     "height": 42
   },
   {
@@ -548,7 +548,7 @@
       "weekly": true
     },
     "showBars": false,
-    "width": 144,
+    "width": 128,
     "height": 36
   },
   {
@@ -560,7 +560,7 @@
       "weekly": false
     },
     "showBars": true,
-    "width": 144,
+    "width": 128,
     "height": 28
   },
   {
@@ -572,7 +572,7 @@
       "weekly": false
     },
     "showBars": false,
-    "width": 144,
+    "width": 128,
     "height": 24
   },
   {
@@ -584,7 +584,7 @@
       "weekly": true
     },
     "showBars": true,
-    "width": 144,
+    "width": 128,
     "height": 28
   },
   {
@@ -596,7 +596,7 @@
       "weekly": true
     },
     "showBars": false,
-    "width": 144,
+    "width": 128,
     "height": 24
   }
 ]

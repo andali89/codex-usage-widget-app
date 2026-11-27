@@ -2203,7 +2203,7 @@ mod tests {
             windows.anchors(&settings),
             default_anchors(DisplayMode::TaskbarStrip)
         );
-        assert_eq!(windows.shell_size, (128.0, 42.0));
+        assert_eq!(windows.shell_size, (112.0, 42.0));
     }
 
     #[test]
