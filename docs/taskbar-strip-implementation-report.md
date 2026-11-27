@@ -6,7 +6,7 @@ Application version baseline: **0.1.5** (settings schema **13 → 14**). No depe
 
 ## Neutral text, aligned readings, and border controls — 2026-11-27
 
-The strip uses the same neutral color and regular-weight Arial with tabular digits for each reading. The period labels align left, both numeric readings align right, and the middle dots share a column. Words mode displays `5h` and `7d`, and Badges mode shows the circular `5` and `W` labels. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
+The strip uses neutral text and the app’s regular-weight Segoe UI Variable and Segoe UI font stack with tabular digits. The period labels align left and the percentages align right. The reset times start immediately after the shared middle-dot column. Words mode displays `5h` and `7d`, and Badges mode shows the circular `5` and `W` labels. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
 
 The base width is 112 logical pixels at 100% scale, with 2 pixels of side padding and 16 additional pixels of width when the status indicator is visible. The two rows share a content-sized label column and reserve space for long percentages and reset times. Countdown text follows the existing compact format, including `2h3m` and `2h`.
 
@@ -29,7 +29,9 @@ Rust publishes the active transparency state after placing the window and config
 
 The Arial layout passed all 20 focused frontend tests (`node --test tests/taskbar-strip.test.mjs tests/compact-layout.test.mjs tests/compact-scaling.test.mjs tests/presentation.test.mjs`), the frontend build, Rust formatting, and four targeted Rust tests covering Taskbar Strip defaults and sizing. The isolated `Usage-arial.exe --check-native-compact-options` check passed for both label styles and font weights, including column alignment and room for `99.9%` and `23h59m`.
 
-Windows denied replacement of the existing `Usage.exe`. The release build succeeded with `cargo rustc --release --manifest-path src-tauri/Cargo.toml --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-arial` and the verified copy is at `src-tauri/target/release/Usage-arial.exe`.
+During the Arial build, Windows denied replacement of the existing `Usage.exe`. The release build succeeded with `cargo rustc --release --manifest-path src-tauri/Cargo.toml --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-arial` and the verified copy is at `src-tauri/target/release/Usage-arial.exe`.
+
+The Segoe UI layout passed 15 focused frontend tests, the frontend build, and the Rust formatting check. The release build produced `src-tauri/target/release/Usage.exe`. Its `--check-native-compact-options` run passed for both label styles and weights, including reset alignment beside the dot and room for the longest standard readings.
 
 Manual checks remain for the physical pointer over the transparent strip, the effect of toggling Windows transparency and high contrast live, mixed-DPI monitor movement, and an actual Explorer restart on interactive Windows 10 and 11 desktops. The isolated Windows session exercised taskbar-band geometry and webview rendering using synthetic data.
 

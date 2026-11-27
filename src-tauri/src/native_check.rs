@@ -1035,12 +1035,13 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                             const row=root?.querySelector('.taskbar-strip-row');
                             const bar=root?.querySelector('.micro-bar > i');
                             if(!row||!bar||row.children.length!==4||row.children[0].textContent!=='5'||row.children[2].textContent!=='·')return false;
+                            const systemFont=getComputedStyle(document.documentElement).fontFamily;
                             const probe=document.createElement('span');
                             probe.style.color='var(--quota-five-hour)'; root.append(probe);
                             const barColor=getComputedStyle(probe).color; probe.remove();
                             return [...row.children].every(cell=>{{
                                 const style=getComputedStyle(cell);
-                                return style.color==='{color}'&&style.fontWeight==='{weight}'&&style.fontFamily.startsWith('Arial');
+                                return style.color==='{color}'&&style.fontWeight==='{weight}'&&style.fontFamily===systemFont;
                             }})&&getComputedStyle(bar).backgroundColor===barColor;
                         }})()"#
                     )
@@ -1086,7 +1087,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                                 const first=[...rows[0].children], second=[...rows[1].children];
                                 if(first.length!==4||second.length!==4||first[0].textContent!=='{five_hour}'||second[0].textContent!=='{weekly}')return false;
                                 if(first[2].textContent!=='·'||second[2].textContent!=='·')return false;
-                                const expectedAlign=['left','right','center','right'];
+                                const expectedAlign=['left','right','center','left'];
                                 const sameColumns=first.every((cell,i)=>{{
                                     const other=second[i], a=cell.getBoundingClientRect(), b=other.getBoundingClientRect();
                                     return Math.abs(a.x-b.x)<.1&&Math.abs(a.width-b.width)<.1
