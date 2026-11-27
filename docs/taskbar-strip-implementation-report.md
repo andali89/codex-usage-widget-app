@@ -6,7 +6,7 @@ Application version baseline: **0.1.5** (settings schema **13 → 14**). No depe
 
 ## Neutral text, aligned readings, and border controls — 2026-11-27
 
-The strip uses neutral text and the app’s regular-weight Segoe UI Variable and Segoe UI font stack with tabular digits. The period labels align left and the percentages align right. The reset times start immediately after the shared middle-dot column. Words mode uses an aligned pipe after `5h` and `7d`, and Badges mode shows the circular `5` and `W` labels. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
+The strip uses neutral text and the app’s regular-weight Segoe UI Variable and Segoe UI font stack with tabular digits. The period labels align left and the percentages align right. The reset times start immediately after the shared middle-dot column. Words mode leaves eight logical pixels of padding after `5h` and `7d` at default text size, and Badges mode shows the circular `5` and `W` labels. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
 
 The strip fits the visible readings up to 112 logical pixels at 100% scale, with 2 pixels of side padding and up to 16 additional pixels for the status indicator. Both rows share columns sized to their readings. The existing window anchor is used when the strip resizes. Countdown text follows the compact format, including `2h3m` and `2h`.
 
@@ -36,6 +36,8 @@ The Segoe UI layout passed 15 focused frontend tests, the frontend build, and th
 Content fitting passed 20 focused Taskbar Strip, sizing, and countdown tests, the frontend build, and the Rust formatting check. The isolated Windows compact-options check verified that the strip shrinks for short times, expands for wide readings, and retains column alignment in Words and Badges mode at both weights. Windows denied replacement of `Usage.exe`, so the release build used `cargo rustc --release --manifest-path src-tauri/Cargo.toml --locked --bin Usage --features tauri/custom-protocol -- -C extra-filename=-fit`. The tested copy is `src-tauri/target/release/Usage-fit.exe`.
 
 The period separators passed all five focused Taskbar Strip tests, the frontend build, and the Rust formatting check. The Windows compact-options check on the rebuilt `Usage.exe` verified aligned pipes in Words mode and compact fit in both label styles.
+
+The spacing update passed all five focused Taskbar Strip tests, the frontend build, and the Rust formatting check. The isolated Windows compact-options check measured the gap between the label and percentage in Words mode and verified that wide readings still fit. Windows denied replacement of `Usage.exe`, so the tested release is `src-tauri/target/release/Usage-spaced.exe`.
 
 Manual checks remain for the physical pointer over the transparent strip, the effect of toggling Windows transparency and high contrast live, mixed-DPI monitor movement, and an actual Explorer restart on interactive Windows 10 and 11 desktops. The isolated Windows session exercised taskbar-band geometry and webview rendering using synthetic data.
 

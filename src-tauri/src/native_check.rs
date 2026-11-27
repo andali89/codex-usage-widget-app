@@ -1076,7 +1076,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                     .visible_periods
                     .insert(mode.key().into(), VisiblePeriods::Both);
                 for (label_style, five_hour, weekly) in [
-                    (QuotaLabelStyle::Words, "5h|", "7d|"),
+                    (QuotaLabelStyle::Words, "5h", "7d"),
                     (QuotaLabelStyle::Badges, "5", "W"),
                 ] {
                     for bold in [false, true] {
@@ -1093,11 +1093,6 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                                 const first=[...rows[0].children], second=[...rows[1].children];
                                 if(first.length!==4||second.length!==4||first[0].textContent!=='{five_hour}'||second[0].textContent!=='{weekly}')return false;
                                 if(first[2].textContent!=='·'||second[2].textContent!=='·')return false;
-                                const firstPipe=first[0].querySelector('.ts-label-separator');
-                                const secondPipe=second[0].querySelector('.ts-label-separator');
-                                if({words}){{
-                                    if(!firstPipe||!secondPipe||Math.abs(firstPipe.getBoundingClientRect().x-secondPipe.getBoundingClientRect().x)>.1)return false;
-                                }}else if(firstPipe||secondPipe)return false;
                                 const expectedAlign=['left','right','center','left'];
                                 const sameColumns=first.every((cell,i)=>{{
                                     const other=second[i], a=cell.getBoundingClientRect(), b=other.getBoundingClientRect();
@@ -1113,13 +1108,18 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                                 try {{
                                     ['45%','2h','100%','3h'].forEach((sample,i)=>samples[i].textContent=sample);
                                     const shortWidth=root.getBoundingClientRect().width;
-                                    const shortTime=document.createRange();
-                                    shortTime.selectNodeContents(second[3]);
-                                    const trailingSpace=second[3].getBoundingClientRect().right-shortTime.getBoundingClientRect().right;
+                                    const textBounds=cell=>{{
+                                        const range=document.createRange();
+                                        range.selectNodeContents(cell);
+                                        return range.getBoundingClientRect();
+                                    }};
+                                    const labelGap=textBounds(second[1]).left-textBounds(second[0]).right;
+                                    const enoughLabelSpace=!{words}||labelGap>=7;
+                                    const trailingSpace=second[3].getBoundingClientRect().right-textBounds(second[3]).right;
                                     first[1].textContent='99.9%';
                                     first[3].textContent='23h59m';
                                     const wideReadingsFit=samples.every(cell=>cell.scrollWidth<=cell.clientWidth);
-                                    return sameColumns&&wideReadingsFit&&trailingSpace<2
+                                    return sameColumns&&enoughLabelSpace&&wideReadingsFit&&trailingSpace<2
                                         &&root.getBoundingClientRect().width>shortWidth+5;
                                 }} finally {{
                                     samples.forEach((cell,i)=>cell.textContent=saved[i]);
