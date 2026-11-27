@@ -1,22 +1,22 @@
 # Codex Usage Widget
 
-Keep Codex remaining quota and expected reset times in view on your Windows desktop. Choose a floating card, screen-edge widget, compact HUD, or system tray summary, with usage read through your local Codex CLI.
+Keep Codex remaining quota and expected reset times in view on your Windows desktop. Choose a floating card, screen-edge widget, compact HUD, Taskbar Strip, or system tray summary. Usage is read through your local Codex CLI.
 
-**[Download v0.1.5 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.5)** · [Release notes](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.5) · [Documentation](docs/README.md)
+**[Download v0.1.6 for Windows x64](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.6)** · [Release notes](docs/v0.1.6-release-notes.md) · [Documentation](docs/README.md)
 
-An unofficial project, not affiliated with or endorsed by OpenAI. Version **0.1.5** is a public preview; see [known limitations](#known-limitations).
+An unofficial project, not affiliated with or endorsed by OpenAI. Version **0.1.6** is a public preview. See [known limitations](#known-limitations).
 
-**In v0.1.6** the new Taskbar Strip shows remaining quota and reset times in two compact rows. System tray hover also shows both periods. See the [v0.1.6 release notes](docs/v0.1.6-release-notes.md). The downloads below are for the published v0.1.5 preview.
+**New in v0.1.6** is the Taskbar Strip, which fits two rows of remaining quota and reset times into a compact view. System tray hover also shows both periods.
 
 ## Download and install
 
-Choose a download from the [v0.1.5 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.5):
+Choose a download from the [v0.1.6 release](https://github.com/andali89/codex-usage-widget-app/releases/tag/v0.1.6).
 
 | Download | Use |
 | --- | --- |
-| [Windows installer](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.5/Codex.Usage.Widget_0.1.5_x64-setup.exe) | Run the setup executable to install for your Windows account. |
-| [Portable ZIP](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.5/Codex.Usage.Widget_0.1.5_x64-portable.zip) | Extract the entire ZIP into a writable folder and run `Usage.exe`. |
-| [SHA-256 checksums](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.5/SHA256SUMS.txt) | Verify the installer and portable archive. |
+| [Windows installer](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.6/Codex.Usage.Widget_0.1.6_x64-setup.exe) | Run the setup executable to install for your Windows account. |
+| [Portable ZIP](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.6/Codex.Usage.Widget_0.1.6_x64-portable.zip) | Extract the entire ZIP into a writable folder and run `Usage.exe`. |
+| [SHA-256 checksums](https://github.com/andali89/codex-usage-widget-app/releases/download/v0.1.6/SHA256SUMS.txt) | Verify the installer and portable archive. |
 
 Requirements:
 
