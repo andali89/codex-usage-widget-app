@@ -20,34 +20,34 @@ const hour = 3_600_000;
 const day = 24 * hour;
 
 test("taskbarPeriodLabel maps standard, custom, and unknown durations honestly", () => {
-  assert.equal(taskbarPeriodLabel(300, 0), "5h:");
-  assert.equal(taskbarPeriodLabel(10080, 1), "Wk:");
-  assert.equal(taskbarPeriodLabel(60, 0), "1h:");
-  assert.equal(taskbarPeriodLabel(1440, 1), "1d:");
-  assert.equal(taskbarPeriodLabel(17, 0), "17m:");
-  assert.equal(taskbarPeriodLabel(null, 0), "P1:");
-  assert.equal(taskbarPeriodLabel(null, 1), "P2:");
+  assert.equal(taskbarPeriodLabel(300, 0), "5h");
+  assert.equal(taskbarPeriodLabel(10080, 1), "7d");
+  assert.equal(taskbarPeriodLabel(60, 0), "1h");
+  assert.equal(taskbarPeriodLabel(1440, 1), "1d");
+  assert.equal(taskbarPeriodLabel(17, 0), "17m");
+  assert.equal(taskbarPeriodLabel(null, 0), "P1");
+  assert.equal(taskbarPeriodLabel(null, 1), "P2");
 });
 
 test("taskbarStripRows preserves unknown durations, handles reversed/partial/empty windows, and filters single periods", () => {
   const empty = taskbarStripRows([], "both");
-  assert.deepEqual(empty.map(r => [r.label, r.remainingPercent]), [["5h:", null], ["Wk:", null]]);
+  assert.deepEqual(empty.map(r => [r.label, r.remainingPercent]), [["5h", null], ["7d", null]]);
 
   const reversed = taskbarStripRows([
     { key: "codex/secondary/10080", durationMinutes: 10080, remainingPercent: 60, resetsAtMs: 3 * day, lastKnown: false },
     { key: "codex/primary/300", durationMinutes: 300, remainingPercent: 50, resetsAtMs: 2 * hour, lastKnown: false },
   ], "both");
-  assert.deepEqual(reversed.map(r => [r.label, r.remainingPercent]), [["5h:", 50], ["Wk:", 60]]);
+  assert.deepEqual(reversed.map(r => [r.label, r.remainingPercent]), [["5h", 50], ["7d", 60]]);
 
   const customUnknown = taskbarStripRows([
     { key: "codex/primary/unknown", durationMinutes: null, remainingPercent: 75, resetsAtMs: hour, lastKnown: false },
     { key: "codex/secondary/1440", durationMinutes: 1440, remainingPercent: 25, resetsAtMs: day, lastKnown: false },
   ], "both");
-  assert.deepEqual(customUnknown.map(r => [r.label, r.remainingPercent]), [["P1:", 75], ["1d:", 25]]);
+  assert.deepEqual(customUnknown.map(r => [r.label, r.remainingPercent]), [["P1", 75], ["1d", 25]]);
 
   const singleWeekly = taskbarStripRows(reversed, "weekly");
   assert.equal(singleWeekly.length, 1);
-  assert.equal(singleWeekly[0].label, "Wk:");
+  assert.equal(singleWeekly[0].label, "7d");
   assert.equal(singleWeekly[0].remainingPercent, 60);
 });
 
@@ -57,13 +57,12 @@ test("TaskbarStripReadings renders micro bars on/off, <1% sliver, worst-case wid
     { key: "codex/secondary/10080", label: "Weekly", durationMinutes: 10080, remainingPercent: 99.9, resetsAtMs: 23 * hour + 59 * 60_000, quality: "valid", lastKnown: false },
   ];
   const withBars = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows, selection: "both", showBars: true, retained: false, now: 0 }));
-  assert.match(withBars, />5h:</);
+  assert.match(withBars, />5h</);
   assert.match(withBars, />&lt;1%</);
   assert.match(withBars, /min-width:0\.125rem/);
   assert.match(withBars, /class="ts-rst ts-due" title="due\?">due\?</);
-  assert.match(withBars, />Wk:</);
-  assert.match(withBars, />99\.9%</);
-  assert.match(withBars, />23h59m</);
+  assert.match(withBars, />7d<\/span><span class="ts-pct">99\.9%<\/span><span class="ts-separator" aria-hidden="true">·<\/span><span class="ts-rst" title="23h59m">23h59m</);
+  assert.equal((withBars.match(/class="ts-separator"/g) ?? []).length, 2);
   assert.equal((withBars.match(/class="micro-bar/g) ?? []).length, 2);
 
   const withoutBars = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows, selection: "both", showBars: false, retained: false, now: 0 }));
@@ -77,8 +76,8 @@ test("TaskbarStripReadings renders micro bars on/off, <1% sliver, worst-case wid
     labelStyle: "badges", now: 0,
   }));
   assert.doesNotMatch(custom, /ts-badge/);
-  assert.match(custom, />P1:</);
-  assert.match(custom, />1d:</);
+  assert.match(custom, />P1</);
+  assert.match(custom, />1d</);
 
   const unavailable = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows: [], selection: "both", showBars: true, retained: true, now: 0 }));
   assert.equal((unavailable.match(/class="micro-bar unknown retained"/g) ?? []).length, 2);
@@ -124,7 +123,7 @@ test("WidgetContents renders Taskbar Strip blocked/warning indicators and two-ro
 
   const freshStrip = renderToStaticMarkup(createElement(WidgetContents, { state: makeState("taskbar-strip"), surface: "shell", now: 0 }));
   assert.match(freshStrip, /taskbar-strip-rows/);
-  assert.match(freshStrip, />5h:</);
+  assert.match(freshStrip, />5h</);
   assert.match(freshStrip, />50%</);
   assert.match(freshStrip, />2h17m</);
   assert.match(freshStrip, />60%</);

@@ -1022,11 +1022,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                 settings.widget_appearance.compact_countdown_high_contrast = strong;
                 save_settings(service, settings).await?;
                 let expression = if mode == DisplayMode::TaskbarStrip {
-                    let weights = if bold {
-                        "['700','700','700']"
-                    } else {
-                        "['500','600','450']"
-                    };
+                    let weight = if bold { "700" } else { "400" };
                     let color = match (theme, strong) {
                         (ThemePreference::Dark, true) => "rgb(255, 255, 255)",
                         (ThemePreference::Dark, false) => "rgb(230, 230, 230)",
@@ -1038,13 +1034,13 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                             const root=document.querySelector('.native-surface.shell');
                             const row=root?.querySelector('.taskbar-strip-row');
                             const bar=root?.querySelector('.micro-bar > i');
-                            if(!row||!bar||row.children[0].textContent!=='5')return false;
+                            if(!row||!bar||row.children.length!==4||row.children[0].textContent!=='5'||row.children[2].textContent!=='·')return false;
                             const probe=document.createElement('span');
                             probe.style.color='var(--quota-five-hour)'; root.append(probe);
                             const barColor=getComputedStyle(probe).color; probe.remove();
-                            return [...row.children].every((cell,i)=>{{
+                            return [...row.children].every(cell=>{{
                                 const style=getComputedStyle(cell);
-                                return style.color==='{color}'&&style.fontWeight==={weights}[i];
+                                return style.color==='{color}'&&style.fontWeight==='{weight}'&&style.fontFamily.startsWith('Consolas');
                             }})&&getComputedStyle(bar).backgroundColor===barColor;
                         }})()"#
                     )
@@ -1083,11 +1079,11 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                         const rows=root?.querySelectorAll('.taskbar-strip-row');
                         if(rows?.length!==2||root.querySelector('.micro-bar'))return false;
                         const first=[...rows[0].children], second=[...rows[1].children];
-                        if(first[0].textContent!=='5h:'||second[0].textContent!=='Wk:')return false;
+                        if(first.length!==4||second.length!==4||first[0].textContent!=='5h'||second[0].textContent!=='7d')return false;
                         const measure=cell=>cell.getBoundingClientRect();
                         return first.every((cell,i)=>{
                             const other=second[i], a=measure(cell), b=measure(other);
-                            const sample=['Wk:','99.9%','23h59m'][i], saved=cell.textContent;
+                            const sample=['7d','99.9%','·','23h59m'][i], saved=cell.textContent;
                             cell.textContent=sample;
                             const fits=cell.scrollWidth<=cell.clientWidth+1;
                             cell.textContent=saved;

@@ -35,6 +35,7 @@ export default function TaskbarStripReadings({
         <div className="taskbar-strip-row">
           <span className={badge ? "ts-lbl ts-badge" : "ts-lbl"} title={period}>{badge || row.label}</span>
           <span className={`ts-pct${value === null ? " ts-unavail" : ""}`}>{value === null ? "—" : percent(value)}</span>
+          <span className="ts-separator" aria-hidden="true">·</span>
           <span className={`ts-rst${due ? " ts-due" : resetUnavail ? " ts-unavail" : ""}`} title={resetText}>{resetText}</span>
         </div>
         {showBars && (

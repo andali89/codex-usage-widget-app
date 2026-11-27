@@ -310,17 +310,20 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
     background:Canvas; border-color:CanvasText;
   }
 }
-.taskbar-strip-rows { display:grid; flex:1; min-width:0; align-content:center; row-gap:.125rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.taskbar-strip-rows { display:grid; flex:1; min-width:0; align-content:center; row-gap:.125rem; white-space:nowrap; }
 .taskbar-strip-rows.bars-off { row-gap:.1875rem; }
 .taskbar-strip-row-wrap { display:grid; row-gap:.09375rem; }
-.taskbar-strip-row { display:grid; grid-template-columns:1.5rem 2.375rem minmax(0,1fr); column-gap:.25rem; align-items:baseline; line-height:1.05; }
+.taskbar-strip-row {
+  display:grid; grid-template-columns:1.375rem 2.5rem .625rem minmax(0,1fr); align-items:baseline;
+  font-family:Consolas,ui-monospace,monospace; font-size:.6875rem; font-weight:400; line-height:1.05;
+}
 .ts-lbl,.ts-rst { overflow:hidden; text-overflow:ellipsis; }
-.ts-lbl { font-size:.65625rem; font-weight:500; text-align:right; }
-.ts-lbl.ts-badge { display:inline-grid; place-items:center; justify-self:center; width:.8125rem; height:.8125rem; border:1px solid currentColor; border-radius:50%; font-size:.5625rem; line-height:1; }
-.ts-pct { font-size:.75rem; font-weight:600; text-align:center; }
-.ts-rst { font-size:.6875rem; font-weight:450; text-align:left; }
-.ts-rst.ts-due { font-weight:600; }
-.mode-taskbar-strip[data-countdown-bold=true] .taskbar-strip-row > span { font-weight:700; }
+.ts-lbl { text-align:right; }
+.ts-lbl.ts-badge { display:inline-grid; place-items:center; justify-self:end; width:.8125rem; height:.8125rem; border:1px solid currentColor; border-radius:50%; font-size:.5625rem; line-height:1; }
+.ts-pct { padding-inline-start:.25rem; text-align:right; }
+.ts-separator { text-align:center; }
+.ts-rst { text-align:left; }
+.mode-taskbar-strip[data-countdown-bold=true] .taskbar-strip-row { font-weight:700; }
 .micro-bar { height:.125rem; border-radius:.125rem; background:var(--strip-track); overflow:hidden; }
 .micro-bar>i { display:block; height:100%; border-radius:inherit; background:var(--quota-five-hour,var(--accent)); }
 .role-wk .micro-bar>i { background:var(--quota-weekly,var(--weekly)); }

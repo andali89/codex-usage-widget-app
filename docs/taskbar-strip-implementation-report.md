@@ -6,7 +6,7 @@ Application version baseline: **0.1.5** (settings schema **13 → 14**). No depe
 
 ## Neutral text, aligned readings, and border controls — 2026-11-27
 
-The strip uses the same neutral color for both period labels, remaining percentages, and reset times. The percentage is semibold, and the existing bold and higher-contrast options apply to every text column. The quota bars retain the active Light or Dark swatches. The shared **Quota labels** setting selects words or circular badges on Save.
+The strip uses the same neutral color and regular-weight Consolas for period labels, remaining percentages, and reset times. Words mode displays `5h   57% · 2h24m` and `7d   42% · 3d11h` in fixed columns. The shared **Quota labels** setting selects words or circular badges on Save. The existing bold and higher-contrast options apply to every text column, and the quota bars retain the active Light or Dark swatches.
 
 The base width is 128 logical pixels at 100% scale, with 16 additional pixels when the status indicator is visible. The existing single- and two-row heights are preserved. Each row uses the same fixed label and percentage columns and an aligned reset column. The native and frontend size rules use the new width.
 
@@ -14,7 +14,7 @@ The base width is 128 logical pixels at 100% scale, with 16 additional pixels wh
 
 Rust publishes the active transparency state after placing the window and configuring its native region. That state drives webview paint. The strip stays clear under the pointer when transparent. Moving above the taskbar, turning off Windows transparency effects, turning on Windows high contrast, or losing native composition uses an opaque fallback while preserving the preference. Inside the taskbar the strip follows the Windows taskbar theme. Above it the strip follows the app theme.
 
-### Validation for this update
+### Validation for the neutral-text and border update
 
 | Check | Result |
 | --- | --- |
@@ -26,6 +26,8 @@ Rust publishes the active transparency state after placing the window and config
 | `cargo build --release --manifest-path src-tauri/Cargo.toml --locked --features tauri/custom-protocol` | Passed. Built the executable used for isolated Windows validation. |
 | `Usage.exe --check-native-compact-options` | Passed, 194 assertions. Covered all-column readability controls, equal widths, fitting wide readings, app and taskbar theme selection, native and webview transparency, independent border paint, widget scale, and live preview, Cancel, and Save. See `src-tauri/target/validation/native-compact-options/result.log`. |
 | `Usage.exe --check-native-appearance` | Passed, 871 assertions. Includes Taskbar Strip and existing compact widget and dashboard appearance checks. See `src-tauri/target/validation/native-appearance/result.log`. |
+
+The later typography and label changes passed `node --test tests/taskbar-strip.test.mjs` (5 tests), `npm.cmd run build`, `npm.cmd run rust:fmt`, and `npm.cmd run rust:check`.
 
 Manual checks remain for the physical pointer over the transparent strip, the effect of toggling Windows transparency and high contrast live, mixed-DPI monitor movement, and an actual Explorer restart on interactive Windows 10 and 11 desktops. The isolated Windows session exercised taskbar-band geometry and webview rendering using synthetic data.
 

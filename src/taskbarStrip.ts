@@ -10,16 +10,14 @@ export interface TaskbarStripRow {
   lastKnown: boolean;
 }
 
-/** Map a quota period duration to its compact colon label without inventing unknown durations. */
+/** Use compact duration labels and keep unknown periods distinct. */
 export function taskbarPeriodLabel(durationMinutes: number | null, slotIndex: 0 | 1): string {
-  if (durationMinutes === 300) return "5h:";
-  if (durationMinutes === 10080) return "Wk:";
   if (durationMinutes !== null && Number.isFinite(durationMinutes) && durationMinutes > 0) {
-    if (durationMinutes % 1440 === 0) return `${durationMinutes / 1440}d:`;
-    if (durationMinutes % 60 === 0) return `${durationMinutes / 60}h:`;
-    return `${durationMinutes}m:`;
+    if (durationMinutes % 1440 === 0) return `${durationMinutes / 1440}d`;
+    if (durationMinutes % 60 === 0) return `${durationMinutes / 60}h`;
+    return `${durationMinutes}m`;
   }
-  return slotIndex === 0 ? "P1:" : "P2:";
+  return slotIndex === 0 ? "P1" : "P2";
 }
 
 function resolveBothSlots(windows: readonly QuotaWindow[]): [QuotaWindow | undefined, QuotaWindow | undefined] {
