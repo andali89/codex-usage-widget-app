@@ -323,6 +323,8 @@ body[data-surface] { min-width:0; background:transparent; overflow:auto; }
 }
 .ts-lbl,.ts-rst { overflow:hidden; text-overflow:ellipsis; }
 .ts-lbl { padding-inline-end:.125rem; text-align:left; }
+.ts-lbl-separated { display:flex; align-items:baseline; justify-content:space-between; gap:.125rem; }
+.ts-label-separator { flex:none; }
 .ts-lbl.ts-badge { display:inline-grid; place-items:center; justify-self:start; width:.8125rem; height:.8125rem; padding:0; margin-inline-end:.125rem; border:1px solid currentColor; border-radius:50%; font-size:.5625rem; line-height:1; }
 .ts-pct { text-align:right; }
 .ts-separator { text-align:center; }

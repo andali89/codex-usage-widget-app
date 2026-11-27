@@ -1076,7 +1076,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                     .visible_periods
                     .insert(mode.key().into(), VisiblePeriods::Both);
                 for (label_style, five_hour, weekly) in [
-                    (QuotaLabelStyle::Words, "5h", "7d"),
+                    (QuotaLabelStyle::Words, "5h|", "7d|"),
                     (QuotaLabelStyle::Badges, "5", "W"),
                 ] {
                     for bold in [false, true] {
@@ -1084,6 +1084,7 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                         no_bars.widget_appearance.compact_countdown_bold = bold;
                         save_settings(service, no_bars.clone()).await?;
                         let weight = if bold { "700" } else { "400" };
+                        let words = label_style == QuotaLabelStyle::Words;
                         let expression = format!(
                             r#"(()=>{{
                                 const root=document.querySelector('.mode-taskbar-strip.shell');
@@ -1092,6 +1093,11 @@ async fn compact_options_check(app: &AppHandle, service: &Service) -> Result<(),
                                 const first=[...rows[0].children], second=[...rows[1].children];
                                 if(first.length!==4||second.length!==4||first[0].textContent!=='{five_hour}'||second[0].textContent!=='{weekly}')return false;
                                 if(first[2].textContent!=='·'||second[2].textContent!=='·')return false;
+                                const firstPipe=first[0].querySelector('.ts-label-separator');
+                                const secondPipe=second[0].querySelector('.ts-label-separator');
+                                if({words}){{
+                                    if(!firstPipe||!secondPipe||Math.abs(firstPipe.getBoundingClientRect().x-secondPipe.getBoundingClientRect().x)>.1)return false;
+                                }}else if(firstPipe||secondPipe)return false;
                                 const expectedAlign=['left','right','center','left'];
                                 const sameColumns=first.every((cell,i)=>{{
                                     const other=second[i], a=cell.getBoundingClientRect(), b=other.getBoundingClientRect();

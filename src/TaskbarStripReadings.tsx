@@ -26,6 +26,7 @@ export default function TaskbarStripReadings({
       const resetText = compactReset(row.resetsAtMs, now, row.durationMinutes);
       const period = row.durationMinutes === 300 ? "5-hour" : row.durationMinutes === 10080 ? "Weekly" : row.label;
       const badge = labelStyle === "badges" && (row.durationMinutes === 300 ? "5" : row.durationMinutes === 10080 ? "W" : null);
+      const labelSeparator = labelStyle === "words" && (row.durationMinutes === 300 || row.durationMinutes === 10080);
       const due = row.resetsAtMs !== null && row.resetsAtMs <= now;
       const resetUnavail = row.resetsAtMs === null;
       return <div
@@ -33,7 +34,10 @@ export default function TaskbarStripReadings({
         className={`taskbar-strip-row-wrap ${row.role === "weekly" ? "role-wk" : "role-5h"}${rowRetained ? " retained" : ""}`}
       >
         <div className="taskbar-strip-row">
-          <span className={badge ? "ts-lbl ts-badge" : "ts-lbl"} title={period}>{badge || row.label}</span>
+          <span className={`ts-lbl${badge ? " ts-badge" : labelSeparator ? " ts-lbl-separated" : ""}`} title={period}>
+            {badge || row.label}
+            {labelSeparator && <span className="ts-label-separator" aria-hidden="true">|</span>}
+          </span>
           <span className={`ts-pct${value === null ? " ts-unavail" : ""}`}>{value === null ? "—" : percent(value)}</span>
           <span className="ts-separator" aria-hidden="true">·</span>
           <span className={`ts-rst${due ? " ts-due" : resetUnavail ? " ts-unavail" : ""}`} title={resetText}>{resetText}</span>

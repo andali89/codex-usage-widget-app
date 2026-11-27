@@ -57,11 +57,11 @@ test("TaskbarStripReadings renders micro bars on/off, <1% sliver, worst-case wid
     { key: "codex/secondary/10080", label: "Weekly", durationMinutes: 10080, remainingPercent: 99.9, resetsAtMs: 23 * hour + 59 * 60_000, quality: "valid", lastKnown: false },
   ];
   const withBars = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows, selection: "both", showBars: true, retained: false, now: 0 }));
-  assert.match(withBars, />5h</);
+  assert.match(withBars, />5h<span class="ts-label-separator" aria-hidden="true">\|<\/span>/);
   assert.match(withBars, />&lt;1%</);
   assert.match(withBars, /min-width:0\.125rem/);
   assert.match(withBars, /class="ts-rst ts-due" title="due\?">due\?</);
-  assert.match(withBars, />7d<\/span><span class="ts-pct">99\.9%<\/span><span class="ts-separator" aria-hidden="true">·<\/span><span class="ts-rst" title="23h59m">23h59m</);
+  assert.match(withBars, />7d<span class="ts-label-separator" aria-hidden="true">\|<\/span><\/span><span class="ts-pct">99\.9%<\/span><span class="ts-separator" aria-hidden="true">·<\/span><span class="ts-rst" title="23h59m">23h59m</);
   assert.equal((withBars.match(/class="ts-separator"/g) ?? []).length, 2);
   assert.equal((withBars.match(/class="micro-bar/g) ?? []).length, 2);
 
@@ -71,13 +71,14 @@ test("TaskbarStripReadings renders micro bars on/off, <1% sliver, worst-case wid
   const badges = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows, labelStyle: "badges", now: 0 }));
   assert.match(badges, /class="ts-lbl ts-badge" title="5-hour">5</);
   assert.match(badges, /class="ts-lbl ts-badge" title="Weekly">W</);
-  const custom = renderToStaticMarkup(createElement(TaskbarStripReadings, {
-    windows: [{ ...windows[0], durationMinutes: null }, { ...windows[1], durationMinutes: 1440 }],
-    labelStyle: "badges", now: 0,
-  }));
-  assert.doesNotMatch(custom, /ts-badge/);
-  assert.match(custom, />P1</);
-  assert.match(custom, />1d</);
+  assert.doesNotMatch(badges, /ts-label-separator/);
+  const customWindows = [{ ...windows[0], durationMinutes: null }, { ...windows[1], durationMinutes: 1440 }];
+  for (const labelStyle of ["words", "badges"]) {
+    const custom = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows: customWindows, labelStyle, now: 0 }));
+    assert.doesNotMatch(custom, /ts-badge|ts-label-separator/);
+    assert.match(custom, />P1</);
+    assert.match(custom, />1d</);
+  }
 
   const unavailable = renderToStaticMarkup(createElement(TaskbarStripReadings, { windows: [], selection: "both", showBars: true, retained: true, now: 0 }));
   assert.equal((unavailable.match(/class="micro-bar unknown retained"/g) ?? []).length, 2);
