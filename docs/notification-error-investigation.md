@@ -1,6 +1,69 @@
-# Installed Windows notification failure
+# Windows notification investigation
 
-Updated: 2026-10-23. **Unresolved; handoff for investigation.** Work is stopped at the user's request; see [the implementation handoff](implementation-handoff.md). This is a focused companion to the [implementation report](implementation-report.md), not a replacement for its checklist or AC-01–AC-39 matrix.
+Updated: 2026-11-04. **Native delivery remains unresolved.** This report covers the current 0.1.5 source, locked notification dependencies, and portable/installed packaging. No application code, notification registrations, or Windows settings were changed during this investigation. Earlier installed-runtime evidence is preserved below and was not reproduced in this pass.
+
+## Summary and implementation
+
+**Portable notifications are explicitly blocked by the application. Installed notifications have a separate unresolved Windows availability-query failure.** Removing the portable gate alone would not complete the feature.
+
+Rust owns reminder evaluation, suppression, scheduling, and persistence. It evaluates low-quota thresholds, approaching resets, confirmed recovery, and scheduled check-ins; applies freshness/account identity, quiet hours, snooze, session-lock/fullscreen, coalescing, and cooldown rules; and persists claims before submission. React controls this shared service through narrow commands. Defaults are reminders off, silent sound, and generic text.
+
+The delivery path is `reminders.rs` → durable claim in `service.rs` → `notification.rs` → Tauri notification plugin 2.7.0 → `notify-rust` 4.18.2 → `tauri-winrt-notification` 0.8.1 → Windows WinRT. These are ordinary local notifications, not cloud push or browser notifications.
+
+## Confirmed findings and root causes
+
+| Finding | Evidence and consequence |
+| --- | --- |
+| Portable submission is disabled in code | [`notification.rs`](../src-tauri/src/notification.rs) requires an NSIS bundle marker, a matching HKCU installation path/running executable, and a Start menu shortcut. An extracted or relocated copy fails this gate and reports `notifications-install-required`. |
+| Portable packaging performs no registration | The release workflow archives `Usage.exe`, `notification.png`, and `LICENSE`. The image alone does not establish a notification identity. |
+| Installed availability previously failed | The October 23 installed debug check created a notifier successfully, then `ToastNotifier.Setting()` threw `0x80070490` (`ERROR_NOT_FOUND`). The adapter maps this to Unknown and stops before claiming/submitting. This remains historical runtime evidence, not a new reproduction. |
+| Framework permission checks cannot establish availability | Cached locked plugin source confirms that desktop permission methods always return Granted. Missing JavaScript notification permissions are not the blocker: submission originates in Rust. |
+| The plugin hides submission errors | Its ordinary send path prepares the payload, queues background work, and discards the eventual Windows result. The application correctly records queued attempts as Outcome unknown and does not blindly resend. |
+
+The process already sets explicit AppUserModelID `dev.codexusagewidget.desktop`. NSIS creates the installed shortcut, and installer hooks add current-user display/icon metadata. Earlier checks verified these elements; they did not resolve the installed query failure. NSIS installation does not provide MSIX package identity.
+
+For this classic WinRT path, Windows requires a Start menu shortcut with the matching AppUserModelID; process identity alone does not satisfy that registration requirement. Microsoft supplies programmatic shortcut creation but recommends installer-managed registration. Tauri documents installed-app support on Windows and does not provide portable registration. [Microsoft registration requirements](https://learn.microsoft.com/en-us/windows/win32/shell/enable-desktop-toast-with-appusermodelid), [Tauri notification guide](https://v2.tauri.app/plugin/notification/).
+
+## Unconfirmed causes
+
+The underlying Windows cause of the installed `Setting()` exception is unresolved. Microsoft's documentation issue tracker reports the same HRESULT, including shortly after installation; a contributor describes it as a platform failure. This supports investigating initialization/registration timing, but does not prove that explanation here. [Microsoft issue #1431](https://github.com/MicrosoftDocs/windows-dev-docs/issues/1431).
+
+Windows notification switches, policy, Focus Assist/Do Not Disturb, and banner suppression require runtime verification. Unsigned binaries and a missing COM activator have not been established as causes of basic banner failure. The earlier installed check ran in an interactive, non-elevated session, so elevation was not supported as its cause. No system configuration changes are recommended as an investigative workaround.
+
+## Feasible solutions
+
+| Approach | Compatibility, complexity, and maintenance |
+| --- | --- |
+| Retain Tauri plugin | Smallest installed-build change, but portable registration and hidden submission errors remain unresolved. |
+| **Direct Rust WinRT adapter — recommended** | Reuses existing Windows bindings and suits ordinary reminders. Requires maintaining per-user registration, native callbacks, and owned-entry cleanup. |
+| Windows App SDK `AppNotificationManager` | Microsoft's current recommended desktop API, including unpackaged apps. Adds runtime deployment and Rust projection/native-bridge integration work. |
+| MSIX distribution | Provides managed package identity but changes distribution and does not preserve the current extracted-ZIP experience. |
+
+Windows App SDK supports local notifications without package identity and supports self-contained deployment. It is a credible alternative if broader activation features become necessary. Its deployment requirements should be checked against the selected SDK version; the current deployment guide distinguishes local app notifications from push APIs requiring the Singleton package. [API guidance](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/), [self-contained deployment](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps).
+
+## Recommended implementation steps
+
+1. Replace the plugin submission boundary with direct WinRT `Show()` results and `Failed` callbacks. Preserve durable claims, conservative outcomes, and no automatic resend of uncertain submissions. A successful submission must never mean the user saw a banner.
+2. Replace installation-only eligibility with validated notification registration. Preserve the installed identity; give portable registration a separate stable identity and owned per-user shortcut. Repair relocated executable paths and provide explicit cleanup without modifying installed-app registrations.
+3. Separate registration readiness, permission status, and submission outcome. Preserve Unknown and known OS denial states. Do not simply turn Unknown into Enabled.
+4. First validate a user-triggered Test submission after registration validation when `Setting()` throws. Establish first-send and subsequent-query behavior on Windows 10/11 before permitting automatic delivery under that condition. If unresolved, keep an explicit unavailable diagnostic.
+5. Validate installed/portable first launch, relocation, upgrades, denial/re-enable, silent/opt-in sound, privacy, deduplication, focus behavior, and cleanup. Update this report and the [implementation report](implementation-report.md) with actual runtime evidence before claiming reliable delivery.
+
+Portable support would leave a small per-user registration footprint outside the extracted folder. Windows controls banner visibility; reminders still require the app running and Windows awake. Notification Center activation and launching after Quit should remain outside this correction.
+
+## Validation in this investigation
+
+| Command | Result |
+| --- | --- |
+| `cargo test --manifest-path src-tauri/Cargo.toml --locked --offline notification::tests` | Passed: 4 tests covering permission mapping, generic/silent privacy defaults, formatting, and test content. |
+| `cargo test --manifest-path src-tauri/Cargo.toml --locked --offline reminders::tests` | Passed: 18 tests covering thresholds, suppression, schedules, persistence, recovery, and deduplication. |
+
+Cargo reported incremental-cache hard-link warnings and copied files instead; both commands completed successfully. These tests establish policy/payload behavior, not native delivery. No notifications were sent, installers run, registrations changed, or live Codex probes executed in this pass. The final documentation-only save does not require an application rebuild.
+
+<details>
+<summary>Historical installed investigation and reproduction evidence — 23 October 2026</summary>
+
+The following record preserves the earlier environment, commands, attempted fixes, and outcomes. Version numbers, executable names, worktree state, and validation counts describe that earlier milestone and must not be treated as current instructions. See the [implementation handoff](implementation-handoff.md) for its original context.
 
 ## Observed failure
 
@@ -17,9 +80,9 @@ native-check result=failed code=notifications-status-unknown
 
 The WebView2 shutdown warning is a separate unresolved observation. There is no evidence that it causes the earlier notification query failure. The wrapper observed zero owned processes before fixture cleanup.
 
-## Reproduce with the current worktree
+## Historical reproduction
 
-The notification changes are **uncommitted**, on top of packaging commit `4f8fcaa`. Preserve the current worktree. Do not test the earlier release installer and assume it contains these changes.
+At that milestone, notification changes were uncommitted on top of packaging commit `4f8fcaa`; the earlier installer did not contain them. These historical artifact names must be updated before reproducing against a later version.
 
 From the repository root, close the widget and run:
 
@@ -117,3 +180,5 @@ Final current-source frontend build and ten Node tests passed. Rust format/check
 After fixing the query, rerun the guarded installed test and then validate actual toast appearance, generic privacy, silent default/opt-in sound, no focus theft, OS denial/re-enable, cooldown/deduplication, Notification Center limitations and cleanup. Rebuild current release artifacts and fresh version-upgrade fixtures; earlier packaging milestone artifacts predate this notification work. Windows 10, screen-reader/input/DPI, actual autostart and ten-minute resource gates remain in the main report.
 
 Next concrete action for an assigned investigator: reproduce the failing `Setting()` call in the installed debug gate, determine supported classic-desktop availability semantics, and propose the smallest evidence-backed adapter/registration correction. Other implementation can proceed without modifying the notification boundary.
+
+</details>
